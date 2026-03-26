@@ -12,7 +12,8 @@ Agents-Memory CLI — 错误记录管理工具
   python3 memory.py promote <id>               # 将错误记录升级为 instruction 规则
   python3 memory.py sync                       # 将已升级规则自动写入注册项目的 instruction 文件
   python3 memory.py bridge-install <project>   # 在注册项目中安装 bridge instruction
-  python3 memory.py register [path]            # 一键注册新项目（自动检测 + 安装 bridge）
+  python3 memory.py register [path]            # 一键注册新项目（自动检测 + 安装 bridge + 写入 mcp.json）
+  python3 memory.py mcp-setup [project-id]     # 在已注册项目中写入 .vscode/mcp.json
   python3 memory.py archive                    # 归档 90 天以上且无重复的记录
   python3 memory.py update-index               # 重新生成 index.md 统计数字
   python3 memory.py to-qdrant                  # 迁移向量索引到 Qdrant（多 Agent 共享）
@@ -825,8 +826,8 @@ def cmd_register(path: str = "."):
     if _project_already_registered(project_id):
         print(f"⚠️  '{project_id}' 已在 memory/projects.md 中注册，跳过写入。")
         print("如需更新，请手动编辑 memory/projects.md。")
-        # Still offer bridge install
         _offer_bridge_install(project_id)
+        _offer_mcp_setup(project_id, root)
         return
 
     # ── 2. 检测 instruction 目录 ────────────────────────────────────────────
@@ -875,6 +876,31 @@ def cmd_register(path: str = "."):
     # ── 5. 安装 bridge instruction ──────────────────────────────────────────
     _offer_bridge_install(project_id)
 
+    # ── 6. 写入 .vscode/mcp.json ─────────────────────────────────────────
+    _offer_mcp_setup(project_id, root)
+
+
+def _offer_mcp_setup(project_id: str, project_root: Path):
+    """询问并写入 .vscode/mcp.json。"""
+    mcp_file = project_root / ".vscode" / "mcp.json"
+    import json
+    already_has = False
+    if mcp_file.exists():
+        try:
+            already_has = "agents-memory" in json.loads(mcp_file.read_text(encoding="utf-8")).get("servers", {})
+        except Exception:
+            pass
+
+    if already_has:
+        print(f"\nℹ️  .vscode/mcp.json 已包含 agents-memory 配置，跳过。")
+        return
+
+    answer = input("\n自动写入 .vscode/mcp.json（VS Code MCP 工具层）？[Y/n]: ").strip().lower()
+    if answer in ("", "y", "yes"):
+        _write_vscode_mcp_json(project_root)
+    else:
+        print(f"跳过。稍后可手动运行: amem mcp-setup {project_id}")
+
 
 def _offer_bridge_install(project_id: str):
     """询问并执行 bridge instruction 安装。"""
@@ -887,6 +913,78 @@ def _offer_bridge_install(project_id: str):
         cmd_bridge_install(project_id)
     else:
         print(f"跳过。稍后可手动运行: python3 scripts/memory.py bridge-install {project_id}")
+
+
+def _write_vscode_mcp_json(project_root: Path) -> bool:
+    """
+    在目标项目写入 .vscode/mcp.json，让 VS Code 知道 MCP Server 在哪里。
+    如果文件已存在且包含 'agents-memory' 键，跳过（幂等）。
+    如果 ".vscode/mcp.json" 存在但不含 agents-memory，将 server 条目 merge 进去。
+    """
+    vscode_dir = project_root / ".vscode"
+    mcp_file   = vscode_dir / "mcp.json"
+    server_entry = {
+        "type": "stdio",
+        "command": "python3.12",
+        "args": [str(BASE_DIR / "scripts" / "mcp_server.py")],
+        "env": {},
+    }
+
+    import json
+
+    if mcp_file.exists():
+        try:
+            existing = json.loads(mcp_file.read_text(encoding="utf-8"))
+        except Exception:
+            existing = {}
+        if "agents-memory" in existing.get("servers", {}):
+            print(f"  已存在: {mcp_file}")
+            return False
+        # Merge
+        existing.setdefault("servers", {})["agents-memory"] = server_entry
+        mcp_file.write_text(json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"  ✅ 已合并写入 agents-memory server 条目 → {mcp_file}")
+        return True
+
+    # 新建
+    vscode_dir.mkdir(exist_ok=True)
+    config = {"servers": {"agents-memory": server_entry}}
+    mcp_file.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"  ✅ 已写入 {mcp_file}")
+    return True
+
+
+def cmd_mcp_setup(project_id_or_path: str = "."):
+    """
+    在已注册项目中写入 .vscode/mcp.json，将 Agents-Memory MCP Server 接入 VS Code。
+
+    用法:
+      amem mcp-setup                   # 将当前目录项目配置
+      amem mcp-setup synapse-network   # 通过已注册项目 ID 配置
+      amem mcp-setup /abs/path         # 通过绝对路径配置
+    """
+    import json
+
+    # 判断是 ID、路径还是""（当前目录）
+    candidate = Path(project_id_or_path).expanduser().resolve()
+    if candidate.is_dir():
+        project_root = candidate
+    else:
+        # 当作项目 ID 查找
+        projects = _parse_projects()
+        proj = next((p for p in projects if p["id"] == project_id_or_path), None)
+        if not proj:
+            print(f"项目 '{project_id_or_path}' 未注册且不是有效路径。")
+            print("先运行: amem register")
+            return
+        project_root = Path(proj["root"])
+
+    print(f"\n🛠  写入 .vscode/mcp.json → {project_root}")
+    _write_vscode_mcp_json(project_root)
+    print()
+    print("验证方式：在该项目的 VS Code Agent/Chat 面板中输入：")
+    print('  请调用 memory_get_index 工具，告诉我当前有多少条错误记录。')
+
 
 
 # ─── 入口 ────────────────────────────────────────────────────────────────────
@@ -919,6 +1017,8 @@ def main():
         cmd_sync()
     elif args[0] == "bridge-install":
         cmd_bridge_install(args[1]) if len(args) > 1 else print("用法: python3 memory.py bridge-install <project-id>")
+    elif args[0] == "mcp-setup":
+        cmd_mcp_setup(args[1] if len(args) > 1 else ".")
     elif args[0] == "register":
         cmd_register(args[1] if len(args) > 1 else ".")
     elif args[0] == "promote":
