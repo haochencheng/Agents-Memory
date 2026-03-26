@@ -8,8 +8,11 @@ amem — Agents-Memory CLI 全局命令
 安装后在任意目录使用:
   amem register              # 一键注册当前目录的项目
   amem register /path/proj   # 注册指定路径的项目
+  amem copilot-setup [id]    # 安装仓库级 Copilot 自动激活指令
+    amem agent-list            # 查看内置 agent adapter 列表
+    amem agent-setup <agent> [target]  # 为指定 agent 安装集成
   amem bridge-install <id>   # 安装 bridge instruction
-    amem doctor [target]       # 检查项目是否完整接入
+  amem doctor [target]       # 检查项目是否完整接入
   amem list                  # 列出活跃错误记录
   amem sync                  # 推送规则到所有已注册项目
   amem stats                 # 错误统计
@@ -18,50 +21,18 @@ amem — Agents-Memory CLI 全局命令
   amem promote <id>          # 升级为 instruction 规则
   amem update-index          # 更新 index.md
 """
-import os
 import sys
-import importlib.util
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-def _find_repo_root() -> Path:
-    # 1. 环境变量覆盖（手动设置时优先）
-    env = os.environ.get("AGENTS_MEMORY_ROOT")
-    if env:
-        root = Path(env)
-        if (root / "scripts" / "memory.py").exists():
-            return root
-
-    # 2. 本脚本的上两级（scripts/amem → Agents-Memory/）
-    candidate = Path(__file__).resolve().parent.parent
-    if (candidate / "scripts" / "memory.py").exists():
-        return candidate
-
-    # 3. 如果是符号链接，解析真实路径
-    real = Path(__file__).resolve()
-    candidate2 = real.parent.parent
-    if (candidate2 / "scripts" / "memory.py").exists():
-        return candidate2
-
-    print(
-        "❌  无法定位 Agents-Memory 仓库。\n"
-        "    请设置：export AGENTS_MEMORY_ROOT=/path/to/Agents-Memory",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+from agents_memory.app import main as app_main
 
 
 def main() -> None:
-    repo_root = _find_repo_root()
-    os.environ["AGENTS_MEMORY_ROOT"] = str(repo_root)
-
-    memory_py = repo_root / "scripts" / "memory.py"
-    spec = importlib.util.spec_from_file_location("memory", memory_py)
-    assert spec and spec.loader
-    mod = importlib.util.module_from_spec(spec)
-    mod.__file__ = str(memory_py)
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    mod.main()
+  return app_main()
 
 
 if __name__ == "__main__":

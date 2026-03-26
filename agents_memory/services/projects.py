@@ -1,0 +1,132 @@
+from __future__ import annotations
+
+import re
+import subprocess
+from pathlib import Path
+
+from agents_memory.constants import DEFAULT_BRIDGE_INSTRUCTION_REL, DOMAIN_HINTS
+from agents_memory.logging_utils import log_file_update
+from agents_memory.runtime import AppContext
+
+
+def parse_projects(ctx: AppContext) -> list[dict]:
+    if not ctx.projects_file.exists():
+        return []
+    projects: list[dict] = []
+    current: dict = {}
+    for line in ctx.projects_file.read_text(encoding="utf-8").splitlines():
+        header_match = re.match(r"^## (.+)", line)
+        if header_match:
+            project_id = header_match.group(1).strip()
+            if current.get("id"):
+                projects.append(current)
+            if any(char > "\u4e00" for char in project_id):
+                current = {}
+            else:
+                current = {"id": project_id}
+            continue
+        if not current:
+            continue
+        field_match = re.match(r"\s*-\s+\*\*(\w+)\*\*:\s*(.*)", line)
+        if field_match:
+            key, value = field_match.group(1).strip(), field_match.group(2).strip()
+            current[key] = value
+    if current.get("id"):
+        projects.append(current)
+    return [project for project in projects if project.get("active", "true").lower() == "true"]
+
+
+def detect_project_id(root: Path) -> str:
+    try:
+        url = subprocess.check_output(
+            ["git", "-C", str(root), "remote", "get-url", "origin"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+        repo_name = re.split(r"[/:]", url.rstrip(".git").rstrip("/"))[-1]
+        return repo_name.lower().replace("_", "-")
+    except Exception:
+        return root.name.lower().replace("_", "-")
+
+
+def detect_domains(instruction_dir: Path) -> list[str]:
+    if not instruction_dir.exists():
+        return ["python", "docs"]
+    found: set[str] = set()
+    for filepath in instruction_dir.glob("*.instructions.md"):
+        name = filepath.name.lower()
+        for hint, domain in DOMAIN_HINTS:
+            if hint in name:
+                found.add(domain)
+    return sorted(found) if found else ["python", "docs"]
+
+
+def detect_instruction_files(instruction_dir: Path, root: Path) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    if not instruction_dir.exists():
+        return mapping
+    for filepath in sorted(instruction_dir.glob("*.instructions.md")):
+        name = filepath.name.lower()
+        for hint, domain in DOMAIN_HINTS:
+            if hint in name and domain not in mapping:
+                mapping[domain] = str(filepath.relative_to(root))
+    return mapping
+
+
+def project_already_registered(ctx: AppContext, project_id: str) -> bool:
+    if not ctx.projects_file.exists():
+        return False
+    return f"## {project_id}" in ctx.projects_file.read_text(encoding="utf-8")
+
+
+def resolve_project_target(ctx: AppContext, project_id_or_path: str = ".") -> tuple[str, Path | None, dict | None]:
+    projects = parse_projects(ctx)
+    if project_id_or_path not in ("", "."):
+        project = next((item for item in projects if item.get("id") == project_id_or_path), None)
+        if project:
+            root_value = project.get("root", "").strip()
+            if root_value:
+                return project["id"], Path(root_value).expanduser().resolve(), project
+            return project["id"], None, project
+
+    candidate = Path(project_id_or_path).expanduser().resolve()
+    if candidate.is_dir():
+        for project in projects:
+            root_value = project.get("root", "").strip()
+            if not root_value:
+                continue
+            try:
+                if Path(root_value).expanduser().resolve() == candidate:
+                    return project.get("id", candidate.name.lower().replace("_", "-")), candidate, project
+            except Exception:
+                continue
+        return candidate.name.lower().replace("_", "-"), candidate, None
+    return project_id_or_path, None, None
+
+
+def project_agents_reference_exists(project_root: Path, bridge_rel: str) -> bool:
+    for candidate in (project_root / "AGENTS.md", project_root / "docs" / "AGENTS.md"):
+        if candidate.exists() and bridge_rel in candidate.read_text(encoding="utf-8"):
+            return True
+    return False
+
+
+def append_project_entry(ctx: AppContext, entry: str) -> None:
+    ctx.memory_dir.mkdir(parents=True, exist_ok=True)
+    if not ctx.projects_file.exists():
+        ctx.projects_file.write_text("# Project Registry\n\n", encoding="utf-8")
+    content = ctx.projects_file.read_text(encoding="utf-8")
+    marker = "## 注册新项目"
+    if marker in content:
+        content = content.replace(marker, entry + "\n" + marker, 1)
+    else:
+        content = content.rstrip() + "\n\n" + entry + "\n"
+    ctx.projects_file.write_text(content, encoding="utf-8")
+    first_line = entry.splitlines()[0].strip() if entry.strip() else "unknown"
+    log_file_update(ctx.logger, action="update_registry", path=ctx.projects_file, detail=first_line)
+
+
+def resolve_bridge_rel(project: dict | None) -> str:
+    if project:
+        return project.get("bridge_instruction", DEFAULT_BRIDGE_INSTRUCTION_REL).strip()
+    return DEFAULT_BRIDGE_INSTRUCTION_REL

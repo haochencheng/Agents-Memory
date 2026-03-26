@@ -12,5 +12,7 @@
 - [向量搜索扩展](#向量搜索扩展)
 - [本地启动与运维](getting-started.md)
 - [接入其他项目](integration.md)
+- [Copilot 自动激活设计](copilot-auto-activation.md)
+- [模块化与插件化结构](modular-architecture.md)
 - [日常运维操作](ops.md)
 - [架构决策](architecture.md)

@@ -6,13 +6,16 @@
 
 ## 接入需要做什么？
 
-接入共 3 步，`amem register` **全部自动完成**：
+接入共 4 步，`amem register` **全部自动完成**：
 
 | 步骤 | 做什么 | 效果 |
 |------|--------|------|
 | 1. **注册** | 写入 `memory/projects.md` | `amem sync` 能向该项目推送规则 |
-| 2. **bridge instruction** | 复制协议文件到 `.github/instructions/` | Agent 知道该如何使用记忆系统 |
-| 3. **MCP 工具层** | 写入 `.vscode/mcp.json` | Agent 真正能调用 `memory_record_error` 等工具 |
+| 2. **仓库级 Copilot 激活** | 写入 `.github/copilot-instructions.md` | Copilot 在仓库上下文的每次请求都会默认加载 Agents-Memory 协议 |
+| 3. **bridge instruction** | 复制协议文件到 `.github/instructions/` | 文件级/代码变更场景继续补强记忆协议 |
+| 4. **MCP 工具层** | 写入 `.vscode/mcp.json` | Agent 真正能调用 `memory_record_error` 等工具 |
+
+> 这是当前 GitHub Copilot 官方能力下的最强自动化组合：仓库级 custom instructions 负责“每次请求默认带上协议”，MCP 负责“真的能调用记忆工具”。平台目前没有公开的硬强制机制能保证每次都先执行某个 MCP tool，所以这里实现的是最强默认，而不是底层强制钩子。
 
 ---
 
@@ -25,7 +28,7 @@
 git clone https://github.com/haochencheng/Agents-Memory.git
 
 # 安装 amem 到系统 PATH（创建符号链接到 /opt/homebrew/bin/amem）
-bash scripts/install-cli.sh
+bash Agents-Memory/scripts/install-cli.sh
 ```
 
 安装后 `amem` 在任意目录全局可用，无需 Python 环境配置、无需 pip。
@@ -54,6 +57,9 @@ Domains (逗号分隔) [frontend, python]: ↵
 
 ✅ 已写入 memory/projects.md → my-service
 
+自动安装 .github/copilot-instructions.md（仓库级 Copilot 自动激活）？[Y/n]: ↵
+  ✅ 已写入 .github/copilot-instructions.md
+
 自动安装 bridge instruction？[Y/n]: ↵
 ✅ Bridge instruction installed → .github/instructions/agents-memory-bridge.instructions.md
 
@@ -61,7 +67,11 @@ Domains (逗号分隔) [frontend, python]: ↵
   ✅ 已写入 .vscode/mcp.json
 ```
 
-> **提示**：如果目标项目已有 `.vscode/mcp.json`（含其他 MCP server），命令会**合并写入** `agents-memory` 条目，不覆盖现有配置。
+> **提示 1**：如果目标项目已有 `.github/copilot-instructions.md`，命令会只追加或更新 `Agents-Memory` 激活块，不覆盖原有仓库指令。
+
+> **提示 2**：如果目标项目已有 `.vscode/mcp.json`（含其他 MCP server），命令会**合并写入** `agents-memory` 条目，不覆盖现有配置。
+
+> **提示 3**：`register` 当前默认安装的是 `github-copilot` adapter。后续如果你要试吃其他 agent，可先运行 `amem agent-list` 查看内置 adapters，再用 `amem agent-setup <agent> <target>` 单独安装。
 
 ---
 
@@ -76,6 +86,23 @@ Domains (逗号分隔) [frontend, python]: ↵
 2. `.github/instructions/python.instructions.md`
 ...
 ```
+
+---
+
+## 为什么现在要多写一个 `.github/copilot-instructions.md`？
+
+因为这一步才是“只执行一次，以后每次请求默认启用”的关键。
+
+- `.github/copilot-instructions.md` 是 GitHub Copilot 官方支持的**仓库级 custom instructions** 文件。
+- 它会在 Copilot 处理当前仓库请求时自动附加到上下文里。
+- `agents-memory-bridge.instructions.md` 更像文件级/规则级补强，能帮助 coding agent 在具体代码任务里保持协议一致。
+- `.vscode/mcp.json` 只解决“工具是否存在”，不解决“Copilot 会不会默认先想到要用它”。
+
+所以新的接入设计是：
+
+1. 用 `.github/copilot-instructions.md` 把 Agents-Memory 变成仓库默认协议。
+2. 用 `.github/instructions/agents-memory-bridge.instructions.md` 继续强化代码变更场景。
+3. 用 `.vscode/mcp.json` 提供真实的 MCP tools。
 
 ---
 
@@ -113,13 +140,20 @@ grep -A3 "## my-service" /path/to/Agents-Memory/memory/projects.md
 
 输出应包含 `active: true`。
 
-### 检查 2：bridge instruction 存在
+### 检查 2：仓库级 Copilot 激活存在
+
+```bash
+ls .github/copilot-instructions.md
+grep -n "agents-memory:start" .github/copilot-instructions.md
+```
+
+### 检查 3：bridge instruction 存在
 
 ```bash
 ls .github/instructions/agents-memory-bridge.instructions.md
 ```
 
-### 检查 3：MCP 配置正确（关键）
+### 检查 4：MCP 配置正确（关键）
 
 ```bash
 cat .vscode/mcp.json
@@ -139,7 +173,7 @@ cat .vscode/mcp.json
 - `python3.12` 是否在 PATH：`which python3.12`
 - `mcp` 包是否已装：`python3.12 -c "from mcp.server.fastmcp import FastMCP; print('OK')"`
 
-### 检查 4：sync 能覆盖该项目
+### 检查 5：sync 能覆盖该项目
 
 ```bash
 amem sync
@@ -156,7 +190,7 @@ tail -f /path/to/Agents-Memory/logs/agents-memory.log
 3. `write_mcp_config` 或 `merge_mcp_config` 是否生效
 4. 后续 `sync_rule` 是否把规则同步进该项目
 
-### 检查 5：一条命令做全量体检
+### 检查 6：一条命令做全量体检
 
 ```bash
 amem doctor my-service
@@ -165,10 +199,11 @@ amem doctor my-service
 它会一次检查：
 
 1. 项目是否已注册到 `memory/projects.md`
-2. bridge instruction 是否存在
-3. `.vscode/mcp.json` 是否包含 `agents-memory`
-4. 当前机器上的 `python3.12` / `mcp` 是否就绪
-5. `AGENTS.md` 或 `docs/AGENTS.md` 是否引用了 bridge instruction（可选项）
+2. `.github/copilot-instructions.md` 是否包含 Agents-Memory 激活块
+3. bridge instruction 是否存在
+4. `.vscode/mcp.json` 是否包含 `agents-memory`
+5. 当前机器上的 `python3.12` / `mcp` 是否就绪
+6. `AGENTS.md` 或 `docs/AGENTS.md` 是否引用了 bridge instruction（可选项）
 
 ---
 
@@ -187,13 +222,19 @@ amem doctor my-service
 - **domains**: python, frontend, docs
 ```
 
-**步骤 2 — 安装 bridge instruction：**
+**步骤 2 — 安装仓库级 Copilot 自动激活：**
+
+```bash
+amem copilot-setup my-service
+```
+
+**步骤 3 — 安装 bridge instruction：**
 
 ```bash
 amem bridge-install my-service
 ```
 
-**步骤 3 — 写入 .vscode/mcp.json：**
+**步骤 4 — 写入 .vscode/mcp.json：**
 
 ```bash
 amem mcp-setup my-service   # 按项目 ID
@@ -207,8 +248,8 @@ cd /path/to/my-service && amem mcp-setup  # 当前目录
 
 ## 已注册项目现状
 
-| 项目 | 注册 | bridge 安装 | MCP 配置 |
-|------|------|------------|------|
-| synapse-network | ✅ | ✅ | ✅ |
-| spec2flow | ✅ | ✅ | ✅ |
-| agents-memory | ✅ | — | ✅（内置）|
+| 项目 | 注册 | Copilot 激活 | bridge 安装 | MCP 配置 |
+|------|------|---------------|------------|------|
+| synapse-network | ✅ | 待补装 | ✅ | ✅ |
+| spec2flow | ✅ | 待补装 | ✅ | ✅ |
+| agents-memory | ✅ | 内置仓库 | — | ✅（内置）|

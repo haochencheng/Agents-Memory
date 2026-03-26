@@ -45,7 +45,7 @@ amem stats
 
 ### 最小安装（CLI 基础功能，零依赖）
 
-CLI 的 `new / list / stats / search / register / sync / bridge-install` 命令使用纯标准库，**无需任何额外 pip 安装**。直接运行：
+CLI 的 `new / list / stats / search / register / copilot-setup / agent-list / agent-setup / bridge-install / mcp-setup / doctor / sync / archive / update-index` 命令使用纯标准库，**无需任何额外 pip 安装**。直接运行：
 
 ```bash
 python3 scripts/memory.py list
@@ -185,7 +185,7 @@ echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | python3.12 scripts/mcp_s
 
 ---
 
-## 5. 日常运维命令速查
+## 7. 日常运维命令速查
 
 ### 记录新错误（交互式）
 
@@ -222,7 +222,7 @@ python3 scripts/memory.py update-index
 
 ---
 
-## 6. 目录结构说明
+## 8. 目录结构说明
 
 ```
 Agents-Memory/
@@ -233,17 +233,18 @@ Agents-Memory/
 ├── errors/           ← 冷区：所有错误记录文件
 │   └── archive/      ← 90 天以上的归档记录
 ├── logs/             ← 统一调试日志（agents-memory.log）
-├── templates/        ← bridge instruction 模板
+├── agents_memory/    ← Python package 主体（app / mcp_app / commands / services / integrations）
+├── templates/        ← bridge / copilot instruction 模板
 ├── scripts/
-│   ├── memory.py     ← CLI 主工具（12 命令）
-│   └── mcp_server.py ← MCP Server（7 个 Agent 工具）
+│   ├── memory.py     ← thin wrapper → agents_memory.app
+│   └── mcp_server.py ← thin wrapper → agents_memory.mcp_app
 └── .vscode/
     └── mcp.json      ← VS Code MCP 集成配置
 ```
 
 ---
 
-## 7. 常见问题
+## 9. 常见问题
 
 **Q: Python 3.12 不在 PATH 怎么办？**
 

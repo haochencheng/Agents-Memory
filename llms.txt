@@ -25,6 +25,20 @@ Agents-Memory/
 │   ├── rules.md                    # 已 promoted 的防范规则，按语言/框架分组
 │   └── projects.md                 # 注册项目注册表（sync + bridge-install 使用）
 │
+├── logs/                           # RUNTIME LOGS (gitignored)
+│   └── agents-memory.log           # CLI / MCP / 文件写入统一日志
+│
+├── agents_memory/
+│   ├── app.py                      # CLI dispatch entrypoint
+│   ├── mcp_app.py                  # MCP server entrypoint
+│   ├── runtime.py                  # shared repo context / paths / logger
+│   ├── constants.py                # shared constants and defaults
+│   ├── cli.py                      # `amem` 包入口
+│   ├── logging_utils.py            # CLI + MCP 共享日志配置
+│   ├── commands/                   # CLI command registry by capability
+│   ├── services/                   # records / projects / integration / vector logic
+│   └── integrations/agents/        # pluggable agent adapters
+│
 ├── vectors/                        # LOCAL VECTOR INDEX (gitignored)
 │   └── errors.lance                # LanceDB 索引，由 embed 命令生成
 │
@@ -33,10 +47,13 @@ Agents-Memory/
 │   └── .env.example                # 环境变量模板
 │
 ├── templates/
-│   └── agents-memory-bridge.instructions.md  # bridge 模板（bridge-install 使用）
+│   ├── agents-memory-bridge.instructions.md   # bridge 模板（bridge-install 使用）
+│   └── agents-memory-copilot-instructions.md  # 仓库级 Copilot 激活模板
 │
 ├── docs/
 │   ├── README.md                   # 文档入口
+│   ├── copilot-auto-activation.md  # Copilot 自动激活设计
+│   ├── modular-architecture.md     # 模块化与插件化结构
 │   ├── architecture.md             # 架构决策记录（ADR-001 ~ ADR-006）
 │   └── ops.md                      # 运维手册：CLI 用法 / MCP / 向量搜索 / Docker
 │
@@ -55,9 +72,17 @@ Agents-Memory/
 | `memory/projects.md` | Registered projects registry | `sync` and `bridge-install` commands |
 | `errors/*.md` | Full error records | On search hit |
 | `schema/error-record.md` | Format spec | Human / Agent when creating records |
-| `scripts/memory.py` | CLI tool (12 commands) | Human / CI |
-| `scripts/mcp_server.py` | MCP Server (7 tools) | AI Agent via tool calls |
+| `scripts/memory.py` | Thin CLI wrapper → `agents_memory.app` | Human / CI |
+| `scripts/mcp_server.py` | Thin MCP wrapper → `agents_memory.mcp_app` | AI Agent via tool calls |
+| `agents_memory/app.py` | CLI command registry entrypoint | Human / CI |
+| `agents_memory/mcp_app.py` | MCP tool registry entrypoint | AI Agent via tool calls |
+| `agents_memory/runtime.py` | Shared repo context and paths | CLI / MCP / services |
+| `agents_memory/services/*` | Business logic by capability | CLI / MCP / future UIs |
+| `agents_memory/integrations/agents/*` | Plugin adapters for Copilot / ChatGPT / Claude | Project integration flows |
+| `agents_memory/cli.py` | `amem` package entrypoint | Human / CI |
+| `agents_memory/logging_utils.py` | Shared structured logging | CLI / MCP |
 | `templates/agents-memory-bridge.instructions.md` | Bridge template | `bridge-install` command |
+| `templates/agents-memory-copilot-instructions.md` | Repo-wide Copilot activation template | `copilot-setup` / `register` |
 | `docker/docker-compose.yml` | Qdrant service | Human (`docker-compose up -d`) |
 
 ## CLI Quick Reference
@@ -71,8 +96,13 @@ python3 scripts/memory.py embed                        # build LanceDB vector in
 python3 scripts/memory.py vsearch <query>              # semantic search   (≥ 200 records)
 python3 scripts/memory.py promote <id>                 # promote to instruction Gotcha
 python3 scripts/memory.py sync                         # push promoted rules → all registered projects
-python3 scripts/memory.py register [path]              # one-command project registration + bridge install
+python3 scripts/memory.py copilot-setup [project-id]   # install repo-wide Copilot activation block
+python3 scripts/memory.py agent-list                   # list built-in agent adapters
+python3 scripts/memory.py agent-setup <agent> [path]   # install a specific agent adapter
+python3 scripts/memory.py register [path]              # one-command project registration + default agent + bridge install
 python3 scripts/memory.py bridge-install <project-id>  # install bridge instruction in a project
+python3 scripts/memory.py mcp-setup [project-id]       # write .vscode/mcp.json for a registered project
+python3 scripts/memory.py doctor [project-id]          # verify a project's full integration health
 python3 scripts/memory.py archive                      # archive old records
 python3 scripts/memory.py to-qdrant                    # migrate to shared Qdrant
 python3 scripts/memory.py update-index                 # regenerate index.md stats
@@ -88,6 +118,7 @@ VS Code config: `.vscode/mcp.json`
 | `memory_get_index()` | Read index.md — call at session start |
 | `memory_get_rules(domain)` | Read domain rules |
 | `memory_search(query)` | Keyword search across error records |
+| `memory_get_error(id)` | Read a specific full error record |
 | `memory_record_error(...)` | Create new error record automatically |
 | `memory_increment_repeat(id)` | Bump repeat_count on recurrence |
 | `memory_list_projects()` | List registered projects |
@@ -132,6 +163,8 @@ Agents-Memory (hub)
 Project (spoke) — e.g. Synapse-Network
 ├── .github/instructions/agents-memory-bridge.instructions.md
 │     ↑ installed by bridge-install, tells agent to load index.md at start
+├── .github/copilot-instructions.md
+│     ↑ installed by github-copilot adapter for repo-wide activation
 └── .github/instructions/python.instructions.md
       ↑ auto-updated by sync with new Gotchas
 ```

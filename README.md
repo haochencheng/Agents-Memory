@@ -57,17 +57,21 @@ TurboQuant（ICLR 2026）解决的是**LLM 推理时 KV Cache 的服务端压缩
 
 ```
 Agents-Memory/
-├── index.md                    # 热区：始终加载，≤ 400 tokens
-├── schema/
-│   └── error-record.md         # 错误记录格式规范
-├── errors/
-│   ├── YYYY-MM-DD-<project>-<seq>.md   # 错误记录
-│   └── archive/                # 90天+无重复的归档记录
+├── index.md
 ├── memory/
-│   └── rules.md                # 已升级为规则的提炼内容（温区）
-└── scripts/
-    └── memory.py               # CLI 管理工具
+├── errors/
+├── templates/
+├── scripts/                    # thin wrappers
+└── agents_memory/              # 真正的运行时与业务逻辑
+    ├── app.py                  # CLI 总入口
+    ├── mcp_app.py              # MCP Server 总入口
+    ├── runtime.py              # 上下文与路径解析
+    ├── commands/               # 命令分发层
+    ├── services/               # 业务服务层
+    └── integrations/agents/    # agent adapter 插件层
 ```
+
+详细拆分见 `docs/modular-architecture.md`。
 
 ---
 
@@ -110,6 +114,9 @@ python scripts/memory.py stats
 
 # 检查某个项目是否完整接入 Agents-Memory
 python scripts/memory.py doctor spec2flow
+
+# 给已注册项目补装仓库级 Copilot 自动激活
+python scripts/memory.py copilot-setup spec2flow
 
 # 将错误标记为已升级到 instruction
 python scripts/memory.py promote 2026-03-26-spec2flow-001
@@ -157,6 +164,33 @@ export AGENTS_MEMORY_LOG_STDERR=1
 ```
 
 `AGENTS_MEMORY_LOG_STDERR=1` 会在保留文件日志的同时，把同样内容打印到 stderr，方便本地调试 CLI / MCP server。
+
+## Copilot 自动激活
+
+`amem register` 现在会同时安装三层接入：
+
+1. `.github/copilot-instructions.md`：仓库级默认协议
+2. `.github/instructions/agents-memory-bridge.instructions.md`：代码任务补强协议
+3. `.vscode/mcp.json`：MCP 工具执行层
+
+设计说明见 `docs/copilot-auto-activation.md`。
+
+## 多 Agent 插件架构
+
+项目现在已经从单文件 CLI 重构成插件式结构：
+
+1. `github-copilot` adapter：已实现
+2. `chatgpt` adapter：scaffold
+3. `claude` adapter：scaffold
+
+可用命令：
+
+```bash
+python scripts/memory.py agent-list
+python scripts/memory.py agent-setup github-copilot /path/to/project
+```
+
+这层设计让后续扩展新 agent 时，不需要再把 `register`、`doctor`、MCP、错误记录逻辑重新拆一遍。
 
 ---
 
