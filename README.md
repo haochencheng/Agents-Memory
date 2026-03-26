@@ -193,6 +193,7 @@ python3 scripts/memory.py docs-check .
 6. `plan-init`, `plan-check`, `profile-apply`, `standards-sync`, `profile-check`, `docs-check`
 
 `profile-apply` 现在会默认写出 `docs/plans/README.md` 入口模板，`doctor` 也会开始感知 planning root 和 planning bundle 健康状态。
+`doctor` 的输出现在按 `Core / Planning / Integration / Optional` 分组，更接近 Shared Engineering Brain 的健康面板。
 
 ## 开源与本地运行数据边界
 

@@ -9,7 +9,7 @@ from io import StringIO
 from pathlib import Path
 
 from agents_memory.runtime import build_context
-from agents_memory.services.integration import _doctor_bridge_check, _doctor_planning_checks, cmd_bridge_install, cmd_doctor, write_vscode_mcp_json
+from agents_memory.services.integration import _doctor_bridge_check, _doctor_group_checks, _doctor_planning_checks, _doctor_overall, cmd_bridge_install, cmd_doctor, write_vscode_mcp_json
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -155,6 +155,30 @@ class IntegrationServiceTests(unittest.TestCase):
         self.assertEqual((status, key), ("INFO", "bridge_instruction"))
         self.assertIn("bridge not configured", detail)
 
+    def test_doctor_overall_ignores_info_only_noise(self) -> None:
+        overall = _doctor_overall(
+            [
+                ("OK", "registry", "registered"),
+                ("OK", "root", "/tmp/demo-project"),
+                ("INFO", "bridge_instruction", "bridge not configured for this project"),
+                ("INFO", "profile_manifest", "no applied profile manifest found"),
+            ]
+        )
+
+        self.assertEqual(overall, "READY")
+
+    def test_doctor_group_checks_splits_sections(self) -> None:
+        groups = _doctor_group_checks(
+            [
+                ("OK", "registry", "registered"),
+                ("OK", "planning_bundle", "bundle ok"),
+                ("OK", "mcp_config", "configured"),
+                ("WARN", "copilot_activation", "missing"),
+            ]
+        )
+
+        self.assertEqual([name for name, _items in groups], ["Core", "Planning", "Integration", "Optional"])
+
     def test_cmd_doctor_surfaces_planning_root_warning_for_applied_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -216,5 +240,8 @@ class IntegrationServiceTests(unittest.TestCase):
                 cmd_doctor(ctx, str(project_root))
 
             output = buffer.getvalue()
+            self.assertIn("Core:", output)
+            self.assertIn("Integration:", output)
+            self.assertIn("Optional:", output)
             self.assertIn("bridge not configured for this project", output)
             self.assertIn("bridge not configured; AGENTS read order check skipped", output)

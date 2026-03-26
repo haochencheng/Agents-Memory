@@ -33,6 +33,9 @@ from agents_memory.services.records import collect_errors
 from agents_memory.services.validation import collect_plan_check_findings, collect_profile_check_findings
 
 
+DOCTOR_GROUP_ORDER = ["Core", "Planning", "Integration", "Optional"]
+
+
 def render_bridge_instruction(ctx: AppContext, project_id: str) -> str:
     template_path = ctx.templates_dir / BRIDGE_TEMPLATE_NAME
     if not template_path.exists():
@@ -357,12 +360,31 @@ def _doctor_planning_checks(project_root: Path) -> list[tuple[str, str, str]]:
 
 
 def _doctor_overall(checks: list[tuple[str, str, str]]) -> str:
-    required_statuses = [status for status, key, _ in checks if key not in {"agents_read_order", "copilot_activation", "profile_manifest"}]
+    required_statuses = [status for status, key, _ in checks if key not in {"agents_read_order", "copilot_activation", "profile_manifest"} and status != "INFO"]
+    if not required_statuses:
+        return "READY"
     if all(status == "OK" for status in required_statuses):
         return "READY"
     if any(status == "OK" for status in required_statuses):
         return "PARTIAL"
     return "NOT_READY"
+
+
+def _doctor_group_name(key: str) -> str:
+    if key in {"registry", "active", "root", PYTHON_BIN, "mcp_package", "profile_manifest", "profile_consistency"}:
+        return "Core"
+    if key in {"planning_root", "planning_bundle"}:
+        return "Planning"
+    if key in {"bridge_instruction", "mcp_config"}:
+        return "Integration"
+    return "Optional"
+
+
+def _doctor_group_checks(checks: list[tuple[str, str, str]]) -> list[tuple[str, list[tuple[str, str, str]]]]:
+    grouped: dict[str, list[tuple[str, str, str]]] = {name: [] for name in DOCTOR_GROUP_ORDER}
+    for check in checks:
+        grouped[_doctor_group_name(check[1])].append(check)
+    return [(name, grouped[name]) for name in DOCTOR_GROUP_ORDER if grouped[name]]
 
 
 def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
@@ -401,8 +423,11 @@ def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
     print(f"Project: {project_id}")
     print(f"Root:    {project_root}")
     print(f"Overall: {overall}\n")
-    for status, key, detail in checks:
-        print(f"[{status:<4}] {key:<18} {detail}")
+    for group_name, group_checks in _doctor_group_checks(checks):
+        print(f"{group_name}:")
+        for status, key, detail in group_checks:
+            print(f"[{status:<4}] {key:<18} {detail}")
+        print()
 
     print("\nNext:")
     if overall == "READY":
