@@ -12,6 +12,7 @@ Agents-Memory CLI — 错误记录管理工具
   python3 memory.py promote <id>               # 将错误记录升级为 instruction 规则
   python3 memory.py sync                       # 将已升级规则自动写入注册项目的 instruction 文件
   python3 memory.py bridge-install <project>   # 在注册项目中安装 bridge instruction
+  python3 memory.py register [path]            # 一键注册新项目（自动检测 + 安装 bridge）
   python3 memory.py archive                    # 归档 90 天以上且无重复的记录
   python3 memory.py update-index               # 重新生成 index.md 统计数字
   python3 memory.py to-qdrant                  # 迁移向量索引到 Qdrant（多 Agent 共享）
@@ -713,6 +714,180 @@ def cmd_bridge_install(project_id: str):
     print(f"Next: add it to {root}/AGENTS.md read-order or .github/instructions/ references.")
 
 
+# ─── 一键注册 ────────────────────────────────────────────────────────────────
+
+# 候选 instruction 文件名关键词 → domain 映射
+_DOMAIN_HINTS: list[tuple[str, str]] = [
+    ("finance-backend",  "finance"),
+    ("finance-admin",    "finance"),
+    ("finance",          "finance"),
+    ("python",           "python"),
+    ("frontend",         "frontend"),
+    ("admin-console",    "frontend"),
+    ("docs",             "docs"),
+    ("config",           "config"),
+    ("infra",            "infra"),
+    ("safety",           "config"),
+]
+
+
+def _detect_project_id(root: Path) -> str:
+    """从 git remote URL 或目录名推断项目 ID。"""
+    import subprocess
+    try:
+        url = subprocess.check_output(
+            ["git", "-C", str(root), "remote", "get-url", "origin"],
+            stderr=subprocess.DEVNULL, text=True,
+        ).strip()
+        # github.com:owner/repo.git  or  https://github.com/owner/repo.git
+        repo_name = re.split(r"[/:]" , url.rstrip(".git").rstrip("/"))[-1]
+        return repo_name.lower().replace("_", "-")
+    except Exception:
+        return root.name.lower().replace("_", "-")
+
+
+def _detect_domains(instruction_dir: Path) -> list[str]:
+    """扫描 instruction_dir 中的 .instructions.md 文件，推断涉及的 domain 列表。"""
+    if not instruction_dir.exists():
+        return ["python", "docs"]
+    found: set[str] = set()
+    for f in instruction_dir.glob("*.instructions.md"):
+        name = f.name.lower()
+        for hint, domain in _DOMAIN_HINTS:
+            if hint in name:
+                found.add(domain)
+    return sorted(found) if found else ["python", "docs"]
+
+
+def _detect_instruction_files(instruction_dir: Path, root: Path) -> dict[str, str]:
+    """返回 domain → relative-path 映射（只包含真实存在的文件）。"""
+    mapping: dict[str, str] = {}
+    if not instruction_dir.exists():
+        return mapping
+    for f in sorted(instruction_dir.glob("*.instructions.md")):
+        name = f.name.lower()
+        for hint, domain in _DOMAIN_HINTS:
+            if hint in name and domain not in mapping:
+                rel = f.relative_to(root)
+                mapping[domain] = str(rel)
+    return mapping
+
+
+def _project_already_registered(project_id: str) -> bool:
+    """检查 projects.md 中是否已包含该项目 ID。"""
+    if not PROJECTS_FILE.exists():
+        return False
+    return f"## {project_id}" in PROJECTS_FILE.read_text(encoding="utf-8")
+
+
+def _append_project_entry(entry: str):
+    """将新项目条目追加到 projects.md 末尾（自动插在 '注册新项目' 说明之前）."""
+    MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+    if not PROJECTS_FILE.exists():
+        PROJECTS_FILE.write_text("# Project Registry\n\n", encoding="utf-8")
+    content = PROJECTS_FILE.read_text(encoding="utf-8")
+    # Insert before the '## 注册新项目' section if it exists
+    marker = "## 注册新项目"
+    if marker in content:
+        content = content.replace(marker, entry + "\n" + marker, 1)
+    else:
+        content = content.rstrip() + "\n\n" + entry + "\n"
+    PROJECTS_FILE.write_text(content, encoding="utf-8")
+
+
+def cmd_register(path: str = "."):
+    """
+    一键注册新项目到 Agents-Memory 共享记忆系统，并自动安装 bridge instruction。
+
+    步骤：
+      1. 解析项目根目录（默认当前目录）
+      2. 从 git remote / 目录名自动推断项目 ID
+      3. 扫描 .github/instructions/ 自动检测 domains 和 instruction_files
+      4. 写入 memory/projects.md
+      5. 安装 bridge instruction（可选）
+
+    用法:
+      python3 /path/to/scripts/memory.py register               # 注册当前目录
+      python3 /path/to/scripts/memory.py register /path/to/proj  # 注册指定路径
+    """
+    root = Path(path).expanduser().resolve()
+    if not root.is_dir():
+        print(f"路径不存在: {root}")
+        return
+
+    # ── 1. 推断项目 ID ──────────────────────────────────────────────────────
+    detected_id = _detect_project_id(root)
+    print(f"\n🔍 检测到项目 ID: {detected_id}  (来源: git remote / 目录名)")
+    project_id = input(f"Project ID [{detected_id}]: ").strip() or detected_id
+    project_id = project_id.lower().replace("_", "-")
+
+    if _project_already_registered(project_id):
+        print(f"⚠️  '{project_id}' 已在 memory/projects.md 中注册，跳过写入。")
+        print("如需更新，请手动编辑 memory/projects.md。")
+        # Still offer bridge install
+        _offer_bridge_install(project_id)
+        return
+
+    # ── 2. 检测 instruction 目录 ────────────────────────────────────────────
+    default_instr_dir = ".github/instructions"
+    instr_dir_input = input(f"Instruction 目录 [{default_instr_dir}]: ").strip() or default_instr_dir
+    instr_dir_abs = root / instr_dir_input
+
+    # ── 3. 自动推断 domain + instruction_files ──────────────────────────────
+    domains = _detect_domains(instr_dir_abs)
+    instr_files = _detect_instruction_files(instr_dir_abs, root)
+
+    print(f"\n📂 扫描到 instruction 文件:")
+    if instr_files:
+        for d, p in instr_files.items():
+            print(f"   {d:<12} → {p}")
+    else:
+        print("   (未找到 .instructions.md 文件，将使用空映射)")
+    print(f"\n🏷  推断的 domains: {', '.join(domains)}")
+    domains_input = input(f"Domains (逗号分隔) [{', '.join(domains)}]: ").strip()
+    if domains_input:
+        domains = [d.strip() for d in domains_input.split(",") if d.strip()]
+
+    # ── 4. 组装 projects.md 条目 ────────────────────────────────────────────
+    bridge_rel = f"{instr_dir_input}/agents-memory-bridge.instructions.md"
+    instr_lines = ""
+    if instr_files:
+        instr_lines = "- **instruction_files**:\n"
+        for d, p in instr_files.items():
+            instr_lines += f"  - {d:<12}: {p}\n"
+
+    entry = (
+        f"## {project_id}\n\n"
+        f"- **id**: {project_id}\n"
+        f"- **root**: {root}\n"
+        f"- **instruction_dir**: {instr_dir_input}\n"
+        f"- **bridge_instruction**: {bridge_rel}\n"
+        f"- **active**: true\n"
+        f"- **domains**: {', '.join(domains)}\n"
+        f"{instr_lines}"
+        f"\n---\n"
+    )
+
+    _append_project_entry(entry)
+    print(f"\n✅ 已写入 memory/projects.md → {project_id}")
+
+    # ── 5. 安装 bridge instruction ──────────────────────────────────────────
+    _offer_bridge_install(project_id)
+
+
+def _offer_bridge_install(project_id: str):
+    """询问并执行 bridge instruction 安装。"""
+    template_path = TEMPLATES_DIR / "agents-memory-bridge.instructions.md"
+    if not template_path.exists():
+        print(f"\n⚠️  Bridge 模板不存在: {template_path}，跳过安装。")
+        return
+    answer = input("\n自动安装 bridge instruction？[Y/n]: ").strip().lower()
+    if answer in ("", "y", "yes"):
+        cmd_bridge_install(project_id)
+    else:
+        print(f"跳过。稍后可手动运行: python3 scripts/memory.py bridge-install {project_id}")
+
+
 # ─── 入口 ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -743,6 +918,8 @@ def main():
         cmd_sync()
     elif args[0] == "bridge-install":
         cmd_bridge_install(args[1]) if len(args) > 1 else print("用法: python3 memory.py bridge-install <project-id>")
+    elif args[0] == "register":
+        cmd_register(args[1] if len(args) > 1 else ".")
     elif args[0] == "promote":
         cmd_promote(args[1]) if len(args) > 1 else print("用法: python3 memory.py promote <id>")
     elif args[0] == "archive":

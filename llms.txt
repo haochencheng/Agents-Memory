@@ -71,6 +71,7 @@ python3 scripts/memory.py embed                        # build LanceDB vector in
 python3 scripts/memory.py vsearch <query>              # semantic search   (≥ 200 records)
 python3 scripts/memory.py promote <id>                 # promote to instruction Gotcha
 python3 scripts/memory.py sync                         # push promoted rules → all registered projects
+python3 scripts/memory.py register [path]              # one-command project registration + bridge install
 python3 scripts/memory.py bridge-install <project-id>  # install bridge instruction in a project
 python3 scripts/memory.py archive                      # archive old records
 python3 scripts/memory.py to-qdrant                    # migrate to shared Qdrant
