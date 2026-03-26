@@ -13,9 +13,29 @@
 
 ### `amem enable . --dry-run`
 
-预览模式。只展示当前项目将启用哪些能力、将写哪些文件，不落任何文件。
+预览模式。只展示当前项目将启用哪些能力、将写哪些文件，以及哪些项目工件会被复用，不落任何文件。
 
 适合在正式接入前先检查影响面。
+
+默认分组输出：
+
+- `Capabilities`
+- `Planned Writes`
+- `Skipped Existing`
+
+### `amem enable . --full --dry-run --json`
+
+结构化 JSON 预览模式。适合 agent、脚本或 CI 直接消费。
+
+输出字段包括：
+
+- `project_id`
+- `project_root`
+- `mode`
+- `dry_run`
+- `capabilities`
+- `planned_writes`
+- `skipped_existing`
 
 ### `amem enable . --full`
 

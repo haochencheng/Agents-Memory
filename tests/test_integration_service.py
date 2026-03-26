@@ -380,18 +380,28 @@ class IntegrationServiceTests(unittest.TestCase):
         self.assertTrue(approve_unsafe)
 
     def test_parse_enable_args_supports_full_mode(self) -> None:
-        project_id_or_path, full, dry_run = _parse_enable_args(["demo-project", "--full"])
+        project_id_or_path, full, dry_run, json_output = _parse_enable_args(["demo-project", "--full"])
 
         self.assertEqual(project_id_or_path, "demo-project")
         self.assertTrue(full)
         self.assertFalse(dry_run)
+        self.assertFalse(json_output)
 
     def test_parse_enable_args_supports_dry_run(self) -> None:
-        project_id_or_path, full, dry_run = _parse_enable_args(["demo-project", "--dry-run"])
+        project_id_or_path, full, dry_run, json_output = _parse_enable_args(["demo-project", "--dry-run"])
 
         self.assertEqual(project_id_or_path, "demo-project")
         self.assertFalse(full)
         self.assertTrue(dry_run)
+        self.assertFalse(json_output)
+
+    def test_parse_enable_args_supports_json_output(self) -> None:
+        project_id_or_path, full, dry_run, json_output = _parse_enable_args(["demo-project", "--full", "--dry-run", "--json"])
+
+        self.assertEqual(project_id_or_path, "demo-project")
+        self.assertTrue(full)
+        self.assertTrue(dry_run)
+        self.assertTrue(json_output)
 
     def test_cmd_doctor_surfaces_planning_root_warning_for_applied_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -806,14 +816,112 @@ class IntegrationServiceTests(unittest.TestCase):
                 exit_code = cmd_enable(ctx, str(project_root), dry_run=True)
 
             self.assertEqual(exit_code, 0)
-            self.assertIn("Planned Actions:", buffer.getvalue())
+            self.assertIn("Capabilities:", buffer.getvalue())
             self.assertIn("Planned Writes:", buffer.getvalue())
+            self.assertIn("Skipped Existing:", buffer.getvalue())
             projects_file = root / "memory" / "projects.md"
             if projects_file.exists():
                 self.assertNotIn("## demo-project", projects_file.read_text(encoding="utf-8"))
             self.assertFalse((project_root / ".vscode" / "mcp.json").exists())
             self.assertFalse((project_root / ".agents-memory" / "onboarding-state.json").exists())
             self.assertFalse((project_root / "docs" / "plans").exists())
+
+    def test_cmd_enable_full_dry_run_json_outputs_preview_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(root / "templates" / "agents-memory-bridge.instructions.md", "root={{AGENTS_MEMORY_ROOT}}\nproject={{PROJECT_ID}}\n")
+            _write_text(root / "templates" / "agents-memory-copilot-instructions.md", "copilot {{PROJECT_ID}} {{AGENTS_MEMORY_ROOT}}\n")
+            for name in ["README.template.md", "spec.template.md", "plan.template.md", "task-graph.template.md", "validation.template.md"]:
+                _write_text(root / "templates" / "planning" / name, f"# {name}\nplanning bundle\n## Acceptance Criteria\n## Change Set\n## Work Items\n## Exit Criteria\n## Required Checks\n{{{{TASK_NAME}}}}\n")
+            _write_text(
+                root / "profiles" / "python-service.yaml",
+                json.dumps(
+                    {
+                        "id": "python-service",
+                        "display_name": "Python Service",
+                        "applies_to": ["backend", "python"],
+                        "standards": ["standards/docs/docs-sync.instructions.md"],
+                        "templates": ["templates/profile/python-service/docs/plans/README.example.md"],
+                        "commands": {"doctor": "amem doctor ."},
+                        "bootstrap": {"create": [".github/instructions/", "docs/", "tests/"]},
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            _write_text(root / "standards" / "docs" / "docs-sync.instructions.md", "docs sync\n")
+            _write_text(root / "templates" / "profile" / "python-service" / "docs" / "plans" / "README.example.md", "planning root\n")
+            _write_text(project_root / "pyproject.toml", "[project]\nname='demo'\n")
+            _write_text(
+                project_root / "service.py",
+                "\n".join(
+                    [
+                        "def heavy(value):",
+                        "    total = 0",
+                        "    items = []",
+                        "    results = {}",
+                        "    status = None",
+                        "    errors = []",
+                        "    flags = set()",
+                        "    cache = {}",
+                        "    index = 0",
+                        "    if value > 0:",
+                        "        for outer in range(value):",
+                        "            if outer % 2 == 0:",
+                        "                for inner in range(3):",
+                        "                    if inner == 1:",
+                        "                        total += outer + inner",
+                        "                        items.append(total)",
+                        "                        results[outer] = inner",
+                        "                        status = 'hot'",
+                        "                    else:",
+                        "                        errors.append(inner)",
+                        "            else:",
+                        "                while index < 2:",
+                        "                    flags.add(index)",
+                        "                    index += 1",
+                        "    if total > 3:",
+                        "        cache['total'] = total",
+                        "    if items:",
+                        "        return total + len(items) + len(results) + len(errors) + len(flags) + len(cache)",
+                        "    return total",
+                    ]
+                )
+                + "\n",
+            )
+
+            buffer = StringIO()
+            with redirect_stdout(buffer):
+                exit_code = cmd_enable(ctx, str(project_root), full=True, dry_run=True, json_output=True)
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(buffer.getvalue())
+            self.assertEqual(payload["status"], "ok")
+            self.assertEqual(payload["mode"], "full")
+            self.assertTrue(payload["dry_run"])
+            self.assertTrue(payload["capabilities"])
+            self.assertTrue(payload["planned_writes"])
+            self.assertIn("apply recommended profile `python-service`", payload["capabilities"])
+            self.assertTrue(any(path.endswith(".github/copilot-instructions.md") for path in payload["planned_writes"]))
+            self.assertTrue(any("hotspot-" in item for item in payload["capabilities"]))
+            self.assertFalse((project_root / ".github" / "copilot-instructions.md").exists())
+            self.assertFalse((project_root / ".agents-memory" / "onboarding-state.json").exists())
+
+    def test_cmd_enable_json_requires_dry_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+
+            buffer = StringIO()
+            with redirect_stdout(buffer):
+                exit_code = cmd_enable(ctx, str(project_root), json_output=True)
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("--json 目前仅支持与 --dry-run 一起使用", buffer.getvalue())
 
     def test_cmd_enable_full_mode_applies_profile_and_refactor_followup(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

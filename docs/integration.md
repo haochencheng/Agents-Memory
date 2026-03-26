@@ -46,10 +46,22 @@ amem enable .
 amem enable . --dry-run
 ```
 
+它会输出三组预览信息：
+
+1. `Capabilities`
+2. `Planned Writes`
+3. `Skipped Existing`
+
 如果你想把 profile、Copilot 激活和第一条 refactor follow-up 也一起打开：
 
 ```bash
 amem enable . --full
+```
+
+如果你希望把全量预览交给 agent 或 CI 直接消费：
+
+```bash
+amem enable . --full --dry-run --json
 ```
 
 默认模式会自动完成：

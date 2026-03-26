@@ -1690,52 +1690,53 @@ def _doctor_artifact_paths(project_root: Path, *, write_state: bool, write_check
     return artifacts
 
 
-def _preview_enable_actions(ctx: AppContext, project_root: Path, *, project_id: str, full: bool) -> tuple[list[str], list[str]]:
-    actions: list[str] = []
-    paths: list[str] = []
+def _preview_enable_actions(ctx: AppContext, project_root: Path, *, project_id: str, full: bool) -> dict[str, object]:
+    capabilities: list[str] = []
+    planned_writes: list[str] = []
+    skipped_existing: list[str] = []
 
     if not project_already_registered(ctx, project_id):
-        actions.append(f"register project `{project_id}`")
-        paths.append(str(ctx.projects_file))
+        capabilities.append(f"register project `{project_id}`")
+        planned_writes.append(str(ctx.projects_file))
     else:
-        actions.append(f"reuse registered project `{project_id}`")
+        skipped_existing.append(f"registry entry already exists for `{project_id}`")
 
     bridge_path = project_root / DEFAULT_BRIDGE_INSTRUCTION_REL
     if not bridge_path.exists():
-        actions.append("install bridge instruction")
-        paths.append(str(bridge_path))
+        capabilities.append("install bridge instruction")
+        planned_writes.append(str(bridge_path))
     else:
-        actions.append("reuse existing bridge instruction")
+        skipped_existing.append(str(bridge_path))
 
     mcp_path = project_root / VSCODE_DIRNAME / MCP_CONFIG_NAME
-    actions.append("merge agents-memory MCP server config")
-    paths.append(str(mcp_path))
+    capabilities.append("merge agents-memory MCP server config")
+    planned_writes.append(str(mcp_path))
 
     recommended_profile_id = None
     applied_profile_id = detect_applied_profile(project_root)
     if full and not applied_profile_id:
         recommended_profile_id = _recommended_enable_profile_id(project_root)
         if recommended_profile_id:
-            actions.append(f"apply recommended profile `{recommended_profile_id}`")
+            capabilities.append(f"apply recommended profile `{recommended_profile_id}`")
             profile = load_profile(ctx, recommended_profile_id)
             expected = expected_profile_paths(profile, project_root)
-            paths.extend(str(path) for path in expected["bootstrap_dirs"])
-            paths.extend(str(path) for path in expected["standard_files"])
-            paths.extend(str(path) for path in expected["template_files"])
-            paths.append(str(project_root / PROFILE_MANIFEST_REL))
+            planned_writes.extend(str(path) for path in expected["bootstrap_dirs"])
+            planned_writes.extend(str(path) for path in expected["standard_files"])
+            planned_writes.extend(str(path) for path in expected["template_files"])
+            planned_writes.append(str(project_root / PROFILE_MANIFEST_REL))
         else:
-            actions.append("skip profile auto-apply (no default profile detected)")
+            skipped_existing.append("profile auto-apply skipped: no default profile detected")
     elif applied_profile_id:
-        actions.append(f"reuse applied profile `{applied_profile_id}`")
+        skipped_existing.append(f"profile already applied: `{applied_profile_id}`")
     else:
-        actions.append("skip profile auto-apply in default mode")
+        skipped_existing.append("profile auto-apply skipped in default mode")
 
     if full:
-        actions.append("install or update Copilot activation block")
-        paths.append(str(project_root / COPILOT_INSTRUCTIONS_REL))
+        capabilities.append("install or update Copilot activation block")
+        planned_writes.append(str(project_root / COPILOT_INSTRUCTIONS_REL))
 
-    actions.append("refresh doctor state and checklist artifacts")
-    paths.extend(str(path) for path in _doctor_artifact_paths(project_root, write_state=True, write_checklist=True))
+    capabilities.append("refresh doctor state and checklist artifacts")
+    planned_writes.extend(str(path) for path in _doctor_artifact_paths(project_root, write_state=True, write_checklist=True))
 
     report = _doctor_report(ctx, str(project_root))
     recommended_key = "onboarding"
@@ -1745,8 +1746,8 @@ def _preview_enable_actions(ctx: AppContext, project_root: Path, *, project_id: 
             recommended_key = str(runbook_steps[0].get("key") or recommended_key)
     onboarding_slug = f"onboarding-{recommended_key.replace('_', '-')}"
     onboarding_plan_root = project_root / "docs" / "plans" / onboarding_slug
-    actions.append("generate onboarding planning bundle")
-    paths.extend(
+    capabilities.append("generate onboarding planning bundle")
+    planned_writes.extend(
         str(onboarding_plan_root / filename)
         for filename in ("README.md", "spec.md", "plan.md", "task-graph.md", "validation.md")
     )
@@ -1757,17 +1758,25 @@ def _preview_enable_actions(ctx: AppContext, project_root: Path, *, project_id: 
             hotspot = hotspots[0]
             refactor_slug = f"refactor-{re.sub(r'[^a-zA-Z0-9]+', '-', f'{hotspot.relative_path}-{hotspot.function_name}'.lower()).strip('-') or 'untitled-task'}"
             refactor_root = project_root / "docs" / "plans" / refactor_slug
-            actions.append(f"generate refactor bundle for `{hotspot.identifier}` using `{hotspot.rank_token}`")
-            paths.extend(
+            capabilities.append(f"generate refactor bundle for `{hotspot.identifier}` using `{hotspot.rank_token}`")
+            planned_writes.extend(
                 str(refactor_root / filename)
                 for filename in ("README.md", "spec.md", "plan.md", "task-graph.md", "validation.md")
             )
-            paths.append(str(project_root / ".agents-memory" / "onboarding-state.json"))
+            planned_writes.append(str(project_root / ".agents-memory" / "onboarding-state.json"))
         else:
-            actions.append("skip refactor bundle generation (no hotspots)")
+            skipped_existing.append("refactor bundle generation skipped: no hotspots")
 
-    deduped_paths = list(dict.fromkeys(paths))
-    return actions, deduped_paths
+    return {
+        "status": "ok",
+        "project_id": project_id,
+        "project_root": str(project_root),
+        "mode": "full" if full else "default",
+        "dry_run": True,
+        "capabilities": capabilities,
+        "planned_writes": list(dict.fromkeys(planned_writes)),
+        "skipped_existing": skipped_existing,
+    }
 
 
 def _recommended_enable_profile_id(project_root: Path) -> str | None:
@@ -1786,7 +1795,7 @@ def _recommended_enable_profile_id(project_root: Path) -> str | None:
     return None
 
 
-def cmd_enable(ctx: AppContext, project_id_or_path: str = ".", *, full: bool = False, dry_run: bool = False) -> int:
+def cmd_enable(ctx: AppContext, project_id_or_path: str = ".", *, full: bool = False, dry_run: bool = False, json_output: bool = False) -> int:
     project_root = Path(project_id_or_path).expanduser().resolve()
     if not project_root.exists():
         print(f"路径不存在: {project_root}")
@@ -1795,24 +1804,38 @@ def cmd_enable(ctx: AppContext, project_id_or_path: str = ".", *, full: bool = F
         print(f"目标不是目录: {project_root}")
         return 1
 
-    ctx.logger.info("enable_start | target=%s | full=%s | dry_run=%s", project_root, full, dry_run)
-    print("\n=== Agents-Memory Enable ===")
-    print(f"Target: {project_root}")
-    print(f"Mode:   {'full' if full else 'default'}")
-    print(f"DryRun: {'yes' if dry_run else 'no'}")
+    ctx.logger.info("enable_start | target=%s | full=%s | dry_run=%s | json_output=%s", project_root, full, dry_run, json_output)
+    if json_output and not dry_run:
+        print("--json 目前仅支持与 --dry-run 一起使用")
+        return 1
+    if not json_output:
+        print("\n=== Agents-Memory Enable ===")
+        print(f"Target: {project_root}")
+        print(f"Mode:   {'full' if full else 'default'}")
+        print(f"DryRun: {'yes' if dry_run else 'no'}")
 
     resolved_project_id, _resolved_root, _project = resolve_project_target(ctx, str(project_root))
     if dry_run:
-        actions, paths = _preview_enable_actions(ctx, project_root, project_id=resolved_project_id, full=full)
-        print("\nPlanned Actions:")
-        for item in actions:
-            print(f"- {item}")
-        print("\nPlanned Writes:")
-        for path in paths:
-            print(f"- {path}")
-        print("\nNext:")
-        print("- Re-run without --dry-run to apply these changes")
-        ctx.logger.info("enable_preview | target=%s | full=%s | planned_writes=%s", project_root, full, len(paths))
+        preview = _preview_enable_actions(ctx, project_root, project_id=resolved_project_id, full=full)
+        if json_output:
+            print(json.dumps(preview, ensure_ascii=False, indent=2))
+        else:
+            print("\nCapabilities:")
+            for item in list(preview.get("capabilities", [])):
+                print(f"- {item}")
+            print("\nPlanned Writes:")
+            for path in list(preview.get("planned_writes", [])):
+                print(f"- {path}")
+            print("\nSkipped Existing:")
+            skipped_existing = list(preview.get("skipped_existing", []))
+            if skipped_existing:
+                for item in skipped_existing:
+                    print(f"- {item}")
+            else:
+                print("- none")
+            print("\nNext:")
+            print("- Re-run without --dry-run to apply these changes")
+        ctx.logger.info("enable_preview | target=%s | full=%s | planned_writes=%s", project_root, full, len(list(preview.get("planned_writes", []))))
         return 0
 
     project_id, registered_now = _ensure_registered_project(ctx, project_root)

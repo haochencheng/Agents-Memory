@@ -28,8 +28,8 @@ USAGE = """Agents-Memory CLI — 错误记录管理工具
   python3 memory.py agent-setup <agent> [path] # 为指定 agent 安装集成
   python3 memory.py register [path]            # 一键注册新项目（agent + bridge + mcp）
   python3 memory.py mcp-setup [project-id]     # 在已注册项目中写入 .vscode/mcp.json
-    python3 memory.py enable [path] [--full] [--dry-run]
-                                                 # 一键启用 Shared Engineering Brain；--full 会附加 profile、Copilot 和 refactor bundle，--dry-run 仅预览变更
+    python3 memory.py enable [path] [--full] [--dry-run] [--json]
+                                                                                             # 一键启用 Shared Engineering Brain；--full 会附加 profile、Copilot 和 refactor bundle，--dry-run 预览变更，--json 输出结构化预览
   python3 memory.py doctor [project-id] [--write-checklist] [--write-state]
                                                # 检查项目是否已完整接入 Agents-Memory，并可导出 onboarding 工件
   python3 memory.py onboarding-execute [path] [--approve-unsafe]

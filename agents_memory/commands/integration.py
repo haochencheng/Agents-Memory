@@ -53,25 +53,28 @@ def _run_onboarding_execute(ctx, args: list[str]) -> None:
     cmd_onboarding_execute(ctx, project_id_or_path, verify=verify, approve_unsafe=approve_unsafe)
 
 
-def _parse_enable_args(args: list[str]) -> tuple[str, bool, bool]:
+def _parse_enable_args(args: list[str]) -> tuple[str, bool, bool, bool]:
     project_id_or_path = "."
     full = False
     dry_run = False
+    json_output = False
     for arg in args:
         if arg == "--full":
             full = True
         elif arg == "--dry-run":
             dry_run = True
+        elif arg == "--json":
+            json_output = True
         elif arg.startswith("--"):
             print(f"未知参数: {arg}")
         else:
             project_id_or_path = arg
-    return project_id_or_path, full, dry_run
+    return project_id_or_path, full, dry_run, json_output
 
 
 def _run_enable(ctx, args: list[str]) -> None:
-    project_id_or_path, full, dry_run = _parse_enable_args(args)
-    raise SystemExit(cmd_enable(ctx, project_id_or_path, full=full, dry_run=dry_run))
+    project_id_or_path, full, dry_run, json_output = _parse_enable_args(args)
+    raise SystemExit(cmd_enable(ctx, project_id_or_path, full=full, dry_run=dry_run, json_output=json_output))
 
 
 def register() -> dict[str, Callable]:
