@@ -126,6 +126,9 @@ python3 scripts/memory.py vsearch "type guard"
 python3 scripts/memory.py doctor .
 # 输出: 当前项目的接入健康检查（按 Core / Planning / Integration / Optional 分组，并附带 Summary / Remediation / Action Sequence / Onboarding Runbook / Project Bootstrap Checklist）
 
+python3 scripts/memory.py doctor . --write-checklist --write-state
+# 输出: 在 docs/plans/bootstrap-checklist.md 和 .agents-memory/onboarding-state.json 导出 onboarding 工件
+
 python3 scripts/memory.py plan-init "shared engineering brain task" .
 # 输出: 在 docs/plans/<slug>/ 生成 spec / plan / task-graph / validation bundle
 

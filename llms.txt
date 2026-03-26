@@ -123,7 +123,7 @@ python3 scripts/memory.py agent-setup <agent> [path]   # install a specific agen
 python3 scripts/memory.py register [path]              # one-command project registration + default agent + bridge install
 python3 scripts/memory.py bridge-install <project-id>  # install bridge instruction in a project
 python3 scripts/memory.py mcp-setup [project-id]       # write .vscode/mcp.json for a registered project
-python3 scripts/memory.py doctor [project-id]          # verify a project's full integration health
+python3 scripts/memory.py doctor [project-id] [--write-checklist] [--write-state] # verify a project's full integration health
 python3 scripts/memory.py plan-init <task-name> [path] # scaffold spec / plan / task-graph / validation bundle
 python3 scripts/memory.py plan-check [path]            # validate planning bundles under docs/plans
 python3 scripts/memory.py profile-list                 # list installable project profiles

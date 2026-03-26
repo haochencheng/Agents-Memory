@@ -4,6 +4,7 @@ import json
 import re
 import shutil
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 from agents_memory.constants import (
@@ -588,7 +589,134 @@ def _doctor_bootstrap_checklist(grouped_checks: list[tuple[str, list[tuple[str, 
     return checklist
 
 
-def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
+def _doctor_state_payload(
+    project_id: str,
+    project_root: Path,
+    overall: str,
+    grouped_checks: list[tuple[str, list[tuple[str, str, str]]]],
+    action_sequence: list[str],
+    runbook_steps: list[dict[str, str]],
+    checklist: list[str],
+) -> dict[str, object]:
+    groups = []
+    for group_name, group_checks in grouped_checks:
+        groups.append(
+            {
+                "name": group_name,
+                "status": _doctor_group_status(group_checks),
+                "summary": _doctor_group_summary(group_name, group_checks),
+                "checks": [
+                    {"status": status, "key": key, "detail": detail}
+                    for status, key, detail in group_checks
+                ],
+            }
+        )
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "project_id": project_id,
+        "project_root": str(project_root),
+        "overall": overall,
+        "groups": groups,
+        "action_sequence": action_sequence,
+        "runbook_steps": runbook_steps,
+        "bootstrap_checklist": checklist,
+    }
+
+
+def _doctor_checklist_markdown(
+    project_id: str,
+    project_root: Path,
+    overall: str,
+    grouped_checks: list[tuple[str, list[tuple[str, str, str]]]],
+    action_sequence: list[str],
+    runbook_steps: list[dict[str, str]],
+    checklist: list[str],
+) -> str:
+    lines = [
+        "# Bootstrap Checklist",
+        "",
+        f"- Project: `{project_id}`",
+        f"- Root: `{project_root}`",
+        f"- Overall: `{overall}`",
+        "",
+        "## Checklist",
+    ]
+    lines.extend(f"- {item}" for item in checklist)
+    if action_sequence:
+        lines.extend(["", "## Action Sequence"])
+        lines.extend(f"{index}. {item}" for index, item in enumerate(action_sequence, start=1))
+    if runbook_steps:
+        lines.extend(["", "## Onboarding Runbook"])
+        for index, step in enumerate(runbook_steps, start=1):
+            lines.extend(
+                [
+                    f"### Step {index}: {step['group']} / {step['key']}",
+                    f"- Priority: `{step['priority']}`",
+                    f"- Trigger: {step['detail']}",
+                    f"- Action: {step['action']}",
+                    f"- Command: `{step['command']}`",
+                    f"- Verify with: `{step['verify_with']}`",
+                    f"- Next command: `{step['next_command']}`",
+                    f"- Done when: {step['done_when']}",
+                    "",
+                ]
+            )
+    lines.extend(["## Group Health"])
+    for group_name, group_checks in grouped_checks:
+        lines.append(f"### {group_name}")
+        lines.append(f"- Summary: {_doctor_group_summary(group_name, group_checks)}")
+        for status, key, detail in group_checks:
+            lines.append(f"- [{status}] `{key}` {detail}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _write_doctor_artifacts(
+    ctx: AppContext,
+    project_id: str,
+    project_root: Path,
+    overall: str,
+    grouped_checks: list[tuple[str, list[tuple[str, str, str]]]],
+    action_sequence: list[str],
+    runbook_steps: list[dict[str, str]],
+    checklist: list[str],
+    *,
+    write_state: bool,
+    write_checklist: bool,
+) -> list[Path]:
+    written: list[Path] = []
+    if write_checklist:
+        checklist_path = project_root / "docs" / "plans" / "bootstrap-checklist.md"
+        checklist_path.parent.mkdir(parents=True, exist_ok=True)
+        checklist_path.write_text(
+            _doctor_checklist_markdown(project_id, project_root, overall, grouped_checks, action_sequence, runbook_steps, checklist),
+            encoding="utf-8",
+        )
+        log_file_update(ctx.logger, action="write_doctor_checklist", path=checklist_path, detail=f"project_id={project_id};overall={overall}")
+        written.append(checklist_path)
+    if write_state:
+        state_path = project_root / ".agents-memory" / "onboarding-state.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(
+            json.dumps(
+                _doctor_state_payload(project_id, project_root, overall, grouped_checks, action_sequence, runbook_steps, checklist),
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        log_file_update(ctx.logger, action="write_doctor_state", path=state_path, detail=f"project_id={project_id};overall={overall}")
+        written.append(state_path)
+    return written
+
+
+def cmd_doctor(
+    ctx: AppContext,
+    project_id_or_path: str = ".",
+    write_state: bool = False,
+    write_checklist: bool = False,
+) -> None:
     project_id, project_root, project = resolve_project_target(ctx, project_id_or_path)
     ctx.logger.info("doctor_start | target=%s | resolved_project_id=%s | project_root=%s", project_id_or_path, project_id, project_root)
     if project_root is None:
@@ -663,6 +791,24 @@ def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
         print("Project Bootstrap Checklist:")
         for item in checklist:
             print(f"- {item}")
+        print()
+
+    written_artifacts = _write_doctor_artifacts(
+        ctx,
+        project_id,
+        project_root,
+        overall,
+        grouped_checks,
+        action_sequence,
+        runbook_steps,
+        checklist,
+        write_state=write_state,
+        write_checklist=write_checklist,
+    )
+    if written_artifacts:
+        print("Exported Artifacts:")
+        for path in written_artifacts:
+            print(f"- {path}")
         print()
 
     print("\nNext:")

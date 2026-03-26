@@ -15,6 +15,7 @@ memory/projects.md
 memory/rules.md
 errors/*.md
 errors/archive/
+.agents-memory/
 
 # Runtime logs
 logs/

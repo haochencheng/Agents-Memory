@@ -141,7 +141,7 @@ Shared Engineering Brain
 2. profile-check
 3. standards-check
 4. project doctor
-   应继续升级为 onboarding runbook，输出推荐命令、验证动作、下一条命令与完成判定
+   应继续升级为 onboarding runbook，输出推荐命令、验证动作、下一条命令与完成判定，并可导出 checklist / onboarding state 工件
 5. bootstrap completeness check
 
 这层负责把规则真正落地，否则 standards 只是文档陈列。
@@ -533,7 +533,7 @@ profile apply   = 项目装配执行
 
 当前进度：`plan-init` 第一版已完成，可在目标项目的 `docs/plans/<task>/` 下生成 planning bundle。
 当前进度：`plan-check` 第一版已完成，可校验 planning bundle 的完整性与关键语义。
-当前进度：`doctor` 已开始感知 planning root 和 planning bundle 健康状态，并正在升级成带行动序列、推荐命令、验证动作、下一条命令与完成判定的 onboarding runbook，同时生成 project bootstrap checklist。
+当前进度：`doctor` 已开始感知 planning root 和 planning bundle 健康状态，并正在升级成带行动序列、推荐命令、验证动作、下一条命令与完成判定的 onboarding runbook，同时生成 project bootstrap checklist，并支持导出 markdown/json 工件。
 
 ### Spec Kit
 
