@@ -5,13 +5,17 @@ When working in this repository, treat Agents-Memory as mandatory session contex
 
 ## Required startup sequence
 
-1. Before any substantial analysis or edits, call `memory_get_index()` if the `agents-memory` MCP server is available.
-2. Before touching domain-specific code, call `memory_get_rules(domain)` with the closest matching domain:
+1. Before any substantial analysis or edits, read `.agents-memory/onboarding-state.json` if it exists.
+   If `project_bootstrap_ready` is `false`, follow `recommended_next_command`, then verify with `recommended_verify_command` before continuing.
+   If `project_bootstrap_ready` is `true` but `project_bootstrap_complete` is `false`, treat `recommended_next_command` as a recommended follow-up instead of a blocker.
+   If the file is missing, run `python3 {{AGENTS_MEMORY_ROOT}}/scripts/memory.py doctor . --write-state --write-checklist`.
+2. Call `memory_get_index()` if the `agents-memory` MCP server is available.
+3. Before touching domain-specific code, call `memory_get_rules(domain)` with the closest matching domain:
    - `python` for Python, FastAPI, backend, repository, or migration work
    - `frontend` for TypeScript, React, Next.js, or UI work
    - `finance` for balance, billing, settlement, ledger, withdraw, refund, or reconciliation work
    - `docs` for README, AGENTS, instruction, contract, workflow, or runbook updates
-3. When the task resembles a previous failure pattern, call `memory_search(query)` before writing code.
+4. When the task resembles a previous failure pattern, call `memory_search(query)` before writing code.
 
 ## Error capture protocol
 

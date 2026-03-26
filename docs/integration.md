@@ -110,6 +110,9 @@ Domains (逗号分隔) [frontend, python]: ↵
 
 ```
 session 开始
+  → Agent 先读 .agents-memory/onboarding-state.json
+  → 如缺失则运行 amem doctor . --write-state --write-checklist
+  → 如 state 提示 bootstrap 未完成，先执行 recommended_next_command
   → Agent 读 bridge instruction
   → 调用 memory_get_index()         # 加载 index.md 热区（≤ 400 tokens）
   → 调用 memory_get_rules("python") # 加载领域规则
@@ -204,6 +207,25 @@ amem doctor my-service
 4. `.vscode/mcp.json` 是否包含 `agents-memory`
 5. 当前机器上的 `python3.12` / `mcp` 是否就绪
 6. `AGENTS.md` 或 `docs/AGENTS.md` 是否引用了 bridge instruction（可选项）
+
+如果你希望把体检结果直接变成 agent 可执行状态：
+
+```bash
+cd /path/to/my-service
+amem doctor . --write-state --write-checklist
+```
+
+它会额外生成：
+
+1. `.agents-memory/onboarding-state.json`
+2. `docs/plans/bootstrap-checklist.md`
+
+其中 `onboarding-state.json` 顶层会直接给出：
+
+1. `project_bootstrap_ready`
+2. `recommended_next_command`
+3. `recommended_verify_command`
+4. `recommended_done_when`
 
 ---
 

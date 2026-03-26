@@ -196,6 +196,7 @@ python3 scripts/memory.py docs-check .
 `profile-apply` 现在会默认写出 `docs/plans/README.md` 入口模板，`doctor` 也会开始感知 planning root 和 planning bundle 健康状态。
 `doctor` 的输出现在按 `Core / Planning / Integration / Optional` 分组，并为每个分组生成健康小结、修复建议、按优先级排序的行动序列，以及带 `Command / Verify with / Next command / Done when` 的 onboarding runbook，同时给出 `Project Bootstrap Checklist`。
 如果加上 `--write-checklist --write-state`，它还会导出 `docs/plans/bootstrap-checklist.md` 和 `.agents-memory/onboarding-state.json`，把控制台状态沉淀成可复查工件。
+`onboarding-state.json` 现在包含 `project_bootstrap_ready`、`recommended_next_command`、`recommended_verify_command` 等顶层字段，方便 agent 在进入项目时先读 state，再决定是否先跑 `mcp-setup`、`plan-init` 或 `profile-check`。
 
 ## 开源与本地运行数据边界
 

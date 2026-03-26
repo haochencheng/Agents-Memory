@@ -589,6 +589,14 @@ def _doctor_bootstrap_checklist(grouped_checks: list[tuple[str, list[tuple[str, 
     return checklist
 
 
+def _doctor_recommended_step(runbook_steps: list[dict[str, str]]) -> dict[str, str] | None:
+    return runbook_steps[0] if runbook_steps else None
+
+
+def _doctor_required_steps_pending(runbook_steps: list[dict[str, str]]) -> bool:
+    return any(step.get("priority") == "required" for step in runbook_steps)
+
+
 def _doctor_state_payload(
     project_id: str,
     project_root: Path,
@@ -598,6 +606,7 @@ def _doctor_state_payload(
     runbook_steps: list[dict[str, str]],
     checklist: list[str],
 ) -> dict[str, object]:
+    recommended_step = _doctor_recommended_step(runbook_steps)
     groups = []
     for group_name, group_checks in grouped_checks:
         groups.append(
@@ -616,6 +625,13 @@ def _doctor_state_payload(
         "project_id": project_id,
         "project_root": str(project_root),
         "overall": overall,
+        "project_bootstrap_ready": not _doctor_required_steps_pending(runbook_steps),
+        "project_bootstrap_complete": not runbook_steps,
+        "recommended_next_group": recommended_step["group"] if recommended_step else None,
+        "recommended_next_key": recommended_step["key"] if recommended_step else None,
+        "recommended_next_command": recommended_step["command"] if recommended_step else None,
+        "recommended_verify_command": recommended_step["verify_with"] if recommended_step else "amem doctor .",
+        "recommended_done_when": recommended_step["done_when"] if recommended_step else "No pending onboarding steps remain.",
         "groups": groups,
         "action_sequence": action_sequence,
         "runbook_steps": runbook_steps,

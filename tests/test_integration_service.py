@@ -350,4 +350,5 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertTrue(state_path.exists())
             self.assertIn("# Bootstrap Checklist", checklist_path.read_text(encoding="utf-8"))
             self.assertIn('"project_id": "demo-project"', state_path.read_text(encoding="utf-8"))
+            self.assertIn('"recommended_next_command": "amem mcp-setup ."', state_path.read_text(encoding="utf-8"))
             self.assertIn("Exported Artifacts:", buffer.getvalue())

@@ -128,6 +128,7 @@ python3 scripts/memory.py doctor .
 
 python3 scripts/memory.py doctor . --write-checklist --write-state
 # 输出: 在 docs/plans/bootstrap-checklist.md 和 .agents-memory/onboarding-state.json 导出 onboarding 工件
+# 提示: agent 可优先读取 onboarding-state.json 中的 recommended_next_command / recommended_verify_command
 
 python3 scripts/memory.py plan-init "shared engineering brain task" .
 # 输出: 在 docs/plans/<slug>/ 生成 spec / plan / task-graph / validation bundle

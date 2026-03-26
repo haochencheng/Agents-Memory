@@ -12,6 +12,24 @@ applyTo: "**"
 
 ### On Session Start (every coding session)
 
+**Step 0 — Read onboarding state first (if present):**
+```
+Read .agents-memory/onboarding-state.json
+```
+If the file exists:
+- Check `project_bootstrap_ready`
+- Check `project_bootstrap_complete`
+- Check `recommended_next_command`
+- Check `recommended_verify_command`
+- If `project_bootstrap_ready` is `false`, finish the recommended onboarding step before deep code changes
+- If `project_bootstrap_ready` is `true` but `project_bootstrap_complete` is `false`, treat the next step as recommended cleanup rather than a blocker
+
+If the file does not exist yet:
+```bash
+python3 {{AGENTS_MEMORY_ROOT}}/scripts/memory.py doctor . --write-state --write-checklist
+```
+Then read `.agents-memory/onboarding-state.json` and follow the first pending step.
+
 **Step 1 — Load hot-tier index (always):**
 ```
 Read {{AGENTS_MEMORY_ROOT}}/index.md
@@ -72,6 +90,8 @@ python3 {{AGENTS_MEMORY_ROOT}}/scripts/memory.py new
 | Condition | Action |
 |-----------|--------|
 | Session starts with code changes | Load `index.md` |
+| Session starts and `.agents-memory/onboarding-state.json` exists | Read state and follow `recommended_next_command` first when bootstrap is incomplete |
+| Session starts and onboarding state is missing | Run `doctor . --write-state --write-checklist` before deep onboarding |
 | Working on finance/payment code | Also load `rules.md` Finance section |
 | Working on Python/FastAPI | Also load `rules.md` Python section |
 | Fixed a bug (any kind) | Record via MCP or CLI |

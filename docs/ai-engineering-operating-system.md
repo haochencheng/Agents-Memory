@@ -534,6 +534,7 @@ profile apply   = 项目装配执行
 当前进度：`plan-init` 第一版已完成，可在目标项目的 `docs/plans/<task>/` 下生成 planning bundle。
 当前进度：`plan-check` 第一版已完成，可校验 planning bundle 的完整性与关键语义。
 当前进度：`doctor` 已开始感知 planning root 和 planning bundle 健康状态，并正在升级成带行动序列、推荐命令、验证动作、下一条命令与完成判定的 onboarding runbook，同时生成 project bootstrap checklist，并支持导出 markdown/json 工件。
+当前进度：导出的 `onboarding-state.json` 已开始承载 `project_bootstrap_ready`、`recommended_next_command` 等 agent 可直接消费的状态字段，可作为进入项目时的自动化前置输入。
 
 ### Spec Kit
 
