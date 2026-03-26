@@ -8,9 +8,12 @@
     "standards/planning/spec-kit.md",
     "standards/planning/review-checklist.md"
   ],
-  "templates": [],
+  "templates": [
+    "templates/profile/fullstack-product/docs/plans/README.example.md"
+  ],
   "commands": {
     "standards_sync": "amem standards-sync .",
+    "plan_check": "amem plan-check .",
     "docs_check": "amem docs-check .",
     "doctor": "amem doctor ."
   },

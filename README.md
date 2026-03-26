@@ -192,6 +192,8 @@ python3 scripts/memory.py docs-check .
 5. `profiles/*.yaml`
 6. `plan-init`, `plan-check`, `profile-apply`, `standards-sync`, `profile-check`, `docs-check`
 
+`profile-apply` 现在会默认写出 `docs/plans/README.md` 入口模板，`doctor` 也会开始感知 planning root 和 planning bundle 健康状态。
+
 ## 开源与本地运行数据边界
 
 公开仓库应只包含代码、模板、标准、profiles 和文档。以下内容属于本地运行数据，默认不应提交：

@@ -532,6 +532,7 @@ profile apply   = 项目装配执行
 
 当前进度：`plan-init` 第一版已完成，可在目标项目的 `docs/plans/<task>/` 下生成 planning bundle。
 当前进度：`plan-check` 第一版已完成，可校验 planning bundle 的完整性与关键语义。
+当前进度：`doctor` 已开始感知 planning root 和 planning bundle 健康状态。
 
 ### Spec Kit
 

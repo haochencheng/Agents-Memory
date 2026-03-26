@@ -70,10 +70,11 @@ class ProfilesServiceTests(unittest.TestCase):
             ctx = self._build_context(root)
             _write_text(
                 root / "profiles" / "python-service.yaml",
-                '{"id":"python-service","display_name":"Python Service","applies_to":["backend"],"standards":["standards/python/base.instructions.md"],"templates":["templates/profile/python-service/AGENTS.example.md"],"commands":{"docs_check":"amem docs-check","doctor":"amem doctor"},"bootstrap":{"create":["docs/","tests/"]}}\n',
+                '{"id":"python-service","display_name":"Python Service","applies_to":["backend"],"standards":["standards/python/base.instructions.md"],"templates":["templates/profile/python-service/AGENTS.example.md","templates/profile/python-service/docs/plans/README.example.md"],"commands":{"docs_check":"amem docs-check","doctor":"amem doctor"},"bootstrap":{"create":["docs/","tests/"]}}\n',
             )
             _write_text(root / "standards" / "python" / "base.instructions.md", "# Python Base\n")
             _write_text(root / "templates" / "profile" / "python-service" / "AGENTS.example.md", "# Target AGENTS\n")
+            _write_text(root / "templates" / "profile" / "python-service" / "docs" / "plans" / "README.example.md", "# Planning Bundles\n")
 
             result = apply_profile(ctx, load_profile(ctx, "python-service"), target)
 
@@ -81,9 +82,10 @@ class ProfilesServiceTests(unittest.TestCase):
             self.assertTrue((target / "tests").exists())
             self.assertTrue((target / ".github" / "instructions" / "agents-memory" / "standards" / "python" / "base.instructions.md").exists())
             self.assertTrue((target / "AGENTS.md").exists())
+            self.assertTrue((target / "docs" / "plans" / "README.md").exists())
             self.assertTrue((target / PROFILE_MANIFEST_REL).exists())
             self.assertEqual(len(result.installed_standards), 1)
-            self.assertEqual(len(result.wrote_templates), 1)
+            self.assertEqual(len(result.wrote_templates), 2)
 
     def test_apply_profile_dry_run_does_not_write_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

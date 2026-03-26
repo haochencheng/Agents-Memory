@@ -7,9 +7,12 @@
     "standards/planning/harness-engineering.md",
     "standards/planning/review-checklist.md"
   ],
-  "templates": [],
+  "templates": [
+    "templates/profile/agent-runtime/docs/plans/README.example.md"
+  ],
   "commands": {
     "standards_sync": "amem standards-sync .",
+    "plan_check": "amem plan-check .",
     "docs_check": "amem docs-check .",
     "doctor": "amem doctor ."
   },

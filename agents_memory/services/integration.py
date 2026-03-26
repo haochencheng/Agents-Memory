@@ -30,7 +30,7 @@ from agents_memory.services.projects import (
 )
 from agents_memory.services.profiles import detect_applied_profile
 from agents_memory.services.records import collect_errors
-from agents_memory.services.validation import collect_profile_check_findings
+from agents_memory.services.validation import collect_plan_check_findings, collect_profile_check_findings
 
 
 def render_bridge_instruction(ctx: AppContext, project_id: str) -> str:
@@ -328,6 +328,32 @@ def _doctor_profile_checks(ctx: AppContext, project_root: Path) -> list[tuple[st
     return checks
 
 
+def _doctor_planning_checks(project_root: Path) -> list[tuple[str, str, str]]:
+    planning_root = project_root / "docs" / "plans"
+    applied_profile = detect_applied_profile(project_root)
+    if not planning_root.exists():
+        if applied_profile:
+            return [("WARN", "planning_root", f"missing docs/plans for applied profile '{applied_profile}'")]
+        return [("INFO", "planning_root", "no docs/plans directory detected")]
+
+    findings = collect_plan_check_findings(project_root, str(project_root))
+    bundle_findings = [finding for finding in findings if finding.key in {"plan_bundle", "plan_files", "plan_semantics"}]
+    has_fail = any(finding.status == "FAIL" for finding in bundle_findings)
+    has_warn = any(finding.status == "WARN" for finding in bundle_findings)
+    bundle_count = sum(1 for finding in findings if finding.key == "plan_bundle")
+
+    checks: list[tuple[str, str, str]] = [("OK", "planning_root", f"present: {planning_root}")]
+    if has_fail:
+        first_fail = next(finding for finding in bundle_findings if finding.status == "FAIL")
+        checks.append(("FAIL", "planning_bundle", first_fail.detail))
+    elif has_warn:
+        first_warn = next(finding for finding in bundle_findings if finding.status == "WARN")
+        checks.append(("WARN", "planning_bundle", first_warn.detail))
+    else:
+        checks.append(("OK", "planning_bundle", f"{bundle_count} planning bundle(s) passed plan-check"))
+    return checks
+
+
 def _doctor_overall(checks: list[tuple[str, str, str]]) -> str:
     required_statuses = [status for status, key, _ in checks if key not in {"agents_read_order", "copilot_activation", "profile_manifest"}]
     if all(status == "OK" for status in required_statuses):
@@ -362,6 +388,7 @@ def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
     agents_ref_exists = project_agents_reference_exists(project_root, bridge_rel) if bridge_rel else False
     checks.append((("INFO" if agents_ref_exists else "WARN"), "agents_read_order", "bridge referenced in AGENTS/docs/AGENTS" if agents_ref_exists else "bridge not referenced in AGENTS.md or docs/AGENTS.md (optional but recommended)"))
     checks.extend(_doctor_profile_checks(ctx, project_root))
+    checks.extend(_doctor_planning_checks(project_root))
 
     overall = _doctor_overall(checks)
 

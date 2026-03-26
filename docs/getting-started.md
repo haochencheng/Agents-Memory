@@ -135,6 +135,9 @@ python3 scripts/memory.py plan-check .
 python3 scripts/memory.py profile-list
 # 输出: 当前内置 profile 列表
 
+python3 scripts/memory.py doctor .
+# 输出: 当前项目的接入健康检查（现已包含 planning root / planning bundle 感知）
+
 python3 scripts/memory.py profile-show python-service
 # 输出: python-service profile 的 standards / templates / bootstrap 详情
 

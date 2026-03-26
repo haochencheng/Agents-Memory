@@ -106,10 +106,17 @@ def _read_text(path: Path) -> str:
 
 
 def _template_destination(template_rel: str) -> Path:
-    name = Path(template_rel).name
+    path = Path(template_rel)
+    parts = path.parts
+    relative_parts = parts
+    if len(parts) >= 3 and parts[0] == "templates" and parts[1] == "profile":
+        relative_parts = parts[3:]
+    name = relative_parts[-1]
     if ".example" in name:
         name = name.replace(".example", "", 1)
-    return Path(name)
+    if len(relative_parts) == 1:
+        return Path(name)
+    return Path(*relative_parts[:-1]) / name
 
 
 def resolve_standard_destination(target_root: Path, standard_rel: str) -> Path:
