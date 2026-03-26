@@ -278,6 +278,57 @@ def _refresh_managed_bundle_files(
     return refreshed_files, skipped_files
 
 
+def _ensure_plan_directories(
+    ctx: AppContext,
+    *,
+    target_root: Path,
+    plan_root: Path,
+    task_slug: str,
+    dry_run: bool,
+) -> list[str]:
+    created_dirs: list[str] = []
+    for directory in (target_root / "docs", target_root / "docs" / "plans", plan_root):
+        relative = directory.relative_to(target_root).as_posix()
+        if directory.exists():
+            continue
+        created_dirs.append(relative)
+        if dry_run:
+            continue
+        directory.mkdir(parents=True, exist_ok=True)
+        log_file_update(ctx.logger, action="plan_init_dir", path=directory, detail=f"task_slug={task_slug}")
+    return created_dirs
+
+
+def _write_plan_template_files(
+    ctx: AppContext,
+    *,
+    templates_dir: Path,
+    plan_root: Path,
+    target_root: Path,
+    task_name: str,
+    task_slug: str,
+    dry_run: bool,
+) -> tuple[list[str], list[str]]:
+    wrote_files: list[str] = []
+    skipped_files: list[str] = []
+    for source in sorted(templates_dir.glob("*.md")):
+        destination_name = source.name.replace(".template", "")
+        destination = plan_root / destination_name
+        relative = destination.relative_to(target_root).as_posix()
+        if destination.exists():
+            skipped_files.append(relative)
+            continue
+        wrote_files.append(relative)
+        if dry_run:
+            continue
+        destination.write_text(
+            _render_template(source, task_name=task_name, task_slug=task_slug),
+            encoding="utf-8",
+        )
+        log_file_update(ctx.logger, action="plan_init_file", path=destination, detail=f"task_slug={task_slug}")
+    return wrote_files, skipped_files
+
+
 def init_plan_bundle(
     ctx: AppContext,
     task_name: str,
@@ -292,35 +343,22 @@ def init_plan_bundle(
         raise FileNotFoundError(f"planning templates directory not found: {templates_dir}")
 
     plan_root = _target_plan_root(target_root, resolved_slug)
-    created_dirs: list[str] = []
-    wrote_files: list[str] = []
-    skipped_files: list[str] = []
-
-    for directory in [target_root / "docs", target_root / "docs" / "plans", plan_root]:
-        relative = directory.relative_to(target_root).as_posix()
-        if directory.exists():
-            continue
-        created_dirs.append(relative)
-        if dry_run:
-            continue
-        directory.mkdir(parents=True, exist_ok=True)
-        log_file_update(ctx.logger, action="plan_init_dir", path=directory, detail=f"task_slug={resolved_slug}")
-
-    for source in sorted(templates_dir.glob("*.md")):
-        destination_name = source.name.replace(".template", "")
-        destination = plan_root / destination_name
-        relative = destination.relative_to(target_root).as_posix()
-        if destination.exists():
-            skipped_files.append(relative)
-            continue
-        wrote_files.append(relative)
-        if dry_run:
-            continue
-        destination.write_text(
-            _render_template(source, task_name=task_name, task_slug=resolved_slug),
-            encoding="utf-8",
-        )
-        log_file_update(ctx.logger, action="plan_init_file", path=destination, detail=f"task_slug={resolved_slug}")
+    created_dirs = _ensure_plan_directories(
+        ctx,
+        target_root=target_root,
+        plan_root=plan_root,
+        task_slug=resolved_slug,
+        dry_run=dry_run,
+    )
+    wrote_files, skipped_files = _write_plan_template_files(
+        ctx,
+        templates_dir=templates_dir,
+        plan_root=plan_root,
+        target_root=target_root,
+        task_name=task_name,
+        task_slug=resolved_slug,
+        dry_run=dry_run,
+    )
 
     return PlanInitResult(
         task_name=task_name,
