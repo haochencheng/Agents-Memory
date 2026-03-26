@@ -406,6 +406,25 @@ def _default_refactor_slug(hotspot: RefactorHotspot, task_slug: str | None) -> s
     return base_slug if base_slug.startswith("refactor-") else f"refactor-{base_slug}"
 
 
+def _resolve_refactor_hotspot(
+    hotspots: list[RefactorHotspot],
+    *,
+    hotspot_index: int,
+    hotspot_token: str | None,
+) -> tuple[int, RefactorHotspot]:
+    if hotspot_token:
+        for resolved_index, candidate in enumerate(hotspots, start=1):
+            if candidate.rank_token == hotspot_token:
+                return resolved_index, candidate
+        raise ValueError(f"hotspot token '{hotspot_token}' was not found; run `amem doctor .` or `memory_get_refactor_hotspots()` again")
+
+    if hotspot_index < 1:
+        raise ValueError("hotspot index must be >= 1")
+    if hotspot_index > len(hotspots):
+        raise IndexError(f"hotspot index {hotspot_index} is out of range; found {len(hotspots)} hotspot(s)")
+    return hotspot_index, hotspots[hotspot_index - 1]
+
+
 def _render_refactor_bundle_content(
     source: Path,
     *,
@@ -490,6 +509,42 @@ def _refactor_appendix_heading(filename: str) -> str:
     return heading_map[filename]
 
 
+def _refresh_refactor_bundle_files(
+    ctx: AppContext,
+    *,
+    target_root: Path,
+    plan_root: Path,
+    templates_dir: Path,
+    task_name: str,
+    task_slug: str,
+    hotspot: RefactorHotspot,
+    hotspot_index: int,
+    dry_run: bool,
+    created_now: set[str],
+) -> tuple[list[str], list[str]]:
+    return _refresh_managed_bundle_files(
+        ctx,
+        target_root=target_root,
+        plan_root=plan_root,
+        filenames=MANAGED_BUNDLE_FILENAMES,
+        created_now=created_now,
+        dry_run=dry_run,
+        render_content=lambda filename: _render_refactor_bundle_content(
+            templates_dir / f"{filename.replace('.md', '')}.template.md",
+            filename=filename,
+            task_name=task_name,
+            task_slug=task_slug,
+            hotspot=hotspot,
+            hotspot_index=hotspot_index,
+            hotspot_token=hotspot.rank_token,
+        ),
+        resolve_heading=_refactor_appendix_heading,
+        create_action="refactor_bundle_file",
+        refresh_action="refactor_bundle_refresh",
+        log_detail=f"task_slug={task_slug};hotspot={hotspot.identifier}",
+    )
+
+
 def init_refactor_bundle(
     ctx: AppContext,
     target_root: Path,
@@ -503,20 +558,11 @@ def init_refactor_bundle(
     if not hotspots:
         raise FileNotFoundError(f"no refactor hotspots found under: {target_root}")
 
-    if hotspot_token:
-        for resolved_index, candidate in enumerate(hotspots, start=1):
-            if candidate.rank_token == hotspot_token:
-                hotspot_index = resolved_index
-                hotspot = candidate
-                break
-        else:
-            raise ValueError(f"hotspot token '{hotspot_token}' was not found; run `amem doctor .` or `memory_get_refactor_hotspots()` again")
-    else:
-        if hotspot_index < 1:
-            raise ValueError("hotspot index must be >= 1")
-        if hotspot_index > len(hotspots):
-            raise IndexError(f"hotspot index {hotspot_index} is out of range; found {len(hotspots)} hotspot(s)")
-        hotspot = hotspots[hotspot_index - 1]
+    hotspot_index, hotspot = _resolve_refactor_hotspot(
+        hotspots,
+        hotspot_index=hotspot_index,
+        hotspot_token=hotspot_token,
+    )
 
     task_name = f"Refactor hotspot: {hotspot.identifier}"
     resolved_slug = _default_refactor_slug(hotspot, task_slug)
@@ -527,26 +573,17 @@ def init_refactor_bundle(
     plan_result = init_plan_bundle(ctx, task_name, target_root, task_slug=resolved_slug, dry_run=dry_run)
     wrote_files = list(plan_result.wrote_files)
     created_now = set(plan_result.wrote_files)
-    refreshed_files, skipped_files = _refresh_managed_bundle_files(
+    refreshed_files, skipped_files = _refresh_refactor_bundle_files(
         ctx,
         target_root=target_root,
         plan_root=plan_result.plan_root,
-        filenames=MANAGED_BUNDLE_FILENAMES,
-        created_now=created_now,
+        templates_dir=templates_dir,
+        task_name=task_name,
+        task_slug=resolved_slug,
+        hotspot=hotspot,
+        hotspot_index=hotspot_index,
         dry_run=dry_run,
-        render_content=lambda filename: _render_refactor_bundle_content(
-            templates_dir / f"{filename.replace('.md', '')}.template.md",
-            filename=filename,
-            task_name=task_name,
-            task_slug=resolved_slug,
-            hotspot=hotspot,
-            hotspot_index=hotspot_index,
-            hotspot_token=hotspot.rank_token,
-        ),
-        resolve_heading=_refactor_appendix_heading,
-        create_action="refactor_bundle_file",
-        refresh_action="refactor_bundle_refresh",
-        log_detail=f"task_slug={resolved_slug};hotspot={hotspot.identifier}",
+        created_now=created_now,
     )
 
     return RefactorBundleResult(
