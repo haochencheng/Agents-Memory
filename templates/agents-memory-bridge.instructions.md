@@ -17,6 +17,10 @@ Preferred via MCP:
 ```
 memory_get_onboarding_next_action(project_root=".")
 ```
+If the first step is blocking and execution is safe to automate, prefer:
+```
+memory_execute_onboarding_next_action(project_root=".", verify=true)
+```
 
 If you need the full state payload, then call:
 ```
@@ -34,6 +38,7 @@ If the file exists:
 - Check `recommended_verify_command`
 - If `project_bootstrap_ready` is `false`, finish the recommended onboarding step before deep code changes
 - If `project_bootstrap_ready` is `true` but `project_bootstrap_complete` is `false`, treat the next step as recommended cleanup rather than a blocker
+- After executing a step, re-read `.agents-memory/onboarding-state.json` or call `memory_get_onboarding_next_action(project_root=".")` again
 
 If the file does not exist yet:
 ```bash

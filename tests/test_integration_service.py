@@ -9,8 +9,8 @@ from io import StringIO
 from pathlib import Path
 
 from agents_memory.runtime import build_context
-from agents_memory.commands.integration import _parse_doctor_args
-from agents_memory.services.integration import _doctor_action_sequence, _doctor_bootstrap_checklist, _doctor_bridge_check, _doctor_group_checks, _doctor_group_remediations, _doctor_group_status, _doctor_group_summary, _doctor_planning_checks, _doctor_overall, _doctor_runbook_steps, cmd_bridge_install, cmd_doctor, onboarding_next_action, write_vscode_mcp_json
+from agents_memory.commands.integration import _parse_doctor_args, _parse_onboarding_execute_args
+from agents_memory.services.integration import _doctor_action_sequence, _doctor_bootstrap_checklist, _doctor_bridge_check, _doctor_group_checks, _doctor_group_remediations, _doctor_group_status, _doctor_group_summary, _doctor_planning_checks, _doctor_overall, _doctor_runbook_steps, cmd_bridge_install, cmd_doctor, execute_onboarding_next_action, onboarding_next_action, write_vscode_mcp_json
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -277,6 +277,12 @@ class IntegrationServiceTests(unittest.TestCase):
         self.assertTrue(write_state)
         self.assertTrue(write_checklist)
 
+    def test_parse_onboarding_execute_args_supports_no_verify(self) -> None:
+        project_id_or_path, verify = _parse_onboarding_execute_args(["demo-project", "--no-verify"])
+
+        self.assertEqual(project_id_or_path, "demo-project")
+        self.assertFalse(verify)
+
     def test_cmd_doctor_surfaces_planning_root_warning_for_applied_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -383,3 +389,85 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertIn('"project_id": "demo-project"', state_path.read_text(encoding="utf-8"))
             self.assertIn('"recommended_next_command": "amem mcp-setup ."', state_path.read_text(encoding="utf-8"))
             self.assertIn("Exported Artifacts:", buffer.getvalue())
+
+    def test_cmd_doctor_preserves_execution_metadata_when_rewriting_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(
+                root / "memory" / "projects.md",
+                "\n".join(
+                    [
+                        "# Project Registry",
+                        "",
+                        "## demo-project",
+                        "- **id**: demo-project",
+                        f"- **root**: {project_root}",
+                        '- **bridge_instruction**: ""',
+                        "- **active**: true",
+                    ]
+                ),
+            )
+            _write_text(
+                project_root / ".agents-memory" / "onboarding-state.json",
+                json.dumps(
+                    {
+                        "execution_history": [{"key": "mcp_config", "status": "verified"}],
+                        "last_executed_action": {"key": "mcp_config", "status": "verified"},
+                        "last_verified_action": {"key": "mcp_config", "status": "verified"},
+                        "last_execution_status": "verified",
+                        "last_execution_at": "2026-03-26T00:00:00+00:00",
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+
+            with redirect_stdout(StringIO()):
+                cmd_doctor(ctx, str(project_root), write_state=True)
+
+            state = json.loads((project_root / ".agents-memory" / "onboarding-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["execution_history"][0]["key"], "mcp_config")
+            self.assertEqual(state["last_execution_status"], "verified")
+            self.assertEqual(state["last_verified_action"]["key"], "mcp_config")
+
+    def test_execute_onboarding_next_action_records_execution_and_verification(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(
+                project_root / ".agents-memory" / "onboarding-state.json",
+                json.dumps(
+                    {
+                        "project_bootstrap_ready": False,
+                        "project_bootstrap_complete": False,
+                        "runbook_steps": [
+                            {
+                                "group": "Integration",
+                                "key": "demo_step",
+                                "priority": "required",
+                                "detail": "seed a demo marker",
+                                "command": "python3 -c \"from pathlib import Path; Path('.agents-memory/executed.txt').write_text('ok', encoding='utf-8')\"",
+                                "verify_with": "python3 -c \"from pathlib import Path; raise SystemExit(0 if Path('.agents-memory/executed.txt').exists() else 1)\"",
+                                "done_when": "marker file exists",
+                                "next_command": "amem doctor .",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+
+            result = execute_onboarding_next_action(ctx, project_root)
+
+            self.assertEqual(result["status"], "verified")
+            self.assertTrue((project_root / ".agents-memory" / "executed.txt").exists())
+            state = json.loads((project_root / ".agents-memory" / "onboarding-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["last_execution_status"], "verified")
+            self.assertEqual(state["last_executed_action"]["key"], "demo_step")
+            self.assertEqual(state["last_verified_action"]["key"], "demo_step")
+            self.assertEqual(state["execution_history"][-1]["status"], "verified")
+            self.assertTrue((project_root / "docs" / "plans" / "bootstrap-checklist.md").exists())

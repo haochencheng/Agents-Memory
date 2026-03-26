@@ -9,6 +9,7 @@ from agents_memory.services.integration import (
     cmd_copilot_setup,
     cmd_doctor,
     cmd_mcp_setup,
+    cmd_onboarding_execute,
     cmd_register,
     cmd_sync,
 )
@@ -30,6 +31,24 @@ def _parse_doctor_args(args: list[str]) -> tuple[str, bool, bool]:
     return project_id_or_path, write_state, write_checklist
 
 
+def _parse_onboarding_execute_args(args: list[str]) -> tuple[str, bool]:
+    project_id_or_path = "."
+    verify = True
+    for arg in args:
+        if arg == "--no-verify":
+            verify = False
+        elif arg.startswith("--"):
+            print(f"未知参数: {arg}")
+        else:
+            project_id_or_path = arg
+    return project_id_or_path, verify
+
+
+def _run_onboarding_execute(ctx, args: list[str]) -> None:
+    project_id_or_path, verify = _parse_onboarding_execute_args(args)
+    cmd_onboarding_execute(ctx, project_id_or_path, verify=verify)
+
+
 def register() -> dict[str, Callable]:
     return {
         "sync": lambda ctx, args: cmd_sync(ctx),
@@ -39,5 +58,6 @@ def register() -> dict[str, Callable]:
         "agent-setup": lambda ctx, args: cmd_agent_setup(ctx, args[0], args[1] if len(args) > 1 else ".") if args else print("用法: python3 memory.py agent-setup <agent> [project-id|path]"),
         "mcp-setup": lambda ctx, args: cmd_mcp_setup(ctx, args[0] if args else "."),
         "doctor": lambda ctx, args: cmd_doctor(ctx, *_parse_doctor_args(args)),
+        "onboarding-execute": _run_onboarding_execute,
         "register": lambda ctx, args: cmd_register(ctx, args[0] if args else "."),
     }

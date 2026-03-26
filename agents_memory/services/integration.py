@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import shutil
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -605,6 +607,7 @@ def _doctor_state_payload(
     action_sequence: list[str],
     runbook_steps: list[dict[str, str]],
     checklist: list[str],
+    existing_state: dict[str, object] | None = None,
 ) -> dict[str, object]:
     recommended_step = _doctor_recommended_step(runbook_steps)
     groups = []
@@ -620,7 +623,7 @@ def _doctor_state_payload(
                 ],
             }
         )
-    return {
+    payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "project_id": project_id,
         "project_root": str(project_root),
@@ -637,6 +640,11 @@ def _doctor_state_payload(
         "runbook_steps": runbook_steps,
         "bootstrap_checklist": checklist,
     }
+    if existing_state:
+        for key in ("execution_history", "last_executed_action", "last_verified_action", "last_execution_status", "last_execution_at"):
+            if key in existing_state:
+                payload[key] = existing_state[key]
+    return payload
 
 
 def _doctor_checklist_markdown(
@@ -704,108 +712,117 @@ def load_onboarding_state(project_root: Path) -> dict[str, object] | None:
     return data
 
 
-def onboarding_next_action(project_root: Path) -> dict[str, object]:
-    state = load_onboarding_state(project_root)
-    if state is None:
-        return {
-            "status": "missing",
-            "project_root": str(project_root),
-            "message": "No onboarding state found for this project.",
-            "recommended_command": "python3 scripts/memory.py doctor . --write-state --write-checklist",
-        }
-
+def _runbook_step_from_state(state: dict[str, object]) -> dict[str, object] | None:
     runbook_steps = state.get("runbook_steps") or []
     if not isinstance(runbook_steps, list) or not runbook_steps:
-        return {
-            "status": "ready",
-            "project_root": str(project_root),
-            "project_bootstrap_ready": bool(state.get("project_bootstrap_ready")),
-            "project_bootstrap_complete": bool(state.get("project_bootstrap_complete")),
-            "message": "No pending onboarding action. Continue with normal implementation flow.",
-            "recommended_command": None,
-            "verify_with": state.get("recommended_verify_command") or "amem doctor .",
-        }
-
+        return None
     first_step = runbook_steps[0]
     if not isinstance(first_step, dict):
-        return {
-            "status": "invalid",
-            "project_root": str(project_root),
-            "message": "Onboarding state is present but malformed.",
-            "recommended_command": "python3 scripts/memory.py doctor . --write-state --write-checklist",
-        }
+        return None
+    return first_step
 
-    blocking = not bool(state.get("project_bootstrap_ready", False))
+
+def _quoted_command(parts: list[str]) -> str:
+    return " ".join(shlex.quote(part) for part in parts)
+
+
+def _resolve_onboarding_command(ctx: AppContext, command: str) -> tuple[list[str], str]:
+    parts = shlex.split(command)
+    if not parts:
+        raise ValueError("Onboarding command is empty.")
+
+    script_path = ctx.base_dir / "scripts" / "memory.py"
+    python_bin = sys.executable or shutil.which(PYTHON_BIN) or PYTHON_BIN
+
+    if parts[0] == "amem":
+        resolved = [python_bin, str(script_path), *parts[1:]]
+        return resolved, _quoted_command(resolved)
+
+    if parts[0].startswith("python") and len(parts) >= 2 and Path(parts[1]).as_posix() == "scripts/memory.py":
+        resolved = [python_bin, str(script_path), *parts[2:]]
+        return resolved, _quoted_command(resolved)
+
+    return parts, _quoted_command(parts)
+
+
+def _command_result_payload(command: str, resolved_command: str, completed: subprocess.CompletedProcess[str]) -> dict[str, object]:
     return {
-        "status": "pending",
-        "project_root": str(project_root),
-        "project_bootstrap_ready": bool(state.get("project_bootstrap_ready")),
-        "project_bootstrap_complete": bool(state.get("project_bootstrap_complete")),
-        "blocking": blocking,
-        "group": first_step.get("group"),
-        "key": first_step.get("key"),
-        "priority": first_step.get("priority"),
-        "command": first_step.get("command"),
-        "verify_with": first_step.get("verify_with"),
-        "done_when": first_step.get("done_when"),
-        "next_command": first_step.get("next_command"),
-        "message": "Complete this onboarding action before deep work." if blocking else "Recommended onboarding follow-up is available.",
+        "command": command,
+        "resolved_command": resolved_command,
+        "returncode": completed.returncode,
+        "stdout": (completed.stdout or "").strip(),
+        "stderr": (completed.stderr or "").strip(),
+        "success": completed.returncode == 0,
     }
 
 
-def _write_doctor_artifacts(
-    ctx: AppContext,
-    project_id: str,
-    project_root: Path,
-    overall: str,
-    grouped_checks: list[tuple[str, list[tuple[str, str, str]]]],
-    action_sequence: list[str],
-    runbook_steps: list[dict[str, str]],
-    checklist: list[str],
-    *,
-    write_state: bool,
-    write_checklist: bool,
-) -> list[Path]:
-    written: list[Path] = []
-    if write_checklist:
-        checklist_path = project_root / "docs" / "plans" / "bootstrap-checklist.md"
-        checklist_path.parent.mkdir(parents=True, exist_ok=True)
-        checklist_path.write_text(
-            _doctor_checklist_markdown(project_id, project_root, overall, grouped_checks, action_sequence, runbook_steps, checklist),
-            encoding="utf-8",
-        )
-        log_file_update(ctx.logger, action="write_doctor_checklist", path=checklist_path, detail=f"project_id={project_id};overall={overall}")
-        written.append(checklist_path)
-    if write_state:
-        state_path = project_root / ".agents-memory" / "onboarding-state.json"
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_text(
-            json.dumps(
-                _doctor_state_payload(project_id, project_root, overall, grouped_checks, action_sequence, runbook_steps, checklist),
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        log_file_update(ctx.logger, action="write_doctor_state", path=state_path, detail=f"project_id={project_id};overall={overall}")
-        written.append(state_path)
-    return written
+def _run_onboarding_command(ctx: AppContext, project_root: Path, command: str) -> dict[str, object]:
+    resolved_parts, resolved_display = _resolve_onboarding_command(ctx, command)
+    completed = subprocess.run(
+        resolved_parts,
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    payload = _command_result_payload(command, resolved_display, completed)
+    ctx.logger.info(
+        "onboarding_command_complete | root=%s | command=%s | resolved=%s | returncode=%s",
+        project_root,
+        command,
+        resolved_display,
+        completed.returncode,
+    )
+    return payload
 
 
-def cmd_doctor(
-    ctx: AppContext,
-    project_id_or_path: str = ".",
-    write_state: bool = False,
-    write_checklist: bool = False,
-) -> None:
+def _merge_onboarding_execution_state(state: dict[str, object] | None, event: dict[str, object]) -> dict[str, object]:
+    payload = dict(state or {})
+    history = payload.get("execution_history")
+    if not isinstance(history, list):
+        history = []
+    history.append(event)
+    payload["execution_history"] = history[-20:]
+    payload["last_executed_action"] = {
+        "group": event.get("group"),
+        "key": event.get("key"),
+        "priority": event.get("priority"),
+        "command": event.get("command"),
+        "resolved_command": event.get("resolved_command"),
+        "executed_at": event.get("executed_at"),
+        "returncode": event.get("execution_returncode"),
+        "success": event.get("execution_success"),
+        "status": event.get("status"),
+    }
+    payload["last_execution_status"] = event.get("status")
+    payload["last_execution_at"] = event.get("executed_at")
+    if event.get("verification_run"):
+        payload["last_verified_action"] = {
+            "group": event.get("group"),
+            "key": event.get("key"),
+            "verify_with": event.get("verify_with"),
+            "resolved_verify_with": event.get("resolved_verify_with"),
+            "verified_at": event.get("verified_at"),
+            "returncode": event.get("verification_returncode"),
+            "success": event.get("verification_success"),
+            "status": event.get("status"),
+        }
+    return payload
+
+
+def _write_onboarding_state_file(ctx: AppContext, project_root: Path, state: dict[str, object]) -> Path:
+    state_path = onboarding_state_path(project_root)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    log_file_update(ctx.logger, action="write_onboarding_state", path=state_path, detail=f"project_root={project_root}")
+    return state_path
+
+
+def _doctor_report(ctx: AppContext, project_id_or_path: str) -> dict[str, object] | None:
     project_id, project_root, project = resolve_project_target(ctx, project_id_or_path)
     ctx.logger.info("doctor_start | target=%s | resolved_project_id=%s | project_root=%s", project_id_or_path, project_id, project_root)
     if project_root is None:
-        ctx.logger.warning("doctor_failed | target=%s | reason=unknown_project_or_path", project_id_or_path)
-        print(f"项目 '{project_id_or_path}' 未注册，且不是有效目录。")
-        print(REGISTER_HINT)
-        return
+        return None
 
     bridge_rel = resolve_bridge_rel(project)
     checks: list[tuple[str, str, str]] = []
@@ -828,9 +845,230 @@ def cmd_doctor(
     checks.extend(_doctor_profile_checks(ctx, project_root))
     checks.extend(_doctor_planning_checks(project_root))
 
-    overall = _doctor_overall(checks)
-
     grouped_checks = _doctor_group_checks(checks)
+    runbook_steps = _doctor_runbook_steps(grouped_checks)
+    action_sequence = _doctor_action_sequence(grouped_checks)
+    checklist = _doctor_bootstrap_checklist(grouped_checks, runbook_steps)
+    overall = _doctor_overall(checks)
+    return {
+        "project_id": project_id,
+        "project_root": project_root,
+        "project": project,
+        "overall": overall,
+        "checks": checks,
+        "grouped_checks": grouped_checks,
+        "action_sequence": action_sequence,
+        "runbook_steps": runbook_steps,
+        "checklist": checklist,
+    }
+
+
+def onboarding_next_action(project_root: Path) -> dict[str, object]:
+    state = load_onboarding_state(project_root)
+    if state is None:
+        return {
+            "status": "missing",
+            "project_root": str(project_root),
+            "message": "No onboarding state found for this project.",
+            "recommended_command": "python3 scripts/memory.py doctor . --write-state --write-checklist",
+        }
+
+    runbook_steps = state.get("runbook_steps") or []
+    if runbook_steps and not isinstance(runbook_steps, list):
+        return {
+            "status": "invalid",
+            "project_root": str(project_root),
+            "message": "Onboarding state is present but malformed.",
+            "recommended_command": "python3 scripts/memory.py doctor . --write-state --write-checklist",
+        }
+    first_step = _runbook_step_from_state(state)
+    if first_step is None:
+        return {
+            "status": "ready",
+            "project_root": str(project_root),
+            "project_bootstrap_ready": bool(state.get("project_bootstrap_ready")),
+            "project_bootstrap_complete": bool(state.get("project_bootstrap_complete")),
+            "message": "No pending onboarding action. Continue with normal implementation flow.",
+            "recommended_command": None,
+            "verify_with": state.get("recommended_verify_command") or "amem doctor .",
+        }
+
+    blocking = not bool(state.get("project_bootstrap_ready", False))
+    return {
+        "status": "pending",
+        "project_root": str(project_root),
+        "project_bootstrap_ready": bool(state.get("project_bootstrap_ready")),
+        "project_bootstrap_complete": bool(state.get("project_bootstrap_complete")),
+        "blocking": blocking,
+        "group": first_step.get("group"),
+        "key": first_step.get("key"),
+        "priority": first_step.get("priority"),
+        "command": first_step.get("command"),
+        "verify_with": first_step.get("verify_with"),
+        "done_when": first_step.get("done_when"),
+        "next_command": first_step.get("next_command"),
+        "message": "Complete this onboarding action before deep work." if blocking else "Recommended onboarding follow-up is available.",
+    }
+
+
+def execute_onboarding_next_action(
+    ctx: AppContext,
+    project_root: Path,
+    *,
+    verify: bool = True,
+    refresh_artifacts: bool = True,
+) -> dict[str, object]:
+    state = load_onboarding_state(project_root)
+    action = onboarding_next_action(project_root)
+    if action["status"] != "pending":
+        return action
+
+    step = _runbook_step_from_state(state or {})
+    if step is None:
+        return {
+            "status": "invalid",
+            "project_root": str(project_root),
+            "message": "Onboarding state is present but malformed.",
+            "recommended_command": "python3 scripts/memory.py doctor . --write-state --write-checklist",
+        }
+
+    executed_at = datetime.now(timezone.utc).isoformat()
+    command_payload = _run_onboarding_command(ctx, project_root, str(step.get("command") or ""))
+    event: dict[str, object] = {
+        "group": step.get("group"),
+        "key": step.get("key"),
+        "priority": step.get("priority"),
+        "detail": step.get("detail"),
+        "command": step.get("command"),
+        "resolved_command": command_payload["resolved_command"],
+        "verify_with": step.get("verify_with"),
+        "executed_at": executed_at,
+        "execution_returncode": command_payload["returncode"],
+        "execution_success": command_payload["success"],
+        "verification_run": False,
+        "verification_returncode": None,
+        "verification_success": None,
+        "verified_at": None,
+        "status": "execution_failed",
+    }
+    if not command_payload["success"]:
+        updated_state = _merge_onboarding_execution_state(state, event)
+        _write_onboarding_state_file(ctx, project_root, updated_state)
+        return {
+            "status": "execution_failed",
+            "project_root": str(project_root),
+            "step": step,
+            "execution": command_payload,
+            "verify": None,
+            "state_updated": True,
+            "artifacts_refreshed": False,
+        }
+
+    verify_payload: dict[str, object] | None = None
+    if verify:
+        verified_at = datetime.now(timezone.utc).isoformat()
+        verify_payload = _run_onboarding_command(ctx, project_root, str(step.get("verify_with") or "amem doctor ."))
+        event["verification_run"] = True
+        event["resolved_verify_with"] = verify_payload["resolved_command"]
+        event["verified_at"] = verified_at
+        event["verification_returncode"] = verify_payload["returncode"]
+        event["verification_success"] = verify_payload["success"]
+        event["status"] = "verified" if verify_payload["success"] else "verification_failed"
+    else:
+        event["status"] = "executed"
+
+    artifacts_refreshed = False
+    written_artifacts: list[Path] = []
+    if (not verify or (verify_payload and verify_payload["success"])) and refresh_artifacts:
+        report = _doctor_report(ctx, str(project_root))
+        if report is not None:
+            written_artifacts = _write_doctor_artifacts(
+                ctx,
+                str(report["project_id"]),
+                Path(report["project_root"]),
+                str(report["overall"]),
+                list(report["grouped_checks"]),
+                list(report["action_sequence"]),
+                list(report["runbook_steps"]),
+                list(report["checklist"]),
+                write_state=True,
+                write_checklist=True,
+            )
+            artifacts_refreshed = bool(written_artifacts)
+
+    refreshed_state = load_onboarding_state(project_root)
+    updated_state = _merge_onboarding_execution_state(refreshed_state or state, event)
+    _write_onboarding_state_file(ctx, project_root, updated_state)
+    return {
+        "status": str(event["status"]),
+        "project_root": str(project_root),
+        "step": step,
+        "execution": command_payload,
+        "verify": verify_payload,
+        "state_updated": True,
+        "artifacts_refreshed": artifacts_refreshed,
+        "written_artifacts": [str(path) for path in written_artifacts],
+        "next_action": onboarding_next_action(project_root),
+    }
+
+
+def _write_doctor_artifacts(
+    ctx: AppContext,
+    project_id: str,
+    project_root: Path,
+    overall: str,
+    grouped_checks: list[tuple[str, list[tuple[str, str, str]]]],
+    action_sequence: list[str],
+    runbook_steps: list[dict[str, str]],
+    checklist: list[str],
+    *,
+    write_state: bool,
+    write_checklist: bool,
+) -> list[Path]:
+    written: list[Path] = []
+    existing_state = load_onboarding_state(project_root) if write_state else None
+    if write_checklist:
+        checklist_path = project_root / "docs" / "plans" / "bootstrap-checklist.md"
+        checklist_path.parent.mkdir(parents=True, exist_ok=True)
+        checklist_path.write_text(
+            _doctor_checklist_markdown(project_id, project_root, overall, grouped_checks, action_sequence, runbook_steps, checklist),
+            encoding="utf-8",
+        )
+        log_file_update(ctx.logger, action="write_doctor_checklist", path=checklist_path, detail=f"project_id={project_id};overall={overall}")
+        written.append(checklist_path)
+    if write_state:
+        state_path = project_root / ".agents-memory" / "onboarding-state.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(
+            json.dumps(
+                _doctor_state_payload(project_id, project_root, overall, grouped_checks, action_sequence, runbook_steps, checklist, existing_state=existing_state),
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        log_file_update(ctx.logger, action="write_doctor_state", path=state_path, detail=f"project_id={project_id};overall={overall}")
+        written.append(state_path)
+    return written
+
+
+def cmd_doctor(
+    ctx: AppContext,
+    project_id_or_path: str = ".",
+    write_state: bool = False,
+    write_checklist: bool = False,
+) -> None:
+    report = _doctor_report(ctx, project_id_or_path)
+    if report is None:
+        ctx.logger.warning("doctor_failed | target=%s | reason=unknown_project_or_path", project_id_or_path)
+        print(f"项目 '{project_id_or_path}' 未注册，且不是有效目录。")
+        print(REGISTER_HINT)
+        return
+    project_id = str(report["project_id"])
+    project_root = Path(report["project_root"])
+    overall = str(report["overall"])
+    grouped_checks = list(report["grouped_checks"])
 
     print("\n=== Agents-Memory Doctor ===")
     print(f"Project: {project_id}")
@@ -848,14 +1086,14 @@ def cmd_doctor(
                 print(f"- {item}")
         print()
 
-    action_sequence = _doctor_action_sequence(grouped_checks)
+    action_sequence = list(report["action_sequence"])
     if action_sequence:
         print("Action Sequence:")
         for index, action in enumerate(action_sequence, start=1):
             print(f"{index}. {action}")
         print()
 
-    runbook_steps = _doctor_runbook_steps(grouped_checks)
+    runbook_steps = list(report["runbook_steps"])
     if runbook_steps:
         print("Onboarding Runbook:")
         for index, step in enumerate(runbook_steps, start=1):
@@ -868,7 +1106,7 @@ def cmd_doctor(
             print(f"   Done when: {step['done_when']}")
         print()
 
-    checklist = _doctor_bootstrap_checklist(grouped_checks, runbook_steps)
+    checklist = list(report["checklist"])
     if checklist:
         print("Project Bootstrap Checklist:")
         for item in checklist:
@@ -901,6 +1139,72 @@ def cmd_doctor(
         print("1. 先修复上面的 FAIL / WARN 项")
         print(f"2. 修复后重新运行: amem doctor {project_id}")
     ctx.logger.info("doctor_complete | project_id=%s | project_root=%s | overall=%s", project_id, project_root, overall)
+
+
+def cmd_onboarding_execute(ctx: AppContext, project_id_or_path: str = ".", *, verify: bool = True) -> None:
+    _project_id, project_root, _project = resolve_project_target(ctx, project_id_or_path)
+    if project_root is None:
+        ctx.logger.warning("onboarding_execute_skip | target=%s | reason=unknown_project_or_path", project_id_or_path)
+        print(f"项目 '{project_id_or_path}' 未注册且不是有效路径。")
+        print(REGISTER_HINT)
+        return
+
+    result = execute_onboarding_next_action(ctx, project_root, verify=verify, refresh_artifacts=True)
+    status = str(result.get("status"))
+    if status in {"missing", "ready", "invalid"}:
+        print("\n=== Onboarding Execute ===")
+        print(f"Project Root: {project_root}")
+        print(f"Status:       {status}")
+        print(f"Message:      {result.get('message')}")
+        recommended_command = result.get("recommended_command")
+        if recommended_command:
+            print(f"Next:         {recommended_command}")
+        return
+
+    step = result.get("step") or {}
+    execution = result.get("execution") or {}
+    verify_result = result.get("verify") or {}
+
+    print("\n=== Onboarding Execute ===")
+    print(f"Project Root: {project_root}")
+    print(f"Step:         {step.get('group')} / {step.get('key')}")
+    print(f"Status:       {status}")
+    print(f"Command:      {execution.get('command')}")
+    print(f"Resolved:     {execution.get('resolved_command')}")
+    print(f"Return Code:  {execution.get('returncode')}")
+    if execution.get("stdout"):
+        print("\nExecution stdout:")
+        print(execution["stdout"])
+    if execution.get("stderr"):
+        print("\nExecution stderr:")
+        print(execution["stderr"])
+
+    if verify_result:
+        print("\nVerification:")
+        print(f"- Command: {verify_result.get('command')}")
+        print(f"- Resolved: {verify_result.get('resolved_command')}")
+        print(f"- Return Code: {verify_result.get('returncode')}")
+        if verify_result.get("stdout"):
+            print("\nVerification stdout:")
+            print(verify_result["stdout"])
+        if verify_result.get("stderr"):
+            print("\nVerification stderr:")
+            print(verify_result["stderr"])
+
+    print("\nState:")
+    print(f"- Updated: {result.get('state_updated')}")
+    print(f"- Artifacts refreshed: {result.get('artifacts_refreshed')}")
+    for path in result.get("written_artifacts", []):
+        print(f"- {path}")
+
+    next_action = result.get("next_action") or {}
+    if isinstance(next_action, dict):
+        print("\nNext Action:")
+        print(f"- Status: {next_action.get('status')}")
+        if next_action.get("command"):
+            print(f"- Command: {next_action.get('command')}")
+        elif next_action.get("recommended_command"):
+            print(f"- Command: {next_action.get('recommended_command')}")
 
 
 def offer_agent_setup(ctx: AppContext, project_root: Path, project_id: str, agent_name: str = DEFAULT_AGENT) -> None:

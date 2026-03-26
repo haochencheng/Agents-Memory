@@ -130,6 +130,9 @@ python3 scripts/memory.py doctor . --write-checklist --write-state
 # 输出: 在 docs/plans/bootstrap-checklist.md 和 .agents-memory/onboarding-state.json 导出 onboarding 工件
 # 提示: agent 可优先读取 onboarding-state.json 中的 recommended_next_command / recommended_verify_command
 
+python3 scripts/memory.py onboarding-execute .
+# 输出: 执行当前第一条 onboarding action，随后验证并把 execution_history / last_verified_action 回写到 onboarding-state.json
+
 python3 scripts/memory.py onboarding-bundle .
 # 输出: 根据 onboarding-state.json 生成 docs/plans/onboarding-*/ onboarding task bundle
 # 提示: 重复运行会增量刷新 bundle 里的受管 onboarding sections
@@ -142,9 +145,6 @@ python3 scripts/memory.py plan-check .
 
 python3 scripts/memory.py profile-list
 # 输出: 当前内置 profile 列表
-
-python3 scripts/memory.py doctor .
-# 输出: 当前项目的接入健康检查（现已包含 planning 感知、分组小结、修复建议、行动序列、可验证 onboarding runbook 和 project bootstrap checklist）
 
 python3 scripts/memory.py profile-show python-service
 # 输出: python-service profile 的 standards / templates / bootstrap 详情

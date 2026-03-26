@@ -14,7 +14,7 @@ except ImportError:
 from agents_memory.constants import CATEGORIES, DOMAINS, PROJECTS, VECTOR_THRESHOLD
 from agents_memory.logging_utils import log_file_update
 from agents_memory.runtime import build_context
-from agents_memory.services.integration import load_onboarding_state, onboarding_next_action
+from agents_memory.services.integration import execute_onboarding_next_action, load_onboarding_state, onboarding_next_action
 from agents_memory.services.projects import parse_projects
 from agents_memory.services.records import cmd_update_index, parse_frontmatter
 
@@ -38,6 +38,7 @@ mcp = FastMCP(
     instructions=(
         "Shared memory system for AI Agents. Always call memory_get_index() at the start of a session involving code changes. "
         "Call memory_get_onboarding_next_action() before deep implementation if onboarding-state.json is available. "
+        "Call memory_execute_onboarding_next_action() when onboarding state already tells you the first required action and you want the system to execute, verify, and write back the result. "
         "Call memory_record_error() whenever you find and fix a bug or make an error during coding. "
         "Call memory_get_rules(domain) before working on finance, frontend, or python code."
     ),
@@ -75,6 +76,15 @@ def memory_get_onboarding_next_action(project_root: str = ".") -> str:
     target_root = Path(project_root).expanduser().resolve()
     payload = onboarding_next_action(target_root)
     _log_tool_end("memory_get_onboarding_next_action", status=payload.get("status"), project_root=target_root)
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+def memory_execute_onboarding_next_action(project_root: str = ".", verify: bool = True) -> str:
+    _log_tool_start("memory_execute_onboarding_next_action", project_root=project_root, verify=verify)
+    target_root = Path(project_root).expanduser().resolve()
+    payload = execute_onboarding_next_action(ctx, target_root, verify=verify, refresh_artifacts=True)
+    _log_tool_end("memory_execute_onboarding_next_action", status=payload.get("status"), project_root=target_root, verify=verify)
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 

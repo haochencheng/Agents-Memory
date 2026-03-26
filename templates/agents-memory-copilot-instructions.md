@@ -6,6 +6,7 @@ When working in this repository, treat Agents-Memory as mandatory session contex
 ## Required startup sequence
 
 1. Before any substantial analysis or edits, call `memory_get_onboarding_next_action(project_root=".")` if the `agents-memory` MCP server is available.
+   If the first step is safe to automate, prefer `memory_execute_onboarding_next_action(project_root=".", verify=true)` so the system records execution and verification back into onboarding state.
    If you need full context, then call `memory_get_onboarding_state(project_root=".")`.
    If MCP tools are unavailable, read `.agents-memory/onboarding-state.json` directly if it exists.
    If `project_bootstrap_ready` is `false`, follow `recommended_next_command`, then verify with `recommended_verify_command` before continuing.
