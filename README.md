@@ -148,6 +148,13 @@ python scripts/memory.py copilot-setup spec2flow
 # 将错误标记为已升级到 instruction
 python scripts/memory.py promote 2026-03-26-spec2flow-001
 
+# 查看内置工程 profile
+python scripts/memory.py profile-list
+
+# 预览或安装 python-service profile
+python scripts/memory.py profile-diff python-service .
+python scripts/memory.py profile-apply python-service .
+
 # 检查 docs/contract/test/policy 漂移和明显过期内容
 python scripts/memory.py docs-check .
 
@@ -231,6 +238,7 @@ python scripts/memory.py agent-setup github-copilot /path/to/project
 1. `docs/ai-engineering-operating-system.md`
 2. `docs/foundation-hardening.md`
 3. `standards/`
+4. `profiles/`
 
 第一批正式纳入仓库的代码规范包括：
 

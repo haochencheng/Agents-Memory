@@ -36,8 +36,14 @@ Agents-Memory/
 │   ├── cli.py                      # `amem` 包入口
 │   ├── logging_utils.py            # CLI + MCP 共享日志配置
 │   ├── commands/                   # CLI command registry by capability
-│   ├── services/                   # records / projects / integration / vector logic
+│   ├── services/                   # records / projects / integration / profiles / vector logic
 │   └── integrations/agents/        # pluggable agent adapters
+│
+├── profiles/                       # installable project profiles (JSON-subset YAML)
+│   ├── python-service.yaml
+│   ├── frontend-app.yaml
+│   ├── fullstack-product.yaml
+│   └── agent-runtime.yaml
 │
 ├── vectors/                        # LOCAL VECTOR INDEX (gitignored)
 │   └── errors.lance                # LanceDB 索引，由 embed 命令生成
@@ -49,6 +55,7 @@ Agents-Memory/
 ├── templates/
 │   ├── agents-memory-bridge.instructions.md   # bridge 模板（bridge-install 使用）
 │   └── agents-memory-copilot-instructions.md  # 仓库级 Copilot 激活模板
+│   └── profile/                    # profile 级初始化模板
 │   ├── index.example.md            # public-safe local hot-tier bootstrap
 │   ├── projects.example.md         # public-safe local registry bootstrap
 │   ├── rules.example.md            # public-safe local rules bootstrap
@@ -83,6 +90,8 @@ Agents-Memory/
 | `agents_memory/mcp_app.py` | MCP tool registry entrypoint | AI Agent via tool calls |
 | `agents_memory/runtime.py` | Shared repo context and paths | CLI / MCP / services |
 | `agents_memory/services/*` | Business logic by capability | CLI / MCP / future UIs |
+| `profiles/*.yaml` | Installable project contracts | `profile-list/show/apply` |
+| `templates/profile/*` | Profile bootstrap templates | `profile-apply` |
 | `agents_memory/integrations/agents/*` | Plugin adapters for Copilot / ChatGPT / Claude | Project integration flows |
 | `agents_memory/cli.py` | `amem` package entrypoint | Human / CI |
 | `agents_memory/logging_utils.py` | Shared structured logging | CLI / MCP |
@@ -108,6 +117,10 @@ python3 scripts/memory.py register [path]              # one-command project reg
 python3 scripts/memory.py bridge-install <project-id>  # install bridge instruction in a project
 python3 scripts/memory.py mcp-setup [project-id]       # write .vscode/mcp.json for a registered project
 python3 scripts/memory.py doctor [project-id]          # verify a project's full integration health
+python3 scripts/memory.py profile-list                 # list installable project profiles
+python3 scripts/memory.py profile-show <profile-id>    # show one profile contract
+python3 scripts/memory.py profile-apply <id> [path]    # install profile into target project
+python3 scripts/memory.py profile-diff <id> [path]     # preview profile install plan
 python3 scripts/memory.py docs-check [path]            # validate docs entrypoints plus contract/test/policy drift
 python3 scripts/memory.py archive                      # archive old records
 python3 scripts/memory.py to-qdrant                    # migrate to shared Qdrant

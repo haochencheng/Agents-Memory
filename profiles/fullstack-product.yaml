@@ -1,0 +1,24 @@
+{
+  "id": "fullstack-product",
+  "display_name": "Fullstack Product",
+  "applies_to": ["backend", "frontend", "fullstack"],
+  "standards": [
+    "standards/docs/docs-sync.instructions.md",
+    "standards/planning/harness-engineering.md",
+    "standards/planning/spec-kit.md",
+    "standards/planning/review-checklist.md"
+  ],
+  "templates": [],
+  "commands": {
+    "docs_check": "amem docs-check .",
+    "doctor": "amem doctor ."
+  },
+  "bootstrap": {
+    "create": [
+      ".github/instructions/",
+      "docs/",
+      "apps/",
+      "tests/"
+    ]
+  }
+}

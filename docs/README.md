@@ -17,5 +17,6 @@
 - [AI Engineering Operating System](ai-engineering-operating-system.md)
 - [Foundation Hardening Plan](foundation-hardening.md)
 - [Stale Cleanup Inventory](stale-cleanup.md)
+- [Profiles](ai-engineering-operating-system.md#7-profiles-目录设计)
 - [日常运维操作](ops.md)
 - [架构决策](architecture.md)

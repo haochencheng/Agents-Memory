@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from agents_memory.services.integration import (
     cmd_agent_list,
     cmd_agent_setup,
@@ -12,7 +14,7 @@ from agents_memory.services.integration import (
 )
 
 
-def register() -> dict[str, callable]:
+def register() -> dict[str, Callable]:
     return {
         "sync": lambda ctx, args: cmd_sync(ctx),
         "bridge-install": lambda ctx, args: cmd_bridge_install(ctx, args[0]) if args else print("用法: python3 memory.py bridge-install <project-id>"),
