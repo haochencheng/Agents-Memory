@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from agents_memory.runtime import AppContext
+from agents_memory.services.profiles import PROFILE_MANIFEST_REL, detect_applied_profile, expected_profile_paths, load_profile, read_profile_manifest
 
 
 CORE_DOC_COMMANDS = [
@@ -28,6 +29,7 @@ CORE_DOC_COMMANDS = [
     "profile-show",
     "profile-apply",
     "profile-diff",
+    "profile-check",
     "docs-check",
     "archive",
     "to-qdrant",
@@ -45,6 +47,9 @@ DOCS_DIR = "docs"
 GETTING_STARTED_FILE = "getting-started.md"
 LLMS_FILE = "llms.txt"
 TESTS_DIR = "tests"
+LICENSE_FILE = "LICENSE"
+CONTRIBUTING_FILE = "CONTRIBUTING.md"
+PYPROJECT_FILE = "pyproject.toml"
 
 CONTRACT_REQUIREMENTS = {
     "engineering_brain": {
@@ -91,6 +96,12 @@ POLICY_REQUIREMENTS = {
         "phrases": ["spec-first", "验收标准必须可被测试或命令验证"],
     },
 }
+
+OPEN_SOURCE_URL_PHRASES = [
+    'Repository = "',
+    'Documentation = "',
+    'Issues = "',
+]
 
 
 def _required_doc_files(project_root: Path) -> list[tuple[str, Path]]:
@@ -298,6 +309,76 @@ def _collect_policy_findings(project_root: Path) -> list[ValidationFinding]:
     return findings
 
 
+def _collect_open_source_findings(project_root: Path) -> list[ValidationFinding]:
+    findings = _collect_required_path_findings(
+        "open_source_files",
+        project_root,
+        [
+            project_root / LICENSE_FILE,
+            project_root / CONTRIBUTING_FILE,
+            project_root / PYPROJECT_FILE,
+        ],
+    )
+    pyproject = project_root / PYPROJECT_FILE
+    if not pyproject.exists():
+        return findings
+
+    findings.append(
+        _collect_phrase_coverage_findings(
+            "open_source_metadata",
+            PYPROJECT_FILE,
+            _read_if_exists(pyproject),
+            OPEN_SOURCE_URL_PHRASES,
+        )
+    )
+    return findings
+
+
+def collect_profile_check_findings(ctx: AppContext, project_root: Path, profile_id: str | None = None) -> list[ValidationFinding]:
+    findings: list[ValidationFinding] = []
+    manifest = read_profile_manifest(project_root)
+    resolved_profile_id = profile_id or detect_applied_profile(project_root)
+
+    if manifest is None:
+        return [ValidationFinding("FAIL", "profile_manifest", f"missing profile manifest: {PROFILE_MANIFEST_REL.as_posix()}")]
+    findings.append(ValidationFinding("OK", "profile_manifest", f"present: {PROFILE_MANIFEST_REL.as_posix()}"))
+
+    if not resolved_profile_id:
+        return findings + [ValidationFinding("FAIL", "profile_id", "profile manifest does not declare profile_id")]
+
+    manifest_profile_id = str(manifest.get("profile_id", "")).strip()
+    if manifest_profile_id != resolved_profile_id:
+        findings.append(
+            ValidationFinding(
+                "FAIL",
+                "profile_id",
+                f"manifest profile_id mismatch: expected {resolved_profile_id}, got {manifest_profile_id or 'empty'}",
+            )
+        )
+        return findings
+
+    findings.append(ValidationFinding("OK", "profile_id", f"resolved profile: {resolved_profile_id}"))
+    try:
+        profile = load_profile(ctx, resolved_profile_id)
+    except FileNotFoundError:
+        return findings + [ValidationFinding("FAIL", "profile_source", f"profile definition not found: {resolved_profile_id}")]
+
+    expected = expected_profile_paths(profile, project_root)
+    findings.extend(_collect_required_path_findings("profile_bootstrap_dirs", project_root, expected["bootstrap_dirs"]))
+    findings.extend(_collect_required_path_findings("profile_standard_files", project_root, expected["standard_files"]))
+    findings.extend(_collect_required_path_findings("profile_template_files", project_root, expected["template_files"]))
+
+    invalid_commands = [command for command in profile.commands.values() if not command.startswith(("amem ", "python3 scripts/memory.py "))]
+    findings.append(
+        ValidationFinding(
+            "OK" if not invalid_commands else "WARN",
+            "profile_commands",
+            "profile commands use supported CLI forms" if not invalid_commands else f"unsupported profile commands: {', '.join(invalid_commands)}",
+        )
+    )
+    return findings
+
+
 def collect_docs_check_findings(project_root: Path) -> list[ValidationFinding]:
     findings: list[ValidationFinding] = []
     docs_readme = project_root / DOCS_DIR / README_FILE
@@ -311,6 +392,7 @@ def collect_docs_check_findings(project_root: Path) -> list[ValidationFinding]:
     findings.extend(_collect_contract_findings(project_root))
     findings.extend(_collect_test_findings(project_root))
     findings.extend(_collect_policy_findings(project_root))
+    findings.extend(_collect_open_source_findings(project_root))
     findings.extend(_collect_hygiene_findings(project_root, searchable_files))
     return findings
 
@@ -350,3 +432,41 @@ def cmd_docs_check(ctx: AppContext, project_id_or_path: str = ".", *, strict: bo
 
     should_fail = has_fail or (strict and has_warn)
     return 1 if should_fail else 0
+
+
+def cmd_profile_check(ctx: AppContext, project_id_or_path: str = ".", *, profile_id: str | None = None, strict: bool = False, output_format: str = "text") -> int:
+    project_root = Path(project_id_or_path).expanduser().resolve()
+    findings = collect_profile_check_findings(ctx, project_root, profile_id=profile_id)
+    has_fail = any(finding.status == "FAIL" for finding in findings)
+    has_warn = any(finding.status == "WARN" for finding in findings)
+    if has_fail:
+        overall = "FAIL"
+    elif has_warn:
+        overall = "PARTIAL"
+    else:
+        overall = "OK"
+    ctx.logger.info("profile_check | root=%s | profile_id=%s | overall=%s | strict=%s", project_root, profile_id, overall, strict)
+
+    if output_format == "json":
+        print(
+            json.dumps(
+                {
+                    "project_root": str(project_root),
+                    "profile_id": profile_id,
+                    "overall": overall,
+                    "strict": strict,
+                    "findings": [asdict(finding) for finding in findings],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+    else:
+        print("\n=== Profile Check ===")
+        print(f"Root:    {project_root}")
+        print(f"Profile: {profile_id or detect_applied_profile(project_root) or '-'}")
+        print(f"Overall: {overall}\n")
+        for finding in findings:
+            print(f"[{finding.status:<4}] {finding.key:<28} {finding.detail}")
+
+    return 1 if has_fail or (strict and has_warn) else 0

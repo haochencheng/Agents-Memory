@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from agents_memory.runtime import build_context
-from agents_memory.services.integration import write_vscode_mcp_json
+from agents_memory.services.integration import cmd_bridge_install, write_vscode_mcp_json
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -93,3 +93,36 @@ class IntegrationServiceTests(unittest.TestCase):
             changed = write_vscode_mcp_json(ctx, project_root)
 
             self.assertFalse(changed)
+
+    def test_cmd_bridge_install_renders_repo_specific_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(
+                root / "templates" / "agents-memory-bridge.instructions.md",
+                "root={{AGENTS_MEMORY_ROOT}}\nproject={{PROJECT_ID}}\n",
+            )
+            _write_text(
+                root / "memory" / "projects.md",
+                "\n".join(
+                    [
+                        "# Project Registry",
+                        "",
+                        "## demo-project",
+                        f"- **id**: demo-project",
+                        f"- **root**: {project_root}",
+                        "- **bridge_instruction**: .github/instructions/agents-memory-bridge.instructions.md",
+                        "- **active**: true",
+                    ]
+                ),
+            )
+
+            cmd_bridge_install(ctx, "demo-project")
+
+            installed = project_root / ".github" / "instructions" / "agents-memory-bridge.instructions.md"
+            self.assertTrue(installed.exists())
+            content = installed.read_text(encoding="utf-8")
+            self.assertIn(f"root={ctx.base_dir}", content)
+            self.assertIn("project=demo-project", content)

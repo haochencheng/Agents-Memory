@@ -26,6 +26,8 @@ amem = "agents_memory.cli:main"
 
 [project.urls]
 Repository = "https://github.com/haochencheng/Agents-Memory"
+Documentation = "https://github.com/haochencheng/Agents-Memory/tree/main/docs"
+Issues = "https://github.com/haochencheng/Agents-Memory/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

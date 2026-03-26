@@ -14,7 +14,7 @@ applyTo: "**"
 
 **Step 1 — Load hot-tier index (always):**
 ```
-Read /Users/cliff/workspace/Agents-Memory/index.md
+Read {{AGENTS_MEMORY_ROOT}}/index.md
 ```
 This file is ≤ 400 tokens. It tells you:
 - How many error records exist (determines search strategy)
@@ -24,18 +24,18 @@ This file is ≤ 400 tokens. It tells you:
 **Step 2 — Load domain rules (before touching domain-specific code):**
 ```
 # Finance code
-Read /Users/cliff/workspace/Agents-Memory/memory/rules.md (Finance section)
+Read {{AGENTS_MEMORY_ROOT}}/memory/rules.md (Finance section)
 
 # Python / FastAPI
-Read /Users/cliff/workspace/Agents-Memory/memory/rules.md (Python section)
+Read {{AGENTS_MEMORY_ROOT}}/memory/rules.md (Python section)
 
 # TypeScript / Frontend
-Read /Users/cliff/workspace/Agents-Memory/memory/rules.md (TypeScript section)
+Read {{AGENTS_MEMORY_ROOT}}/memory/rules.md (TypeScript section)
 ```
 
 **Step 3 — Search before writing (when you see a pattern):**
 ```bash
-python3 /Users/cliff/workspace/Agents-Memory/scripts/memory.py search <keyword>
+python3 {{AGENTS_MEMORY_ROOT}}/scripts/memory.py search <keyword>
 ```
 Or via MCP tool: `memory_search(query="<keyword>")`
 
@@ -48,7 +48,7 @@ Or via MCP tool: `memory_search(query="<keyword>")`
 **Option A — MCP tool (preferred, works inside agent tool calls):**
 ```
 memory_record_error(
-  project="synapse-network",     # or spec2flow, gateway, etc.
+  project="{{PROJECT_ID}}",
   domain="python",               # finance | frontend | python | docs | config | infra
   category="logic-error",        # see CATEGORIES in memory.py
   severity="warning",            # critical | warning | info
@@ -62,7 +62,7 @@ memory_record_error(
 
 **Option B — CLI (when MCP not available):**
 ```bash
-python3 /Users/cliff/workspace/Agents-Memory/scripts/memory.py new
+python3 {{AGENTS_MEMORY_ROOT}}/scripts/memory.py new
 ```
 
 ---
@@ -108,4 +108,4 @@ If the Agents-Memory MCP server is running as a VS Code tool, you can call:
 - `memory_list_projects()` — see all registered projects
 - `memory_sync_stats()` — check record count and search strategy
 
-MCP server config: `/Users/cliff/workspace/Agents-Memory/.vscode/mcp.json`
+MCP server config is typically installed into the target repository at `.vscode/mcp.json`.

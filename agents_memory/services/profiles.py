@@ -9,6 +9,7 @@ from agents_memory.runtime import AppContext
 
 
 PROFILE_INSTALL_ROOT = Path(".github/instructions/agents-memory")
+PROFILE_MANIFEST_REL = PROFILE_INSTALL_ROOT / "profile-manifest.json"
 
 
 @dataclass(frozen=True)
@@ -96,46 +97,106 @@ def _template_destination(template_rel: str) -> Path:
     return Path(name)
 
 
-def apply_profile(ctx: AppContext, profile: ProfileSpec, target_root: Path, *, dry_run: bool = False) -> ProfileApplyResult:
-    created_dirs: list[str] = []
-    installed_standards: list[str] = []
-    wrote_templates: list[str] = []
-    skipped_paths: list[str] = []
+def resolve_standard_destination(target_root: Path, standard_rel: str) -> Path:
+    return target_root / PROFILE_INSTALL_ROOT / standard_rel
 
-    for rel_dir in profile.bootstrap_create:
+
+def resolve_template_destination(target_root: Path, template_rel: str) -> Path:
+    return target_root / _template_destination(template_rel)
+
+
+def expected_profile_paths(profile: ProfileSpec, target_root: Path) -> dict[str, list[Path]]:
+    return {
+        "bootstrap_dirs": [target_root / rel_dir for rel_dir in profile.bootstrap_create],
+        "standard_files": [resolve_standard_destination(target_root, standard_rel) for standard_rel in profile.standards],
+        "template_files": [resolve_template_destination(target_root, template_rel) for template_rel in profile.templates],
+    }
+
+
+def _apply_directory_items(ctx: AppContext, profile_id: str, target_root: Path, rel_paths: list[str], created_dirs: list[str], skipped_paths: list[str], *, dry_run: bool) -> None:
+    for rel_dir in rel_paths:
         destination = target_root / rel_dir
         relative = destination.relative_to(target_root).as_posix()
         if destination.exists():
             skipped_paths.append(relative)
             continue
         created_dirs.append(relative)
-        if not dry_run:
-            destination.mkdir(parents=True, exist_ok=True)
-            log_file_update(ctx.logger, action="profile_create_dir", path=destination, detail=f"profile_id={profile.id}")
+        if dry_run:
+            continue
+        destination.mkdir(parents=True, exist_ok=True)
+        log_file_update(ctx.logger, action="profile_create_dir", path=destination, detail=f"profile_id={profile_id}")
 
-    for standard_rel in profile.standards:
-        source = ctx.base_dir / standard_rel
-        destination = target_root / PROFILE_INSTALL_ROOT / standard_rel
+
+def _apply_file_items(ctx: AppContext, profile_id: str, target_root: Path, items: list[tuple[Path, Path]], installed_paths: list[str], skipped_paths: list[str], action: str, *, dry_run: bool) -> None:
+    for source, destination in items:
         relative = destination.relative_to(target_root).as_posix()
         if destination.exists():
             skipped_paths.append(relative)
             continue
-        installed_standards.append(relative)
-        if not dry_run:
-            _copy_text_file(source, destination)
-            log_file_update(ctx.logger, action="profile_install_standard", path=destination, detail=f"profile_id={profile.id}")
-
-    for template_rel in profile.templates:
-        source = ctx.base_dir / template_rel
-        destination = target_root / _template_destination(template_rel)
-        relative = destination.relative_to(target_root).as_posix()
-        if destination.exists():
-            skipped_paths.append(relative)
+        installed_paths.append(relative)
+        if dry_run:
             continue
-        wrote_templates.append(relative)
-        if not dry_run:
-            _copy_text_file(source, destination)
-            log_file_update(ctx.logger, action="profile_write_template", path=destination, detail=f"profile_id={profile.id}")
+        _copy_text_file(source, destination)
+        log_file_update(ctx.logger, action=action, path=destination, detail=f"profile_id={profile_id}")
+
+
+def _manifest_payload(profile: ProfileSpec) -> dict:
+    return {
+        "profile_id": profile.id,
+        "display_name": profile.display_name,
+        "applies_to": profile.applies_to,
+        "standards": profile.standards,
+        "templates": profile.templates,
+        "commands": profile.commands,
+        "bootstrap": {"create": profile.bootstrap_create},
+    }
+
+
+def write_profile_manifest(ctx: AppContext, target_root: Path, profile: ProfileSpec) -> Path:
+    manifest_path = target_root / PROFILE_MANIFEST_REL
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(_manifest_payload(profile), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    log_file_update(ctx.logger, action="profile_write_manifest", path=manifest_path, detail=f"profile_id={profile.id}")
+    return manifest_path
+
+
+def read_profile_manifest(target_root: Path) -> dict | None:
+    manifest_path = target_root / PROFILE_MANIFEST_REL
+    if not manifest_path.exists():
+        return None
+    return json.loads(manifest_path.read_text(encoding="utf-8"))
+
+
+def detect_applied_profile(target_root: Path) -> str | None:
+    manifest = read_profile_manifest(target_root)
+    if not manifest:
+        return None
+    profile_id = manifest.get("profile_id")
+    return str(profile_id) if profile_id else None
+
+
+def apply_profile(ctx: AppContext, profile: ProfileSpec, target_root: Path, *, dry_run: bool = False) -> ProfileApplyResult:
+    created_dirs: list[str] = []
+    installed_standards: list[str] = []
+    wrote_templates: list[str] = []
+    skipped_paths: list[str] = []
+
+    _apply_directory_items(ctx, profile.id, target_root, profile.bootstrap_create, created_dirs, skipped_paths, dry_run=dry_run)
+
+    standard_items = [
+        (ctx.base_dir / standard_rel, resolve_standard_destination(target_root, standard_rel))
+        for standard_rel in profile.standards
+    ]
+    template_items = [
+        (ctx.base_dir / template_rel, resolve_template_destination(target_root, template_rel))
+        for template_rel in profile.templates
+    ]
+
+    _apply_file_items(ctx, profile.id, target_root, standard_items, installed_standards, skipped_paths, "profile_install_standard", dry_run=dry_run)
+    _apply_file_items(ctx, profile.id, target_root, template_items, wrote_templates, skipped_paths, "profile_write_template", dry_run=dry_run)
+
+    if not dry_run:
+        write_profile_manifest(ctx, target_root, profile)
 
     return ProfileApplyResult(
         profile_id=profile.id,

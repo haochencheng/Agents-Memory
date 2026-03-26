@@ -70,6 +70,21 @@ class DocsCheckTests(unittest.TestCase):
 
             self.assertTrue(any(f.status == "FAIL" and f.key == "policy_files" for f in findings))
 
+    def test_collect_docs_check_findings_flags_missing_open_source_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_text(root / "README.md", "# Demo\n")
+            _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
+            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
+            (root / "tests").mkdir(parents=True, exist_ok=True)
+
+            findings = collect_docs_check_findings(root)
+
+            self.assertTrue(any(f.status == "FAIL" and f.key == "open_source_files" for f in findings))
+
     def test_cmd_docs_check_returns_zero_for_minimal_healthy_repo(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -122,6 +137,7 @@ class DocsCheckTests(unittest.TestCase):
                         "python3 scripts/memory.py profile-show python-service",
                         "python3 scripts/memory.py profile-apply python-service .",
                         "python3 scripts/memory.py profile-diff python-service .",
+                        "python3 scripts/memory.py profile-check .",
                         "python3 scripts/memory.py docs-check .",
                         "python3 scripts/memory.py archive",
                         "python3 scripts/memory.py update-index",
@@ -154,11 +170,28 @@ class DocsCheckTests(unittest.TestCase):
                         "python3 scripts/memory.py profile-show python-service",
                         "python3 scripts/memory.py profile-apply python-service .",
                         "python3 scripts/memory.py profile-diff python-service .",
+                        "python3 scripts/memory.py profile-check .",
                         "python3 scripts/memory.py docs-check [path]",
                         "python3 scripts/memory.py archive",
                         "python3 scripts/memory.py to-qdrant",
                         "python3 scripts/memory.py update-index",
                         "python3.12 -m unittest discover -s tests -p 'test_*.py'",
+                    ]
+                ),
+            )
+            _write_text(root / "LICENSE", "MIT\n")
+            _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
+            _write_text(
+                root / "pyproject.toml",
+                "\n".join(
+                    [
+                        "[project]",
+                        "name = 'demo'",
+                        "",
+                        "[project.urls]",
+                        'Repository = "https://example.com/repo"',
+                        'Documentation = "https://example.com/docs"',
+                        'Issues = "https://example.com/issues"',
                     ]
                 ),
             )

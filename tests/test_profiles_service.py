@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 
 from agents_memory.runtime import build_context
-from agents_memory.services.profiles import apply_profile, list_profiles, load_profile
+from agents_memory.services.profiles import PROFILE_MANIFEST_REL, apply_profile, list_profiles, load_profile
+from agents_memory.services.validation import collect_profile_check_findings
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -80,6 +81,7 @@ class ProfilesServiceTests(unittest.TestCase):
             self.assertTrue((target / "tests").exists())
             self.assertTrue((target / ".github" / "instructions" / "agents-memory" / "standards" / "python" / "base.instructions.md").exists())
             self.assertTrue((target / "AGENTS.md").exists())
+            self.assertTrue((target / PROFILE_MANIFEST_REL).exists())
             self.assertEqual(len(result.installed_standards), 1)
             self.assertEqual(len(result.wrote_templates), 1)
 
@@ -101,3 +103,41 @@ class ProfilesServiceTests(unittest.TestCase):
             self.assertEqual(result.created_dirs, ["docs"])
             self.assertFalse((target / "docs").exists())
             self.assertFalse((target / "AGENTS.md").exists())
+
+    def test_profile_check_reports_ok_for_applied_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "target"
+            target.mkdir()
+            ctx = self._build_context(root)
+            _write_text(
+                root / "profiles" / "python-service.yaml",
+                '{"id":"python-service","display_name":"Python Service","applies_to":["backend"],"standards":["standards/python/base.instructions.md"],"templates":["templates/profile/python-service/AGENTS.example.md"],"commands":{"docs_check":"amem docs-check ."},"bootstrap":{"create":["docs/","tests/"]}}\n',
+            )
+            _write_text(root / "standards" / "python" / "base.instructions.md", "# Python Base\n")
+            _write_text(root / "templates" / "profile" / "python-service" / "AGENTS.example.md", "# Target AGENTS\n")
+
+            apply_profile(ctx, load_profile(ctx, "python-service"), target)
+            findings = collect_profile_check_findings(ctx, target)
+
+            self.assertFalse(any(f.status == "FAIL" for f in findings))
+
+    def test_profile_check_flags_missing_installed_standard(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "target"
+            target.mkdir()
+            ctx = self._build_context(root)
+            _write_text(
+                root / "profiles" / "python-service.yaml",
+                '{"id":"python-service","display_name":"Python Service","applies_to":["backend"],"standards":["standards/python/base.instructions.md"],"templates":["templates/profile/python-service/AGENTS.example.md"],"commands":{"docs_check":"amem docs-check ."},"bootstrap":{"create":["docs/"]}}\n',
+            )
+            _write_text(root / "standards" / "python" / "base.instructions.md", "# Python Base\n")
+            _write_text(root / "templates" / "profile" / "python-service" / "AGENTS.example.md", "# Target AGENTS\n")
+
+            apply_profile(ctx, load_profile(ctx, "python-service"), target)
+            (target / ".github" / "instructions" / "agents-memory" / "standards" / "python" / "base.instructions.md").unlink()
+
+            findings = collect_profile_check_findings(ctx, target)
+
+            self.assertTrue(any(f.status == "FAIL" and f.key == "profile_standard_files" for f in findings))

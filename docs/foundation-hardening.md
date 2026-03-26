@@ -294,7 +294,7 @@ python3 -m py_compile $(find agents_memory scripts -name '*.py' -print)
 1. `profiles/` 目录
 2. `profile-apply` 命令
 3. 结构测试 / standards-check
-4. profile consistency check / doctor 扩展
+4. profile consistency check / doctor 扩展：已完成第一版
 
 ---
 

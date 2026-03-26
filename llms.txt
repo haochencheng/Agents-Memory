@@ -13,6 +13,8 @@ Agents-Memory/
 ├── index.md                        # HOT runtime file, locally generated from templates, gitignored
 ├── llms.txt                        # 机器可读的项目结构地图（本文件）
 ├── README.md                       # 人类可读的项目介绍 + 设计方案
+├── CONTRIBUTING.md                 # 开源贡献约定 + 最小验证命令
+├── LICENSE                         # 开源许可证
 │
 ├── schema/
 │   └── error-record.md             # 错误记录 frontmatter + 正文格式规范
@@ -84,6 +86,8 @@ Agents-Memory/
 | `errors/*.md` | Local full error records | On search hit |
 | `schema/error-record.md` | Format spec | Human / Agent when creating records |
 | `templates/*.example.*` | Public-safe bootstrap examples | Human / first local run |
+| `CONTRIBUTING.md` | Contribution workflow and validation baseline | Human contributors |
+| `LICENSE` | Open-source license | Humans / package metadata |
 | `scripts/memory.py` | Thin CLI wrapper → `agents_memory.app` | Human / CI |
 | `scripts/mcp_server.py` | Thin MCP wrapper → `agents_memory.mcp_app` | AI Agent via tool calls |
 | `agents_memory/app.py` | CLI command registry entrypoint | Human / CI |
@@ -91,6 +95,7 @@ Agents-Memory/
 | `agents_memory/runtime.py` | Shared repo context and paths | CLI / MCP / services |
 | `agents_memory/services/*` | Business logic by capability | CLI / MCP / future UIs |
 | `profiles/*.yaml` | Installable project contracts | `profile-list/show/apply` |
+| `.github/instructions/agents-memory/profile-manifest.json` | Applied profile manifest in target project | `profile-apply`, `profile-check`, `doctor` |
 | `templates/profile/*` | Profile bootstrap templates | `profile-apply` |
 | `agents_memory/integrations/agents/*` | Plugin adapters for Copilot / ChatGPT / Claude | Project integration flows |
 | `agents_memory/cli.py` | `amem` package entrypoint | Human / CI |
@@ -121,6 +126,7 @@ python3 scripts/memory.py profile-list                 # list installable projec
 python3 scripts/memory.py profile-show <profile-id>    # show one profile contract
 python3 scripts/memory.py profile-apply <id> [path]    # install profile into target project
 python3 scripts/memory.py profile-diff <id> [path]     # preview profile install plan
+python3 scripts/memory.py profile-check [path]         # verify installed profile consistency
 python3 scripts/memory.py docs-check [path]            # validate docs entrypoints plus contract/test/policy drift
 python3 scripts/memory.py archive                      # archive old records
 python3 scripts/memory.py to-qdrant                    # migrate to shared Qdrant

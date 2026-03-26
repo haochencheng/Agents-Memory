@@ -5,7 +5,7 @@
 ### 记录新错误
 
 ```bash
-cd /Users/cliff/workspace/Agents-Memory
+cd /path/to/Agents-Memory
 python3 scripts/memory.py new
 ```
 
@@ -84,7 +84,7 @@ python3 scripts/memory.py vsearch "filter type guard typescript" 10   # 返回 t
 ### 首次启动
 
 ```bash
-cd /Users/cliff/workspace/Agents-Memory/docker
+cd /path/to/Agents-Memory/docker
 mkdir -p data/qdrant
 cp .env.example .env
 docker-compose up -d

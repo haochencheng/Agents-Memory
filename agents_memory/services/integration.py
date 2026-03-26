@@ -28,7 +28,17 @@ from agents_memory.services.projects import (
     resolve_bridge_rel,
     resolve_project_target,
 )
+from agents_memory.services.profiles import detect_applied_profile
 from agents_memory.services.records import collect_errors
+from agents_memory.services.validation import collect_profile_check_findings
+
+
+def render_bridge_instruction(ctx: AppContext, project_id: str) -> str:
+    template_path = ctx.templates_dir / BRIDGE_TEMPLATE_NAME
+    if not template_path.exists():
+        raise FileNotFoundError(f"Bridge template not found: {template_path}")
+    content = template_path.read_text(encoding="utf-8")
+    return content.replace("{{PROJECT_ID}}", project_id).replace("{{AGENTS_MEMORY_ROOT}}", str(ctx.base_dir))
 
 
 def extract_rule_text(filepath: Path) -> str:
@@ -143,7 +153,7 @@ def cmd_bridge_install(ctx: AppContext, project_id: str) -> None:
         print("Delete the file manually if you want to reinstall.")
         return
 
-    destination.write_text(template_path.read_text(encoding="utf-8"), encoding="utf-8")
+    destination.write_text(render_bridge_instruction(ctx, project_id), encoding="utf-8")
     log_file_update(ctx.logger, action="install_bridge", path=destination, detail=f"project_id={project_id}")
     print(f"✅ Bridge instruction installed → {destination}")
     print(f"Next: add it to {root}/AGENTS.md read-order or .github/instructions/ references.")
@@ -237,7 +247,7 @@ def write_vscode_mcp_json(ctx: AppContext, project_root: Path) -> bool:
 
 
 def cmd_mcp_setup(ctx: AppContext, project_id_or_path: str = ".") -> None:
-    project_id, project_root, project = resolve_project_target(ctx, project_id_or_path)
+    _, project_root, _ = resolve_project_target(ctx, project_id_or_path)
     if project_root is None:
         ctx.logger.warning("mcp_setup_skip | target=%s | reason=unknown_project_or_path", project_id_or_path)
         print(f"项目 '{project_id_or_path}' 未注册且不是有效路径。")
@@ -251,6 +261,82 @@ def cmd_mcp_setup(ctx: AppContext, project_id_or_path: str = ".") -> None:
     print("  请调用 memory_get_index 工具，告诉我当前有多少条错误记录。")
 
 
+def _doctor_registry_checks(project_id: str, project_root: Path, project: dict | None) -> list[tuple[str, str, str]]:
+    checks: list[tuple[str, str, str]] = []
+    if project:
+        checks.append(("OK", "registry", f"registered as '{project.get('id', project_id)}'"))
+        active = project.get("active", "true").lower() == "true"
+        checks.append((("OK" if active else "FAIL"), "active", f"active={project.get('active', 'true')}"))
+    else:
+        checks.append(("FAIL", "registry", "project is not registered in memory/projects.md"))
+    checks.append((("OK" if project_root.exists() else "FAIL"), "root", str(project_root)))
+    return checks
+
+
+def _doctor_bridge_check(project_root: Path, bridge_rel: str | None) -> tuple[str, str, str]:
+    bridge_file = project_root / bridge_rel if bridge_rel else None
+    bridge_status = "FAIL"
+    bridge_detail = str(bridge_file) if bridge_file else "bridge path missing"
+    if bridge_file and bridge_file.exists():
+        bridge_status = "OK"
+    return bridge_status, "bridge_instruction", bridge_detail
+
+
+def _doctor_mcp_check(ctx: AppContext, project_root: Path) -> tuple[str, str, str]:
+    mcp_file = project_root / VSCODE_DIRNAME / MCP_CONFIG_NAME
+    mcp_status = "FAIL"
+    mcp_detail = str(mcp_file)
+    if not mcp_file.exists():
+        return mcp_status, "mcp_config", mcp_detail
+    try:
+        content = json.loads(mcp_file.read_text(encoding="utf-8"))
+        server = content.get("servers", {}).get("agents-memory")
+        if isinstance(server, dict):
+            expected_server = str(ctx.base_dir / "scripts" / "mcp_server.py")
+            if expected_server in server.get("args", []):
+                return "OK", "mcp_config", f"agents-memory server configured -> {mcp_file}"
+            return "WARN", "mcp_config", f"agents-memory exists but args do not include {expected_server}"
+        return mcp_status, "mcp_config", f"agents-memory server entry missing in {mcp_file}"
+    except Exception as exc:
+        return mcp_status, "mcp_config", f"invalid JSON in {mcp_file}: {exc}"
+
+
+def _doctor_runtime_checks() -> list[tuple[str, str, str]]:
+    python_ok, python_detail = python_ready()
+    mcp_ok, mcp_detail = mcp_package_ready()
+    return [
+        (("OK" if python_ok else "FAIL"), PYTHON_BIN, python_detail),
+        (("OK" if mcp_ok else "FAIL"), "mcp_package", mcp_detail),
+    ]
+
+
+def _doctor_profile_checks(ctx: AppContext, project_root: Path) -> list[tuple[str, str, str]]:
+    applied_profile_id = detect_applied_profile(project_root)
+    if not applied_profile_id:
+        return [("INFO", "profile_manifest", "no applied profile manifest found")]
+
+    findings = collect_profile_check_findings(ctx, project_root, profile_id=applied_profile_id)
+    profile_fail = [finding for finding in findings if finding.status == "FAIL"]
+    profile_warn = [finding for finding in findings if finding.status == "WARN"]
+    checks: list[tuple[str, str, str]] = [("OK", "profile_manifest", f"applied profile '{applied_profile_id}'")]
+    if profile_fail:
+        checks.append(("FAIL", "profile_consistency", profile_fail[0].detail))
+    elif profile_warn:
+        checks.append(("WARN", "profile_consistency", profile_warn[0].detail))
+    else:
+        checks.append(("OK", "profile_consistency", f"profile '{applied_profile_id}' consistency OK"))
+    return checks
+
+
+def _doctor_overall(checks: list[tuple[str, str, str]]) -> str:
+    required_statuses = [status for status, key, _ in checks if key not in {"agents_read_order", "copilot_activation", "profile_manifest"}]
+    if all(status == "OK" for status in required_statuses):
+        return "READY"
+    if any(status == "OK" for status in required_statuses):
+        return "PARTIAL"
+    return "NOT_READY"
+
+
 def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
     project_id, project_root, project = resolve_project_target(ctx, project_id_or_path)
     ctx.logger.info("doctor_start | target=%s | resolved_project_id=%s | project_root=%s", project_id_or_path, project_id, project_root)
@@ -261,60 +347,23 @@ def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
         return
 
     bridge_rel = resolve_bridge_rel(project)
-    bridge_file = project_root / bridge_rel if bridge_rel else None
-    mcp_file = project_root / VSCODE_DIRNAME / MCP_CONFIG_NAME
     checks: list[tuple[str, str, str]] = []
-
-    if project:
-        checks.append(("OK", "registry", f"registered as '{project.get('id', project_id)}'"))
-        active = project.get("active", "true").lower() == "true"
-        checks.append((("OK" if active else "FAIL"), "active", f"active={project.get('active', 'true')}"))
-    else:
-        checks.append(("FAIL", "registry", "project is not registered in memory/projects.md"))
-    checks.append((("OK" if project_root.exists() else "FAIL"), "root", str(project_root)))
-
-    bridge_status = "FAIL"
-    bridge_detail = str(bridge_file) if bridge_file else "bridge path missing"
-    if bridge_file and bridge_file.exists():
-        bridge_status = "OK"
-    checks.append((bridge_status, "bridge_instruction", bridge_detail))
+    checks.extend(_doctor_registry_checks(project_id, project_root, project))
+    checks.append(_doctor_bridge_check(project_root, bridge_rel))
 
     copilot_adapter = get_agent_adapter(DEFAULT_AGENT)
     if copilot_adapter is not None:
         copilot_check = copilot_adapter.doctor(ctx, project_root, project_id)
         if copilot_check:
             checks.append(copilot_check)
-
-    mcp_status = "FAIL"
-    mcp_detail = str(mcp_file)
-    if mcp_file.exists():
-        try:
-            content = json.loads(mcp_file.read_text(encoding="utf-8"))
-            server = content.get("servers", {}).get("agents-memory")
-            if isinstance(server, dict):
-                expected_server = str(ctx.base_dir / "scripts" / "mcp_server.py")
-                if expected_server in server.get("args", []):
-                    mcp_status = "OK"
-                    mcp_detail = f"agents-memory server configured -> {mcp_file}"
-                else:
-                    mcp_status = "WARN"
-                    mcp_detail = f"agents-memory exists but args do not include {expected_server}"
-            else:
-                mcp_detail = f"agents-memory server entry missing in {mcp_file}"
-        except Exception as exc:
-            mcp_detail = f"invalid JSON in {mcp_file}: {exc}"
-    checks.append((mcp_status, "mcp_config", mcp_detail))
-
-    python_ok, python_detail = python_ready()
-    checks.append((("OK" if python_ok else "FAIL"), PYTHON_BIN, python_detail))
-    mcp_ok, mcp_detail = mcp_package_ready()
-    checks.append((("OK" if mcp_ok else "FAIL"), "mcp_package", mcp_detail))
+    checks.append(_doctor_mcp_check(ctx, project_root))
+    checks.extend(_doctor_runtime_checks())
 
     agents_ref_exists = project_agents_reference_exists(project_root, bridge_rel) if bridge_rel else False
     checks.append((("INFO" if agents_ref_exists else "WARN"), "agents_read_order", "bridge referenced in AGENTS/docs/AGENTS" if agents_ref_exists else "bridge not referenced in AGENTS.md or docs/AGENTS.md (optional but recommended)"))
+    checks.extend(_doctor_profile_checks(ctx, project_root))
 
-    required_statuses = [status for status, key, _ in checks if key not in {"agents_read_order", "copilot_activation"}]
-    overall = "READY" if all(status == "OK" for status in required_statuses) else "PARTIAL" if any(status == "OK" for status in required_statuses) else "NOT_READY"
+    overall = _doctor_overall(checks)
 
     print("\n=== Agents-Memory Doctor ===")
     print(f"Project: {project_id}")

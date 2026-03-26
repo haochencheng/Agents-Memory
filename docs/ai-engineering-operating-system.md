@@ -138,12 +138,49 @@ Shared Engineering Brain
 负责：
 
 1. docs-check
-2. standards-check
-3. project doctor
-4. profile consistency check
+2. profile-check
+3. standards-check
+4. project doctor
 5. bootstrap completeness check
 
 这层负责把规则真正落地，否则 standards 只是文档陈列。
+
+### 3.1 系统架构图
+
+```mermaid
+flowchart TD
+  A[AI Coding Agent] --> B[index.md hot tier]
+  A --> C[memory/rules.md warm tier]
+  A --> D[errors/*.md cold tier]
+  A --> E[profiles/*.yaml]
+  A --> F[standards/*]
+  A --> G[planning docs and templates]
+
+  H[amem CLI / MCP] --> I[services/records.py]
+  H --> J[services/integration.py]
+  H --> K[services/profiles.py]
+  H --> L[services/validation.py]
+
+  I --> D
+  I --> B
+  I --> C
+  J --> M[target project]
+  K --> M
+  L --> M
+
+  K --> N[profile-manifest.json]
+  N --> L
+  L --> O[docs-check]
+  L --> P[profile-check]
+  J --> Q[doctor]
+  Q --> P
+
+  F --> K
+  G --> K
+  O --> R[delivery gate]
+  P --> R
+  Q --> R
+```
 
 ### 为什么必须是四层，而不是单一 memory
 
@@ -538,15 +575,16 @@ profile apply   = 项目装配执行
 1. `amem profile-list`
 2. `amem profile-show`
 3. `amem profile-apply`
-4. `amem docs-check`（已完成第二版）
+4. `amem profile-check`（已完成第一版）
+5. `amem docs-check`（已完成第二版）
 
 ### MVP-5
 
 新增统一校验：
 
 1. docs-check
-2. profile consistency check
-3. project doctor 扩展
+2. profile-check：已完成第一版
+3. project doctor 扩展：已完成第一版
 
 ---
 
@@ -590,6 +628,7 @@ Shared Engineering Brain =
 1. `standards/` 目录设计与首批标准文件：已完成
 2. `profiles/` 目录设计与 `python-service` profile：已完成第一版
 3. `amem profile-apply` 命令实现：已完成第一版
-4. `amem docs-check` 命令实现：已完成第二版
+4. `amem profile-check` 命令实现：已完成第一版
+5. `amem docs-check` 命令实现：已完成第二版
 
 这四步做完，Agents-Memory 才会从“共享错误记忆系统”升级成真正可执行的工程治理底座。

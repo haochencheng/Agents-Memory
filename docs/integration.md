@@ -215,7 +215,7 @@ amem doctor my-service
 ## my-service
 
 - **id**: my-service
-- **root**: /absolute/path/to/my-service
+- **root**: /path/to/my-service
 - **instruction_dir**: .github/instructions
 - **bridge_instruction**: .github/instructions/agents-memory-bridge.instructions.md
 - **active**: true
