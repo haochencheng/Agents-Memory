@@ -892,6 +892,112 @@ def _result_string_list(value: object) -> list[str]:
         return []
     return [str(item) for item in value]
 
+
+def _report_project_root(report: dict[str, object]) -> Path:
+    return Path(str(report.get("project_root") or "."))
+
+
+def _report_grouped_checks(report: dict[str, object]) -> list[tuple[str, list[tuple[str, str, str]]]]:
+    raw_groups = report.get("grouped_checks")
+    if not isinstance(raw_groups, list):
+        return []
+
+    grouped_checks: list[tuple[str, list[tuple[str, str, str]]]] = []
+    for item in raw_groups:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            continue
+        group_name, raw_checks = item
+        if not isinstance(group_name, str) or not isinstance(raw_checks, list):
+            continue
+        checks: list[tuple[str, str, str]] = []
+        for check in raw_checks:
+            if not isinstance(check, (list, tuple)) or len(check) != 3:
+                continue
+            status, key, detail = check
+            checks.append((str(status), str(key), str(detail)))
+        grouped_checks.append((group_name, checks))
+    return grouped_checks
+
+
+def _report_steps(report: dict[str, object], key: str) -> list[dict[str, object]]:
+    return _state_steps(report.get(key))
+
+
+def _print_doctor_header(*, project_id: str, project_root: Path, overall: str) -> None:
+    print("\n=== Agents-Memory Doctor ===")
+    print(f"Project: {project_id}")
+    print(f"Root:    {project_root}")
+    print(f"Overall: {overall}\n")
+
+
+def _print_doctor_groups(grouped_checks: list[tuple[str, list[tuple[str, str, str]]]]) -> None:
+    for group_name, group_checks in grouped_checks:
+        print(f"{group_name}:")
+        print(f"Summary: {_doctor_group_summary(group_name, group_checks)}")
+        for status, key, detail in group_checks:
+            print(f"[{status:<4}] {key:<18} {detail}")
+        remediations = _doctor_group_remediations(group_name, group_checks)
+        if remediations:
+            print("Remediation:")
+            for item in remediations:
+                print(f"- {item}")
+        print()
+
+
+def _print_doctor_action_sequence(action_sequence: list[str]) -> None:
+    if not action_sequence:
+        return
+    print("Action Sequence:")
+    for index, action in enumerate(action_sequence, start=1):
+        print(f"{index}. {action}")
+    print()
+
+
+def _print_doctor_runbook(runbook_steps: list[dict[str, object]]) -> None:
+    if not runbook_steps:
+        return
+    print("Onboarding Runbook:")
+    for index, step in enumerate(runbook_steps, start=1):
+        print(f"{index}. {step['group']} / {step['key']} [{step['priority']}]")
+        print(f"   Trigger: {step['detail']}")
+        print(f"   Action: {step['action']}")
+        print(f"   Command: {step['command']}")
+        print(f"   Verify with: {step['verify_with']}")
+        print(f"   Next command: {step['next_command']}")
+        print(f"   Safe to auto execute: {step['safe_to_auto_execute']}")
+        print(f"   Approval required: {step['approval_required']}")
+        print(f"   Approval reason: {step['approval_reason']}")
+        print(f"   Done when: {step['done_when']}")
+    print()
+
+
+def _print_doctor_checklist(checklist: list[str]) -> None:
+    if not checklist:
+        return
+    print("Project Bootstrap Checklist:")
+    for item in checklist:
+        print(f"- {item}")
+    print()
+
+
+def _print_doctor_exported_artifacts(written_artifacts: list[Path]) -> None:
+    if not written_artifacts:
+        return
+    print("Exported Artifacts:")
+    for path in written_artifacts:
+        print(f"- {path}")
+    print()
+
+
+def _print_doctor_next_steps(*, ctx: AppContext, overall: str, project_id: str) -> None:
+    print("\nNext:")
+    if overall == "READY":
+        print("1. 在该项目的 VS Code Agent/Chat 面板中调用 memory_get_index 进行最终运行时验证")
+        print(f"2. 如需观察后续接入动作日志，执行: tail -f {ctx.base_dir / 'logs' / 'agents-memory.log'}")
+    else:
+        print("1. 先修复上面的 FAIL / WARN 项")
+        print(f"2. 修复后重新运行: amem doctor {project_id}")
+
 def _recommended_step_metadata(step: dict[str, object]) -> dict[str, object]:
     return {
         "recommended_next_group": step.get("group"),
@@ -1385,12 +1491,12 @@ def execute_onboarding_next_action(
             written_artifacts = _write_doctor_artifacts(
                 ctx,
                 str(report["project_id"]),
-                Path(report["project_root"]),
+                _report_project_root(report),
                 str(report["overall"]),
-                list(report["grouped_checks"]),
-                list(report["action_sequence"]),
-                list(report["runbook_steps"]),
-                list(report["checklist"]),
+                _report_grouped_checks(report),
+                _result_string_list(report.get("action_sequence")),
+                _report_steps(report, "runbook_steps"),
+                _result_string_list(report.get("checklist")),
                 write_state=True,
                 write_checklist=True,
             )
@@ -1477,55 +1583,18 @@ def cmd_doctor(
         print(REGISTER_HINT)
         return
     project_id = str(report["project_id"])
-    project_root = Path(report["project_root"])
+    project_root = _report_project_root(report)
     overall = str(report["overall"])
-    grouped_checks = list(report["grouped_checks"])
+    grouped_checks = _report_grouped_checks(report)
+    action_sequence = _result_string_list(report.get("action_sequence"))
+    runbook_steps = _report_steps(report, "runbook_steps")
+    checklist = _result_string_list(report.get("checklist"))
 
-    print("\n=== Agents-Memory Doctor ===")
-    print(f"Project: {project_id}")
-    print(f"Root:    {project_root}")
-    print(f"Overall: {overall}\n")
-    for group_name, group_checks in grouped_checks:
-        print(f"{group_name}:")
-        print(f"Summary: {_doctor_group_summary(group_name, group_checks)}")
-        for status, key, detail in group_checks:
-            print(f"[{status:<4}] {key:<18} {detail}")
-        remediations = _doctor_group_remediations(group_name, group_checks)
-        if remediations:
-            print("Remediation:")
-            for item in remediations:
-                print(f"- {item}")
-        print()
-
-    action_sequence = list(report["action_sequence"])
-    if action_sequence:
-        print("Action Sequence:")
-        for index, action in enumerate(action_sequence, start=1):
-            print(f"{index}. {action}")
-        print()
-
-    runbook_steps = list(report["runbook_steps"])
-    if runbook_steps:
-        print("Onboarding Runbook:")
-        for index, step in enumerate(runbook_steps, start=1):
-            print(f"{index}. {step['group']} / {step['key']} [{step['priority']}]")
-            print(f"   Trigger: {step['detail']}")
-            print(f"   Action: {step['action']}")
-            print(f"   Command: {step['command']}")
-            print(f"   Verify with: {step['verify_with']}")
-            print(f"   Next command: {step['next_command']}")
-            print(f"   Safe to auto execute: {step['safe_to_auto_execute']}")
-            print(f"   Approval required: {step['approval_required']}")
-            print(f"   Approval reason: {step['approval_reason']}")
-            print(f"   Done when: {step['done_when']}")
-        print()
-
-    checklist = list(report["checklist"])
-    if checklist:
-        print("Project Bootstrap Checklist:")
-        for item in checklist:
-            print(f"- {item}")
-        print()
+    _print_doctor_header(project_id=project_id, project_root=project_root, overall=overall)
+    _print_doctor_groups(grouped_checks)
+    _print_doctor_action_sequence(action_sequence)
+    _print_doctor_runbook(runbook_steps)
+    _print_doctor_checklist(checklist)
 
     written_artifacts = _write_doctor_artifacts(
         ctx,
@@ -1539,19 +1608,8 @@ def cmd_doctor(
         write_state=write_state,
         write_checklist=write_checklist,
     )
-    if written_artifacts:
-        print("Exported Artifacts:")
-        for path in written_artifacts:
-            print(f"- {path}")
-        print()
-
-    print("\nNext:")
-    if overall == "READY":
-        print("1. 在该项目的 VS Code Agent/Chat 面板中调用 memory_get_index 进行最终运行时验证")
-        print(f"2. 如需观察后续接入动作日志，执行: tail -f {ctx.base_dir / 'logs' / 'agents-memory.log'}")
-    else:
-        print("1. 先修复上面的 FAIL / WARN 项")
-        print(f"2. 修复后重新运行: amem doctor {project_id}")
+    _print_doctor_exported_artifacts(written_artifacts)
+    _print_doctor_next_steps(ctx=ctx, overall=overall, project_id=project_id)
     ctx.logger.info("doctor_complete | project_id=%s | project_root=%s | overall=%s", project_id, project_root, overall)
 
 
