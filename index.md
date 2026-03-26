@@ -7,7 +7,7 @@
 
 | 类别 | 数量 | 文件 |
 |------|------|------|
-| 错误模式 (errors) | 3 | `errors/` |
+| 错误模式 (errors) | 5 | `errors/` |
 | 升级规则 (promoted) | 1 | `memory/rules.md` |
 
 ## 最近升级的规则（Top 3）
@@ -18,8 +18,9 @@
 
 | Category | Count |
 |----------|-------|
+| `build-error` | 1 |
+| `logic-error` | 1 |
 | `type-error` | 1 |
-| `config-error` | 1 |
 
 ## 检索指引
 

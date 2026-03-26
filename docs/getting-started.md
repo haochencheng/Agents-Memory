@@ -116,6 +116,30 @@ python3 scripts/memory.py list
 
 python3 scripts/memory.py search pydantic
 # 输出: 包含 "pydantic" 的所有错误记录
+
+python3 scripts/memory.py doctor .
+# 输出: 当前项目的接入健康检查（注册 / bridge / MCP / 环境）
+```
+
+### 调试日志
+
+所有关键操作默认都会写到：
+
+```bash
+tail -f logs/agents-memory.log
+```
+
+重点会记录：
+- `amem register` 的项目接入过程
+- `.github/instructions/*` 或 `.vscode/mcp.json` 的文件写入
+- `amem sync` 对其他项目的规则同步结果
+- MCP tools 调用和错误记录写入
+
+如果需要把日志同时打印到终端：
+
+```bash
+export AGENTS_MEMORY_LOG_STDERR=1
+export AGENTS_MEMORY_LOG_LEVEL=DEBUG
 ```
 
 ---
@@ -208,6 +232,7 @@ Agents-Memory/
 │   └── projects.md   ← 已注册的跨项目注册表
 ├── errors/           ← 冷区：所有错误记录文件
 │   └── archive/      ← 90 天以上的归档记录
+├── logs/             ← 统一调试日志（agents-memory.log）
 ├── templates/        ← bridge instruction 模板
 ├── scripts/
 │   ├── memory.py     ← CLI 主工具（12 命令）

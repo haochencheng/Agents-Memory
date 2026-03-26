@@ -108,6 +108,9 @@ python scripts/memory.py search "pydantic"
 # 统计错误分布
 python scripts/memory.py stats
 
+# 检查某个项目是否完整接入 Agents-Memory
+python scripts/memory.py doctor spec2flow
+
 # 将错误标记为已升级到 instruction
 python scripts/memory.py promote 2026-03-26-spec2flow-001
 
@@ -117,6 +120,43 @@ python scripts/memory.py archive
 # 重新生成 index.md 统计
 python scripts/memory.py update-index
 ```
+
+---
+
+## 调试日志
+
+项目现在会把关键操作写入统一日志文件：
+
+```text
+logs/agents-memory.log
+```
+
+默认会记录：
+
+1. CLI 命令开始 / 结束
+2. `register` 新项目接入
+3. `bridge-install` 写入 bridge instruction
+4. `mcp-setup` 写入或合并 `.vscode/mcp.json`
+5. `sync` 向其他项目同步规则时的跳过 / 写入结果
+6. MCP tools 调用，如 `memory_get_index`、`memory_record_error`、`memory_increment_repeat`
+7. 所有关键文件更新动作（错误记录文件、项目注册表、index、目标 instruction 文件）
+
+常用查看方式：
+
+```bash
+tail -f logs/agents-memory.log
+grep "sync_rule" logs/agents-memory.log
+grep "project_id=synapse-network" logs/agents-memory.log
+```
+
+可选环境变量：
+
+```bash
+export AGENTS_MEMORY_LOG_LEVEL=DEBUG
+export AGENTS_MEMORY_LOG_STDERR=1
+```
+
+`AGENTS_MEMORY_LOG_STDERR=1` 会在保留文件日志的同时，把同样内容打印到 stderr，方便本地调试 CLI / MCP server。
 
 ---
 

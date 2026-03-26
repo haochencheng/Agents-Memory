@@ -14,6 +14,7 @@ Agents-Memory CLI — 错误记录管理工具
   python3 memory.py bridge-install <project>   # 在注册项目中安装 bridge instruction
   python3 memory.py register [path]            # 一键注册新项目（自动检测 + 安装 bridge + 写入 mcp.json）
   python3 memory.py mcp-setup [project-id]     # 在已注册项目中写入 .vscode/mcp.json
+    python3 memory.py doctor [project-id]        # 检查项目是否已完整接入 Agents-Memory
   python3 memory.py archive                    # 归档 90 天以上且无重复的记录
   python3 memory.py update-index               # 重新生成 index.md 统计数字
   python3 memory.py to-qdrant                  # 迁移向量索引到 Qdrant（多 Agent 共享）
@@ -31,6 +32,9 @@ import shutil
 from datetime import date, timedelta
 from pathlib import Path
 
+import json
+import subprocess
+
 # ─── 路径常量 ────────────────────────────────────────────────────────────────
 # AGENTS_MEMORY_ROOT 可通过环境变量覆盖，供全局安装的 `amem` CLI 使用
 
@@ -42,6 +46,13 @@ VECTOR_DIR    = BASE_DIR / "vectors"          # LanceDB 本地文件目录（git
 INDEX_FILE    = BASE_DIR / "index.md"
 PROJECTS_FILE = MEMORY_DIR / "projects.md"   # 注册项目注册表
 TEMPLATES_DIR = BASE_DIR / "templates"       # bridge instruction 模板
+
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+from agents_memory.logging_utils import configure_logger, log_file_update
+
+LOGGER = configure_logger("agents_memory.cli", base_dir=BASE_DIR)
 
 # 超过此数量自动推荐向量搜索
 VECTOR_THRESHOLD = 200
@@ -69,6 +80,16 @@ PROJECTS = [
 ]
 
 DOMAINS = ["finance", "frontend", "python", "docs", "config", "infra", "other"]
+
+
+def _log_command_start(args: list[str]) -> None:
+    command = args[0] if args else "list"
+    LOGGER.info("command_start | command=%s | argv=%s", command, args)
+
+
+def _log_command_end(args: list[str], *, status: str) -> None:
+    command = args[0] if args else "list"
+    LOGGER.info("command_end | command=%s | status=%s", command, status)
 
 
 
@@ -221,6 +242,7 @@ def cmd_archive():
         if record_date < cutoff and int(meta.get("repeat_count", "1")) <= 1:
             shutil.move(str(filepath), str(ARCHIVE_DIR / filepath.name))
             archived += 1
+            log_file_update(LOGGER, action="archive", path=ARCHIVE_DIR / filepath.name, detail=f"source={filepath.name}")
             print(f"  Archived: {filepath.name}")
     print(f"\n{archived} record(s) archived.")
     if archived:
@@ -293,6 +315,7 @@ errors/YYYY-MM-DD-<project>-<sequence>.md
 格式见 `schema/error-record.md`
 """
     INDEX_FILE.write_text(index_content, encoding="utf-8")
+    log_file_update(LOGGER, action="write", path=INDEX_FILE, detail=f"total_records={total}")
     print("index.md updated.")
 
 
@@ -598,12 +621,15 @@ def cmd_sync():
     - 目标文件不存在或路径解析失败时打印警告，不中断其他同步。
     """
     promoted = collect_errors(status_filter=["promoted"])
+    LOGGER.info("sync_start | promoted=%s", len(promoted))
     if not promoted:
+        LOGGER.info("sync_skip | reason=no_promoted_records")
         print("No promoted records to sync.")
         return
 
     projects = _parse_projects()
     if not projects:
+        LOGGER.warning("sync_skip | reason=no_registered_projects")
         print("No projects registered. See memory/projects.md")
         return
 
@@ -631,6 +657,7 @@ def cmd_sync():
         record_id = record.get("id", "unknown")
 
         if not abs_target:
+            LOGGER.warning("sync_target_missing | record_id=%s | target=%s", record_id, rel_path)
             print(f"  ⚠  [{record_id}] target not found: {rel_path}")
             skipped += 1
             continue
@@ -639,12 +666,14 @@ def cmd_sync():
 
         # Idempotency check: skip if already synced
         if record_id in target_content:
+            LOGGER.info("sync_skip | record_id=%s | reason=already_synced | target=%s", record_id, abs_target)
             print(f"  ✓  [{record_id}] already synced → {abs_target.name}")
             skipped += 1
             continue
 
         rule_text = _extract_rule_text(Path(record["_file"]))
         if not rule_text:
+            LOGGER.warning("sync_skip | record_id=%s | reason=no_rule_text", record_id)
             print(f"  ⚠  [{record_id}] no rule text found, skipping")
             skipped += 1
             continue
@@ -665,9 +694,11 @@ def cmd_sync():
             target_content += f"\n\n## ⚠️ Gotchas\n{gotcha_entry}\n"
 
         abs_target.write_text(target_content, encoding="utf-8")
+        log_file_update(LOGGER, action="sync_rule", path=abs_target, detail=f"record_id={record_id}")
         print(f"  ✅ [{record_id}] synced → {abs_target}")
         synced += 1
 
+    LOGGER.info("sync_complete | synced=%s | skipped=%s", synced, skipped)
     print(f"\nSync complete: {synced} synced, {skipped} skipped.")
 
 
@@ -687,11 +718,13 @@ def cmd_bridge_install(project_id: str):
     projects = _parse_projects()
     proj = next((p for p in projects if p["id"] == project_id), None)
     if not proj:
+        LOGGER.warning("bridge_install_skip | project_id=%s | reason=project_not_registered", project_id)
         print(f"Project '{project_id}' not registered. Add it to memory/projects.md first.")
         return
 
     template_path = TEMPLATES_DIR / "agents-memory-bridge.instructions.md"
     if not template_path.exists():
+        LOGGER.warning("bridge_install_skip | project_id=%s | reason=template_missing | template=%s", project_id, template_path)
         print(f"Bridge template not found: {template_path}")
         print("Run this tool after the template has been created.")
         return
@@ -699,6 +732,7 @@ def cmd_bridge_install(project_id: str):
     root = proj.get("root", "").strip()
     bridge_rel = proj.get("bridge_instruction", ".github/instructions/agents-memory-bridge.instructions.md").strip()
     if not root or not bridge_rel:
+        LOGGER.warning("bridge_install_skip | project_id=%s | reason=missing_registry_fields", project_id)
         print(f"Missing 'root' or 'bridge_instruction' in project registry for '{project_id}'.")
         return
 
@@ -706,12 +740,14 @@ def cmd_bridge_install(project_id: str):
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     if dest.exists():
+        LOGGER.info("bridge_install_skip | project_id=%s | reason=already_installed | path=%s", project_id, dest)
         print(f"Already installed: {dest}")
         print("Delete the file manually if you want to reinstall.")
         return
 
     content = template_path.read_text(encoding="utf-8")
     dest.write_text(content, encoding="utf-8")
+    log_file_update(LOGGER, action="install_bridge", path=dest, detail=f"project_id={project_id}")
     print(f"✅ Bridge instruction installed → {dest}")
     print(f"Next: add it to {root}/AGENTS.md read-order or .github/instructions/ references.")
 
@@ -782,6 +818,177 @@ def _project_already_registered(project_id: str) -> bool:
     return f"## {project_id}" in PROJECTS_FILE.read_text(encoding="utf-8")
 
 
+def _resolve_project_target(project_id_or_path: str = ".") -> tuple[str, Path | None, dict | None]:
+    """Resolve either a registered project id or a filesystem path to a project root."""
+    projects = _parse_projects()
+    if project_id_or_path not in ("", "."):
+        proj = next((p for p in projects if p.get("id") == project_id_or_path), None)
+        if proj:
+            root_value = proj.get("root", "").strip()
+            if root_value:
+                return proj["id"], Path(root_value).expanduser().resolve(), proj
+            return proj["id"], None, proj
+
+    candidate = Path(project_id_or_path).expanduser().resolve()
+    if candidate.is_dir():
+        for proj in projects:
+            root_value = proj.get("root", "").strip()
+            if not root_value:
+                continue
+            try:
+                if Path(root_value).expanduser().resolve() == candidate:
+                    return proj.get("id", candidate.name.lower().replace("_", "-")), candidate, proj
+            except Exception:
+                continue
+        return candidate.name.lower().replace("_", "-"), candidate, None
+
+    return project_id_or_path, None, None
+
+
+def _project_agents_reference_exists(project_root: Path, bridge_rel: str) -> bool:
+    for candidate in (project_root / "AGENTS.md", project_root / "docs" / "AGENTS.md"):
+        if candidate.exists() and bridge_rel in candidate.read_text(encoding="utf-8"):
+            return True
+    return False
+
+
+def _python312_ready() -> tuple[bool, str]:
+    python_bin = shutil.which("python3.12")
+    if not python_bin:
+        return False, "python3.12 not found in PATH"
+    return True, python_bin
+
+
+def _mcp_package_ready() -> tuple[bool, str]:
+    python_bin = shutil.which("python3.12")
+    if not python_bin:
+        return False, "python3.12 not found in PATH"
+    result = subprocess.run(
+        [python_bin, "-c", "from mcp.server.fastmcp import FastMCP"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return True, "mcp import OK"
+    stderr = (result.stderr or result.stdout or "import failed").strip().splitlines()[0]
+    return False, stderr
+
+
+def cmd_doctor(project_id_or_path: str = "."):
+    """
+    检查项目是否已完整接入 Agents-Memory：注册、bridge、MCP、运行环境。
+
+    用法:
+      amem doctor
+      amem doctor spec2flow
+      amem doctor /abs/path/to/project
+    """
+    project_id, project_root, proj = _resolve_project_target(project_id_or_path)
+    LOGGER.info(
+        "doctor_start | target=%s | resolved_project_id=%s | project_root=%s",
+        project_id_or_path,
+        project_id,
+        project_root,
+    )
+
+    if project_root is None:
+        LOGGER.warning("doctor_failed | target=%s | reason=unknown_project_or_path", project_id_or_path)
+        print(f"项目 '{project_id_or_path}' 未注册，且不是有效目录。")
+        print("先运行: amem register")
+        return
+
+    bridge_rel = (
+        proj.get("bridge_instruction", ".github/instructions/agents-memory-bridge.instructions.md").strip()
+        if proj
+        else ".github/instructions/agents-memory-bridge.instructions.md"
+    )
+    bridge_file = project_root / bridge_rel if bridge_rel else None
+    mcp_file = project_root / ".vscode" / "mcp.json"
+
+    checks: list[tuple[str, str, str]] = []
+
+    if proj:
+        checks.append(("OK", "registry", f"registered as '{proj.get('id', project_id)}'"))
+        active = proj.get("active", "true").lower() == "true"
+        checks.append((("OK" if active else "FAIL"), "active", f"active={proj.get('active', 'true')}"))
+    else:
+        checks.append(("FAIL", "registry", "project is not registered in memory/projects.md"))
+
+    checks.append((("OK" if project_root.exists() else "FAIL"), "root", str(project_root)))
+
+    bridge_status = "FAIL"
+    bridge_detail = str(bridge_file) if bridge_file else "bridge path missing"
+    if bridge_file and bridge_file.exists():
+        bridge_status = "OK"
+    checks.append((bridge_status, "bridge_instruction", bridge_detail))
+
+    mcp_status = "FAIL"
+    mcp_detail = str(mcp_file)
+    if mcp_file.exists():
+        try:
+            content = json.loads(mcp_file.read_text(encoding="utf-8"))
+            server = content.get("servers", {}).get("agents-memory")
+            if isinstance(server, dict):
+                server_args = server.get("args", [])
+                expected_server = str(BASE_DIR / "scripts" / "mcp_server.py")
+                if expected_server in server_args:
+                    mcp_status = "OK"
+                    mcp_detail = f"agents-memory server configured -> {mcp_file}"
+                else:
+                    mcp_status = "WARN"
+                    mcp_detail = f"agents-memory exists but args do not include {expected_server}"
+            else:
+                mcp_detail = f"agents-memory server entry missing in {mcp_file}"
+        except Exception as exc:
+            mcp_detail = f"invalid JSON in {mcp_file}: {exc}"
+    checks.append((mcp_status, "mcp_config", mcp_detail))
+
+    python_ok, python_detail = _python312_ready()
+    checks.append((("OK" if python_ok else "FAIL"), "python3.12", python_detail))
+
+    mcp_pkg_ok, mcp_pkg_detail = _mcp_package_ready()
+    checks.append((("OK" if mcp_pkg_ok else "FAIL"), "mcp_package", mcp_pkg_detail))
+
+    agents_ref_exists = _project_agents_reference_exists(project_root, bridge_rel) if bridge_rel else False
+    checks.append(
+        (
+            ("INFO" if agents_ref_exists else "WARN"),
+            "agents_read_order",
+            (
+                "bridge referenced in AGENTS/docs/AGENTS"
+                if agents_ref_exists
+                else "bridge not referenced in AGENTS.md or docs/AGENTS.md (optional but recommended)"
+            ),
+        )
+    )
+
+    required_statuses = [status for status, key, _detail in checks if key != "agents_read_order"]
+    if all(status == "OK" for status in required_statuses):
+        overall = "READY"
+    elif any(status == "OK" for status in required_statuses):
+        overall = "PARTIAL"
+    else:
+        overall = "NOT_READY"
+
+    print("\n=== Agents-Memory Doctor ===")
+    print(f"Project: {project_id}")
+    print(f"Root:    {project_root}")
+    print(f"Overall: {overall}\n")
+
+    for status, key, detail in checks:
+        print(f"[{status:<4}] {key:<18} {detail}")
+
+    print("\nNext:")
+    if overall == "READY":
+        print("1. 在该项目的 VS Code Agent/Chat 面板中调用 memory_get_index 进行最终运行时验证")
+        print(f"2. 如需观察后续接入动作日志，执行: tail -f {BASE_DIR / 'logs' / 'agents-memory.log'}")
+    else:
+        print("1. 先修复上面的 FAIL / WARN 项")
+        print(f"2. 修复后重新运行: amem doctor {project_id}")
+
+    LOGGER.info("doctor_complete | project_id=%s | project_root=%s | overall=%s", project_id, project_root, overall)
+
+
 def _append_project_entry(entry: str):
     """将新项目条目追加到 projects.md 末尾（自动插在 '注册新项目' 说明之前）."""
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -795,6 +1002,8 @@ def _append_project_entry(entry: str):
     else:
         content = content.rstrip() + "\n\n" + entry + "\n"
     PROJECTS_FILE.write_text(content, encoding="utf-8")
+    first_line = entry.splitlines()[0].strip() if entry.strip() else "unknown"
+    log_file_update(LOGGER, action="update_registry", path=PROJECTS_FILE, detail=first_line)
 
 
 def cmd_register(path: str = "."):
@@ -814,8 +1023,11 @@ def cmd_register(path: str = "."):
     """
     root = Path(path).expanduser().resolve()
     if not root.is_dir():
+        LOGGER.warning("register_skip | path=%s | reason=path_not_found", root)
         print(f"路径不存在: {root}")
         return
+
+    LOGGER.info("register_start | root=%s", root)
 
     # ── 1. 推断项目 ID ──────────────────────────────────────────────────────
     detected_id = _detect_project_id(root)
@@ -824,6 +1036,7 @@ def cmd_register(path: str = "."):
     project_id = project_id.lower().replace("_", "-")
 
     if _project_already_registered(project_id):
+        LOGGER.info("register_skip | project_id=%s | reason=already_registered", project_id)
         print(f"⚠️  '{project_id}' 已在 memory/projects.md 中注册，跳过写入。")
         print("如需更新，请手动编辑 memory/projects.md。")
         _offer_bridge_install(project_id)
@@ -871,6 +1084,7 @@ def cmd_register(path: str = "."):
     )
 
     _append_project_entry(entry)
+    LOGGER.info("register_complete | project_id=%s | root=%s | domains=%s", project_id, root, ",".join(domains))
     print(f"\n✅ 已写入 memory/projects.md → {project_id}")
 
     # ── 5. 安装 bridge instruction ──────────────────────────────────────────
@@ -892,13 +1106,16 @@ def _offer_mcp_setup(project_id: str, project_root: Path):
             pass
 
     if already_has:
+        LOGGER.info("mcp_setup_skip | project_id=%s | reason=already_present | path=%s", project_id, mcp_file)
         print(f"\nℹ️  .vscode/mcp.json 已包含 agents-memory 配置，跳过。")
         return
 
     answer = input("\n自动写入 .vscode/mcp.json（VS Code MCP 工具层）？[Y/n]: ").strip().lower()
     if answer in ("", "y", "yes"):
+        LOGGER.info("mcp_setup_accept | project_id=%s | root=%s", project_id, project_root)
         _write_vscode_mcp_json(project_root)
     else:
+        LOGGER.info("mcp_setup_skip | project_id=%s | reason=user_declined", project_id)
         print(f"跳过。稍后可手动运行: amem mcp-setup {project_id}")
 
 
@@ -906,12 +1123,15 @@ def _offer_bridge_install(project_id: str):
     """询问并执行 bridge instruction 安装。"""
     template_path = TEMPLATES_DIR / "agents-memory-bridge.instructions.md"
     if not template_path.exists():
+        LOGGER.warning("bridge_offer_skip | project_id=%s | reason=template_missing | template=%s", project_id, template_path)
         print(f"\n⚠️  Bridge 模板不存在: {template_path}，跳过安装。")
         return
     answer = input("\n自动安装 bridge instruction？[Y/n]: ").strip().lower()
     if answer in ("", "y", "yes"):
+        LOGGER.info("bridge_install_accept | project_id=%s", project_id)
         cmd_bridge_install(project_id)
     else:
+        LOGGER.info("bridge_install_skip | project_id=%s | reason=user_declined", project_id)
         print(f"跳过。稍后可手动运行: python3 scripts/memory.py bridge-install {project_id}")
 
 
@@ -938,11 +1158,13 @@ def _write_vscode_mcp_json(project_root: Path) -> bool:
         except Exception:
             existing = {}
         if "agents-memory" in existing.get("servers", {}):
+            LOGGER.info("mcp_file_skip | path=%s | reason=already_contains_server", mcp_file)
             print(f"  已存在: {mcp_file}")
             return False
         # Merge
         existing.setdefault("servers", {})["agents-memory"] = server_entry
         mcp_file.write_text(json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        log_file_update(LOGGER, action="merge_mcp_config", path=mcp_file, detail=f"project_root={project_root}")
         print(f"  ✅ 已合并写入 agents-memory server 条目 → {mcp_file}")
         return True
 
@@ -950,6 +1172,7 @@ def _write_vscode_mcp_json(project_root: Path) -> bool:
     vscode_dir.mkdir(exist_ok=True)
     config = {"servers": {"agents-memory": server_entry}}
     mcp_file.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    log_file_update(LOGGER, action="write_mcp_config", path=mcp_file, detail=f"project_root={project_root}")
     print(f"  ✅ 已写入 {mcp_file}")
     return True
 
@@ -974,11 +1197,13 @@ def cmd_mcp_setup(project_id_or_path: str = "."):
         projects = _parse_projects()
         proj = next((p for p in projects if p["id"] == project_id_or_path), None)
         if not proj:
+            LOGGER.warning("mcp_setup_skip | target=%s | reason=unknown_project_or_path", project_id_or_path)
             print(f"项目 '{project_id_or_path}' 未注册且不是有效路径。")
             print("先运行: amem register")
             return
         project_root = Path(proj["root"])
 
+    LOGGER.info("mcp_setup_start | target=%s | project_root=%s", project_id_or_path, project_root)
     print(f"\n🛠  写入 .vscode/mcp.json → {project_root}")
     _write_vscode_mcp_json(project_root)
     print()
@@ -995,42 +1220,51 @@ def main():
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
 
     args = sys.argv[1:]
+    _log_command_start(args)
 
-    if not args or args[0] == "list":
-        cmd_list()
-    elif args[0] == "stats":
-        cmd_stats()
-    elif args[0] == "search":
-        cmd_search(" ".join(args[1:]) if len(args) > 1 else "")
-    elif args[0] == "vsearch":
-        if len(args) < 2:
-            print("用法: python3 memory.py vsearch <query>")
+    try:
+        if not args or args[0] == "list":
+            cmd_list()
+        elif args[0] == "stats":
+            cmd_stats()
+        elif args[0] == "search":
+            cmd_search(" ".join(args[1:]) if len(args) > 1 else "")
+        elif args[0] == "vsearch":
+            if len(args) < 2:
+                print("用法: python3 memory.py vsearch <query>")
+            else:
+                top_k = int(args[-1]) if args[-1].isdigit() else 5
+                query = " ".join(args[1:]) if not args[-1].isdigit() else " ".join(args[1:-1])
+                cmd_vsearch(query, top_k)
+        elif args[0] == "embed":
+            cmd_embed()
+        elif args[0] == "to-qdrant":
+            cmd_to_qdrant()
+        elif args[0] == "sync":
+            cmd_sync()
+        elif args[0] == "bridge-install":
+            cmd_bridge_install(args[1]) if len(args) > 1 else print("用法: python3 memory.py bridge-install <project-id>")
+        elif args[0] == "mcp-setup":
+            cmd_mcp_setup(args[1] if len(args) > 1 else ".")
+        elif args[0] == "doctor":
+            cmd_doctor(args[1] if len(args) > 1 else ".")
+        elif args[0] == "register":
+            cmd_register(args[1] if len(args) > 1 else ".")
+        elif args[0] == "promote":
+            cmd_promote(args[1]) if len(args) > 1 else print("用法: python3 memory.py promote <id>")
+        elif args[0] == "archive":
+            cmd_archive()
+        elif args[0] == "update-index":
+            cmd_update_index()
+        elif args[0] == "new":
+            cmd_new()
         else:
-            top_k = int(args[-1]) if args[-1].isdigit() else 5
-            query = " ".join(args[1:]) if not args[-1].isdigit() else " ".join(args[1:-1])
-            cmd_vsearch(query, top_k)
-    elif args[0] == "embed":
-        cmd_embed()
-    elif args[0] == "to-qdrant":
-        cmd_to_qdrant()
-    elif args[0] == "sync":
-        cmd_sync()
-    elif args[0] == "bridge-install":
-        cmd_bridge_install(args[1]) if len(args) > 1 else print("用法: python3 memory.py bridge-install <project-id>")
-    elif args[0] == "mcp-setup":
-        cmd_mcp_setup(args[1] if len(args) > 1 else ".")
-    elif args[0] == "register":
-        cmd_register(args[1] if len(args) > 1 else ".")
-    elif args[0] == "promote":
-        cmd_promote(args[1]) if len(args) > 1 else print("用法: python3 memory.py promote <id>")
-    elif args[0] == "archive":
-        cmd_archive()
-    elif args[0] == "update-index":
-        cmd_update_index()
-    elif args[0] == "new":
-        cmd_new()
-    else:
-        print(__doc__)
+            print(__doc__)
+        _log_command_end(args, status="ok")
+    except Exception:
+        _log_command_end(args, status="error")
+        LOGGER.exception("command_failed | argv=%s", args)
+        raise
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@
 git clone https://github.com/haochencheng/Agents-Memory.git
 
 # 安装 amem 到系统 PATH（创建符号链接到 /opt/homebrew/bin/amem）
-bash Agents-Memory/scripts/install-cli.sh
+bash scripts/install-cli.sh
 ```
 
 安装后 `amem` 在任意目录全局可用，无需 Python 环境配置、无需 pip。
@@ -144,7 +144,31 @@ cat .vscode/mcp.json
 ```bash
 amem sync
 # 输出中应出现该项目的 instruction 文件路径
+
+# 如需看详细日志
+tail -f /path/to/Agents-Memory/logs/agents-memory.log
 ```
+
+日志里可以直接看到：
+
+1. `register_start` / `register_complete`
+2. `install_bridge` 写入了哪个项目的哪个文件
+3. `write_mcp_config` 或 `merge_mcp_config` 是否生效
+4. 后续 `sync_rule` 是否把规则同步进该项目
+
+### 检查 5：一条命令做全量体检
+
+```bash
+amem doctor my-service
+```
+
+它会一次检查：
+
+1. 项目是否已注册到 `memory/projects.md`
+2. bridge instruction 是否存在
+3. `.vscode/mcp.json` 是否包含 `agents-memory`
+4. 当前机器上的 `python3.12` / `mcp` 是否就绪
+5. `AGENTS.md` 或 `docs/AGENTS.md` 是否引用了 bridge instruction（可选项）
 
 ---
 
@@ -186,5 +210,5 @@ cd /path/to/my-service && amem mcp-setup  # 当前目录
 | 项目 | 注册 | bridge 安装 | MCP 配置 |
 |------|------|------------|------|
 | synapse-network | ✅ | ✅ | ✅ |
-| spec2flow | ✅ | ✅ | 运行 `amem mcp-setup spec2flow` |
+| spec2flow | ✅ | ✅ | ✅ |
 | agents-memory | ✅ | — | ✅（内置）|

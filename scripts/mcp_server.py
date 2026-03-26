@@ -43,6 +43,7 @@ Claude Desktop 配置（~/Library/Application Support/Claude/claude_desktop_conf
 """
 
 import json
+import os
 import sys
 import shutil
 from datetime import date, timedelta
@@ -56,7 +57,14 @@ except ImportError:
 
 # ─── 路径 ────────────────────────────────────────────────────────────────────
 
-BASE_DIR     = Path(__file__).parent.parent
+BASE_DIR     = Path(os.environ.get("AGENTS_MEMORY_ROOT", Path(__file__).parent.parent))
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+from agents_memory.logging_utils import configure_logger, log_file_update
+
+LOGGER = configure_logger("agents_memory.mcp", base_dir=BASE_DIR)
+
 ERRORS_DIR   = BASE_DIR / "errors"
 ARCHIVE_DIR  = BASE_DIR / "errors" / "archive"
 MEMORY_DIR   = BASE_DIR / "memory"
@@ -74,6 +82,18 @@ PROJECTS = [
     "gateway", "admin-front", "gateway-admin", "other",
 ]
 DOMAINS = ["finance", "frontend", "python", "docs", "config", "infra", "other"]
+
+
+def _log_tool_start(tool_name: str, **fields: object) -> None:
+    payload = " | ".join(f"{key}={value}" for key, value in fields.items() if value not in (None, ""))
+    suffix = f" | {payload}" if payload else ""
+    LOGGER.info("tool_start | tool=%s%s", tool_name, suffix)
+
+
+def _log_tool_end(tool_name: str, **fields: object) -> None:
+    payload = " | ".join(f"{key}={value}" for key, value in fields.items() if value not in (None, ""))
+    suffix = f" | {payload}" if payload else ""
+    LOGGER.info("tool_end | tool=%s%s", tool_name, suffix)
 
 # ─── 内部工具函数 ─────────────────────────────────────────────────────────────
 
@@ -141,8 +161,11 @@ def memory_get_index() -> str:
     ALWAYS call this at the start of every coding session.
     Returns: summary of active error count, promoted rules, top error categories, and search guidance.
     """
+    _log_tool_start("memory_get_index")
     if not INDEX_FILE.exists():
+        _log_tool_end("memory_get_index", status="missing_index")
         return "Memory index not found. Run: python3 scripts/memory.py update-index"
+    _log_tool_end("memory_get_index", status="ok")
     return INDEX_FILE.read_text(encoding="utf-8")
 
 
@@ -158,10 +181,13 @@ def memory_get_rules(domain: str = "") -> str:
 
     Returns: Promoted rules relevant to the domain.
     """
+    _log_tool_start("memory_get_rules", domain=domain or "all")
     if not RULES_FILE.exists():
+        _log_tool_end("memory_get_rules", status="missing_rules")
         return "No rules file found."
     content = RULES_FILE.read_text(encoding="utf-8")
     if not domain:
+        _log_tool_end("memory_get_rules", status="ok", scope="all")
         return content
 
     # Extract only the relevant section
@@ -174,6 +200,7 @@ def memory_get_rules(domain: str = "") -> str:
     }
     headers = domain_map.get(domain.lower(), [])
     if not headers:
+        _log_tool_end("memory_get_rules", status="ok", scope="all_unmapped")
         return content  # return all if domain not mapped
 
     lines = content.splitlines()
@@ -187,7 +214,9 @@ def memory_get_rules(domain: str = "") -> str:
         if in_section:
             result_lines.append(line)
 
-    return "\n".join(result_lines) if result_lines else f"No rules found for domain: {domain}"
+    result = "\n".join(result_lines) if result_lines else f"No rules found for domain: {domain}"
+    _log_tool_end("memory_get_rules", status="ok", scope=domain)
+    return result
 
 
 @mcp.tool()
@@ -202,6 +231,7 @@ def memory_search(query: str, limit: int = 5) -> str:
 
     Returns: Matching error record summaries with ID, project, category, and status.
     """
+    _log_tool_start("memory_search", query=query, limit=limit)
     keyword = query.lower()
     matches = []
     for fp in sorted(ERRORS_DIR.glob("*.md")):
@@ -214,6 +244,7 @@ def memory_search(query: str, limit: int = 5) -> str:
             break
 
     if not matches:
+        _log_tool_end("memory_search", status="no_matches", query=query)
         return f"No error records matching '{query}'."
 
     lines = [f"Found {len(matches)} match(es) for '{query}':\n"]
@@ -223,6 +254,7 @@ def memory_search(query: str, limit: int = 5) -> str:
             f"{m.get('project','')} / {m.get('category','')}  "
             f"→ status: {m.get('status','')}"
         )
+    _log_tool_end("memory_search", status="ok", query=query, matches=len(matches))
     return "\n".join(lines)
 
 
@@ -236,10 +268,13 @@ def memory_get_error(record_id: str) -> str:
 
     Returns: Full markdown content of the error record.
     """
+    _log_tool_start("memory_get_error", record_id=record_id)
     for fp in ERRORS_DIR.glob("*.md"):
         meta = _parse_frontmatter(fp)
         if meta.get("id") == record_id:
+            _log_tool_end("memory_get_error", status="ok", record_id=record_id)
             return fp.read_text(encoding="utf-8")
+    _log_tool_end("memory_get_error", status="not_found", record_id=record_id)
     return f"Error record '{record_id}' not found."
 
 
@@ -249,8 +284,11 @@ def memory_list_projects() -> str:
     List all projects registered in the shared memory system.
     Returns: Project registry with IDs, paths, and active domains.
     """
+    _log_tool_start("memory_list_projects")
     if not PROJECTS_FILE.exists():
+        _log_tool_end("memory_list_projects", status="missing_registry")
         return "No projects registered. See memory/projects.md"
+    _log_tool_end("memory_list_projects", status="ok")
     return PROJECTS_FILE.read_text(encoding="utf-8")
 
 
@@ -260,17 +298,20 @@ def memory_sync_stats() -> str:
     Get current memory statistics to decide search strategy.
     Returns: record count, search recommendation (keyword vs semantic), and storage backend.
     """
+    _log_tool_start("memory_sync_stats")
     total = _total_count()
     active = _collect_errors(status_filter=["new", "reviewed"])
     promoted = _collect_errors(status_filter=["promoted"])
     strategy = "semantic (LanceDB)" if total >= 200 else "keyword (stdlib)"
-    return json.dumps({
+    result = json.dumps({
         "total_records":    total,
         "active_records":   len(active),
         "promoted_rules":   len(promoted),
         "search_strategy":  strategy,
         "vector_threshold": 200,
     }, ensure_ascii=False, indent=2)
+    _log_tool_end("memory_sync_stats", status="ok", total_records=total)
+    return result
 
 
 # ── Write tools ───────────────────────────────────────────────────────────────
@@ -312,6 +353,7 @@ def memory_record_error(
 
     Returns: Created record ID and file path.
     """
+    _log_tool_start("memory_record_error", project=project, domain=domain, category=category, severity=severity)
     ERRORS_DIR.mkdir(parents=True, exist_ok=True)
     today = date.today().isoformat()
 
@@ -375,12 +417,15 @@ tags: {tags_value}
 <!-- 关联记录 ID 或 instruction 文件 -->
 """
     filepath.write_text(content, encoding="utf-8")
+    log_file_update(LOGGER, action="record_error", path=filepath, detail=f"record_id={record_id}")
 
     # update index in background (best-effort)
     try:
         _update_index()
     except Exception:
-        pass
+        LOGGER.exception("memory_record_error_index_update_failed | record_id=%s", record_id)
+
+    _log_tool_end("memory_record_error", status="ok", record_id=record_id)
 
     return (
         f"✅ Error recorded: {record_id}\n"
@@ -402,6 +447,7 @@ def memory_increment_repeat(record_id: str) -> str:
 
     Returns: Updated repeat_count and whether the promote threshold was reached.
     """
+    _log_tool_start("memory_increment_repeat", record_id=record_id)
     for fp in ERRORS_DIR.glob("*.md"):
         meta = _parse_frontmatter(fp)
         if meta.get("id") == record_id:
@@ -413,11 +459,14 @@ def memory_increment_repeat(record_id: str) -> str:
                 f"repeat_count: {new_count}",
             )
             fp.write_text(content, encoding="utf-8")
+            log_file_update(LOGGER, action="increment_repeat", path=fp, detail=f"record_id={record_id};new_count={new_count}")
             should_promote = new_count >= 2 or meta.get("severity") == "critical"
             msg = f"repeat_count updated: {old_count} → {new_count}"
             if should_promote and meta.get("status") == "reviewed":
                 msg += f"\n⚡ Promote threshold reached! Run: python3 scripts/memory.py promote {record_id}"
+            _log_tool_end("memory_increment_repeat", status="ok", record_id=record_id, repeat_count=new_count)
             return msg
+    _log_tool_end("memory_increment_repeat", status="not_found", record_id=record_id)
     return f"Record '{record_id}' not found."
 
 

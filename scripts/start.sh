@@ -19,6 +19,7 @@ PYTHON="python3.12"
 MCP_SERVER="$REPO_ROOT/scripts/mcp_server.py"
 DOCKER_DIR="$REPO_ROOT/docker"
 MCP_PID_FILE="$REPO_ROOT/.mcp_server.pid"
+LOG_FILE="$REPO_ROOT/logs/agents-memory.log"
 
 # ─── 颜色 ────────────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
@@ -131,6 +132,7 @@ start_mcp_debug() {
 show_status() {
   echo ""
   echo "=== Agents-Memory 服务状态 ==="
+  info "调试日志: $LOG_FILE"
 
   # Qdrant
   if curl -sf http://localhost:6333/readyz &>/dev/null; then
@@ -187,6 +189,7 @@ stop_services() {
 print_vscode_tip() {
   echo ""
   echo "=== VS Code 验证 ==="
+  info "调试日志: $LOG_FILE"
   info "在 VS Code Agent/Chat 面板中输入以下内容，验证 MCP 工具是否可用："
   echo ""
   echo '    请调用 memory_get_index 工具，告诉我当前有多少条错误记录。'

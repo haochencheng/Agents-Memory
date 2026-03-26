@@ -9,6 +9,7 @@ amem — Agents-Memory CLI 全局命令
   amem register              # 一键注册当前目录的项目
   amem register /path/proj   # 注册指定路径的项目
   amem bridge-install <id>   # 安装 bridge instruction
+    amem doctor [target]       # 检查项目是否完整接入
   amem list                  # 列出活跃错误记录
   amem sync                  # 推送规则到所有已注册项目
   amem stats                 # 错误统计
