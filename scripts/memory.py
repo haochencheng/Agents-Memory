@@ -3,16 +3,18 @@
 Agents-Memory CLI — 错误记录管理工具
 
 用法:
-  python3 memory.py new               # 交互式创建新错误记录
-  python3 memory.py list              # 列出所有 new/reviewed 状态的记录
-  python3 memory.py stats             # 统计各类别错误数量
-  python3 memory.py search <keyword>  # 关键词搜索（< 200 条默认策略）
-  python3 memory.py vsearch <query>   # 语义向量搜索（需先运行 embed）
-  python3 memory.py embed             # 构建 / 更新本地 LanceDB 向量索引
-  python3 memory.py promote <id>      # 将错误记录升级为 instruction 规则
-  python3 memory.py archive           # 归档 90 天以上且无重复的记录
-  python3 memory.py update-index      # 重新生成 index.md 统计数字
-  python3 memory.py to-qdrant         # 迁移向量索引到 Qdrant（多 Agent 共享）
+  python3 memory.py new                        # 交互式创建新错误记录
+  python3 memory.py list                       # 列出所有 new/reviewed 状态的记录
+  python3 memory.py stats                      # 统计各类别错误数量
+  python3 memory.py search <keyword>           # 关键词搜索（< 200 条默认策略）
+  python3 memory.py vsearch <query>            # 语义向量搜索（需先运行 embed）
+  python3 memory.py embed                      # 构建 / 更新本地 LanceDB 向量索引
+  python3 memory.py promote <id>               # 将错误记录升级为 instruction 规则
+  python3 memory.py sync                       # 将已升级规则自动写入注册项目的 instruction 文件
+  python3 memory.py bridge-install <project>   # 在注册项目中安装 bridge instruction
+  python3 memory.py archive                    # 归档 90 天以上且无重复的记录
+  python3 memory.py update-index               # 重新生成 index.md 统计数字
+  python3 memory.py to-qdrant                  # 迁移向量索引到 Qdrant（多 Agent 共享）
 
 依赖安装:
   基础（关键词搜索）: 无需额外依赖，纯标准库
@@ -21,6 +23,7 @@ Agents-Memory CLI — 错误记录管理工具
 """
 
 import os
+import re
 import sys
 import shutil
 from datetime import date, timedelta
@@ -28,12 +31,14 @@ from pathlib import Path
 
 # ─── 路径常量 ────────────────────────────────────────────────────────────────
 
-BASE_DIR    = Path(__file__).parent.parent
-ERRORS_DIR  = BASE_DIR / "errors"
-ARCHIVE_DIR = BASE_DIR / "errors" / "archive"
-MEMORY_DIR  = BASE_DIR / "memory"
-VECTOR_DIR  = BASE_DIR / "vectors"   # LanceDB 本地文件目录（gitignored）
-INDEX_FILE  = BASE_DIR / "index.md"
+BASE_DIR      = Path(__file__).parent.parent
+ERRORS_DIR    = BASE_DIR / "errors"
+ARCHIVE_DIR   = BASE_DIR / "errors" / "archive"
+MEMORY_DIR    = BASE_DIR / "memory"
+VECTOR_DIR    = BASE_DIR / "vectors"          # LanceDB 本地文件目录（gitignored）
+INDEX_FILE    = BASE_DIR / "index.md"
+PROJECTS_FILE = MEMORY_DIR / "projects.md"   # 注册项目注册表
+TEMPLATES_DIR = BASE_DIR / "templates"       # bridge instruction 模板
 
 # 超过此数量自动推荐向量搜索
 VECTOR_THRESHOLD = 200
@@ -535,6 +540,179 @@ def cmd_to_qdrant():
     print(f"\nQdrant Dashboard: http://{QDRANT_HOST}:6333/dashboard")
 
 
+# ─── 跨项目同步 ──────────────────────────────────────────────────────────────
+
+def _parse_projects() -> list[dict]:
+    """解析 memory/projects.md，返回已注册的活跃项目列表。"""
+    if not PROJECTS_FILE.exists():
+        return []
+    projects: list[dict] = []
+    current: dict = {}
+    for line in PROJECTS_FILE.read_text(encoding="utf-8").splitlines():
+        m_header = re.match(r'^## (.+)', line)
+        if m_header:
+            pid = m_header.group(1).strip()
+            if current.get("id"):
+                projects.append(current)
+            # Skip comment headers (Chinese text sections)
+            if any(c > '\u4e00' for c in pid):
+                current = {}
+            else:
+                current = {"id": pid}
+            continue
+        if not current:
+            continue
+        m_field = re.match(r'\s*-\s+\*\*(\w+)\*\*:\s*(.*)', line)
+        if m_field:
+            key, val = m_field.group(1).strip(), m_field.group(2).strip()
+            current[key] = val
+    if current.get("id"):
+        projects.append(current)
+    return [p for p in projects if p.get("active", "true").lower() == "true"]
+
+
+def _extract_rule_text(filepath: Path) -> str:
+    """从错误记录文件提取 '提炼规则' 段落的纯文本。"""
+    lines = filepath.read_text(encoding="utf-8").splitlines()
+    in_rule = False
+    rule_lines: list[str] = []
+    for line in lines:
+        if line.strip() == "## 提炼规则":
+            in_rule = True
+            continue
+        if in_rule:
+            if line.startswith("## "):
+                break
+            if line.strip() and not line.strip().startswith("<!--"):
+                rule_lines.append(line.strip())
+    return " ".join(rule_lines).strip()
+
+
+def cmd_sync():
+    """
+    将所有 promoted 状态的错误记录规则自动写入各注册项目的 instruction 文件。
+    - 已写入的记录（文件中含 record_id）会跳过，保证幂等。
+    - 目标文件不存在或路径解析失败时打印警告，不中断其他同步。
+    """
+    promoted = collect_errors(status_filter=["promoted"])
+    if not promoted:
+        print("No promoted records to sync.")
+        return
+
+    projects = _parse_projects()
+    if not projects:
+        print("No projects registered. See memory/projects.md")
+        return
+
+    synced = 0
+    skipped = 0
+
+    for record in promoted:
+        raw_path = record.get("promoted_to", "").strip('"').strip("'")
+        if not raw_path:
+            continue
+        # Strip trailing annotation like "(Gotchas)"
+        rel_path = re.sub(r'\s*\(.*\)\s*$', '', raw_path).strip()
+
+        # Resolve absolute target by checking each registered project root
+        abs_target: Path | None = None
+        for proj in projects:
+            root = proj.get("root", "").strip()
+            if not root:
+                continue
+            candidate = Path(root) / rel_path
+            if candidate.exists():
+                abs_target = candidate
+                break
+
+        record_id = record.get("id", "unknown")
+
+        if not abs_target:
+            print(f"  ⚠  [{record_id}] target not found: {rel_path}")
+            skipped += 1
+            continue
+
+        target_content = abs_target.read_text(encoding="utf-8")
+
+        # Idempotency check: skip if already synced
+        if record_id in target_content:
+            print(f"  ✓  [{record_id}] already synced → {abs_target.name}")
+            skipped += 1
+            continue
+
+        rule_text = _extract_rule_text(Path(record["_file"]))
+        if not rule_text:
+            print(f"  ⚠  [{record_id}] no rule text found, skipping")
+            skipped += 1
+            continue
+
+        gotcha_entry = (
+            f"\n- **[`{record_id}`]** {rule_text}\n"
+            f"  <!-- auto-synced from agents-memory -->"
+        )
+
+        if "## ⚠️ Gotchas" in target_content:
+            # Insert after the Gotchas heading
+            target_content = target_content.replace(
+                "## ⚠️ Gotchas",
+                f"## ⚠️ Gotchas\n{gotcha_entry}",
+                1,
+            )
+        else:
+            target_content += f"\n\n## ⚠️ Gotchas\n{gotcha_entry}\n"
+
+        abs_target.write_text(target_content, encoding="utf-8")
+        print(f"  ✅ [{record_id}] synced → {abs_target}")
+        synced += 1
+
+    print(f"\nSync complete: {synced} synced, {skipped} skipped.")
+
+
+def cmd_bridge_install(project_id: str):
+    """
+    在指定注册项目中安装 bridge instruction 文件。
+    Bridge instruction 告诉该项目的 agent：
+      - session 开始时加载 index.md（热区）
+      - 代码出错后调用 CLI 或 MCP 记录错误
+
+    前提：
+      - 项目已在 memory/projects.md 中注册
+      - templates/agents-memory-bridge.instructions.md 存在
+
+    用法: python3 memory.py bridge-install synapse-network
+    """
+    projects = _parse_projects()
+    proj = next((p for p in projects if p["id"] == project_id), None)
+    if not proj:
+        print(f"Project '{project_id}' not registered. Add it to memory/projects.md first.")
+        return
+
+    template_path = TEMPLATES_DIR / "agents-memory-bridge.instructions.md"
+    if not template_path.exists():
+        print(f"Bridge template not found: {template_path}")
+        print("Run this tool after the template has been created.")
+        return
+
+    root = proj.get("root", "").strip()
+    bridge_rel = proj.get("bridge_instruction", ".github/instructions/agents-memory-bridge.instructions.md").strip()
+    if not root or not bridge_rel:
+        print(f"Missing 'root' or 'bridge_instruction' in project registry for '{project_id}'.")
+        return
+
+    dest = Path(root) / bridge_rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+
+    if dest.exists():
+        print(f"Already installed: {dest}")
+        print("Delete the file manually if you want to reinstall.")
+        return
+
+    content = template_path.read_text(encoding="utf-8")
+    dest.write_text(content, encoding="utf-8")
+    print(f"✅ Bridge instruction installed → {dest}")
+    print(f"Next: add it to {root}/AGENTS.md read-order or .github/instructions/ references.")
+
+
 # ─── 入口 ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -561,6 +739,10 @@ def main():
         cmd_embed()
     elif args[0] == "to-qdrant":
         cmd_to_qdrant()
+    elif args[0] == "sync":
+        cmd_sync()
+    elif args[0] == "bridge-install":
+        cmd_bridge_install(args[1]) if len(args) > 1 else print("用法: python3 memory.py bridge-install <project-id>")
     elif args[0] == "promote":
         cmd_promote(args[1]) if len(args) > 1 else print("用法: python3 memory.py promote <id>")
     elif args[0] == "archive":

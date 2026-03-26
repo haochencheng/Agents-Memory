@@ -1,0 +1,15 @@
+# Agents-Memory Python dependencies
+#
+# Basic CLI (list/search/new/sync/bridge-install):
+#   No extra deps — Python 3.11+ stdlib only
+#
+# MCP Server (mcp_server.py):
+mcp>=1.0.0
+#
+# Vector index + semantic search:
+lancedb>=0.6.0
+openai>=1.0.0
+pyarrow>=14.0.0
+#
+# Shared multi-agent Qdrant:
+qdrant-client>=1.8.0

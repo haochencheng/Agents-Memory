@@ -21,8 +21,9 @@ Agents-Memory/
 │   ├── YYYY-MM-DD-<project>-<seq>.md
 │   └── archive/                    # 90 天以上归档记录
 │
-├── memory/                         # WARM: 升级后的规则摘要
-│   └── rules.md                    # 已 promoted 的防范规则，按语言/框架分组
+├── memory/                         # WARM: 升级后的规则摘要 + 项目注册表
+│   ├── rules.md                    # 已 promoted 的防范规则，按语言/框架分组
+│   └── projects.md                 # 注册项目注册表（sync + bridge-install 使用）
 │
 ├── vectors/                        # LOCAL VECTOR INDEX (gitignored)
 │   └── errors.lance                # LanceDB 索引，由 embed 命令生成
@@ -31,13 +32,18 @@ Agents-Memory/
 │   ├── docker-compose.yml          # Qdrant 向量数据库（多 Agent 共享场景）
 │   └── .env.example                # 环境变量模板
 │
+├── templates/
+│   └── agents-memory-bridge.instructions.md  # bridge 模板（bridge-install 使用）
+│
 ├── docs/
 │   ├── README.md                   # 文档入口
-│   ├── architecture.md             # 架构决策记录（ADR-001 ~ ADR-005）
-│   └── ops.md                      # 运维手册：CLI 用法 / 向量搜索 / Docker
+│   ├── architecture.md             # 架构决策记录（ADR-001 ~ ADR-006）
+│   └── ops.md                      # 运维手册：CLI 用法 / MCP / 向量搜索 / Docker
+│
 │
 └── scripts/
-    └── memory.py                   # CLI 主入口（所有命令）
+    ├── memory.py                   # CLI 主入口（所有命令）
+    └── mcp_server.py               # MCP Server（Agent 工具调用接口）
 ```
 
 ## Key Files
@@ -46,25 +52,45 @@ Agents-Memory/
 |------|------|-----------|
 | `index.md` | Hot-tier summary, ≤ 400 tokens | Agent on every session start |
 | `memory/rules.md` | Promoted prevention rules | Agent when domain matches |
+| `memory/projects.md` | Registered projects registry | `sync` and `bridge-install` commands |
 | `errors/*.md` | Full error records | On search hit |
 | `schema/error-record.md` | Format spec | Human / Agent when creating records |
-| `scripts/memory.py` | CLI tool | Human / CI |
+| `scripts/memory.py` | CLI tool (12 commands) | Human / CI |
+| `scripts/mcp_server.py` | MCP Server (7 tools) | AI Agent via tool calls |
+| `templates/agents-memory-bridge.instructions.md` | Bridge template | `bridge-install` command |
 | `docker/docker-compose.yml` | Qdrant service | Human (`docker-compose up -d`) |
 
 ## CLI Quick Reference
 
 ```bash
-python3 scripts/memory.py new                 # create error record
-python3 scripts/memory.py list                # list active records
-python3 scripts/memory.py stats               # distribution stats
-python3 scripts/memory.py search <keyword>    # full-text search  (< 200 records)
-python3 scripts/memory.py embed               # build LanceDB vector index
-python3 scripts/memory.py vsearch <query>     # semantic search   (≥ 200 records)
-python3 scripts/memory.py promote <id>        # promote to instruction Gotcha
-python3 scripts/memory.py archive             # archive old records
-python3 scripts/memory.py to-qdrant           # migrate to shared Qdrant
-python3 scripts/memory.py update-index        # regenerate index.md stats
+python3 scripts/memory.py new                          # create error record (interactive)
+python3 scripts/memory.py list                         # list active records
+python3 scripts/memory.py stats                        # distribution stats
+python3 scripts/memory.py search <keyword>             # full-text search  (< 200 records)
+python3 scripts/memory.py embed                        # build LanceDB vector index
+python3 scripts/memory.py vsearch <query>              # semantic search   (≥ 200 records)
+python3 scripts/memory.py promote <id>                 # promote to instruction Gotcha
+python3 scripts/memory.py sync                         # push promoted rules → all registered projects
+python3 scripts/memory.py bridge-install <project-id>  # install bridge instruction in a project
+python3 scripts/memory.py archive                      # archive old records
+python3 scripts/memory.py to-qdrant                    # migrate to shared Qdrant
+python3 scripts/memory.py update-index                 # regenerate index.md stats
 ```
+
+## MCP Server Tools (for AI Agents)
+
+Start server: `python3 scripts/mcp_server.py`
+VS Code config: `.vscode/mcp.json`
+
+| Tool | Description |
+|------|-------------|
+| `memory_get_index()` | Read index.md — call at session start |
+| `memory_get_rules(domain)` | Read domain rules |
+| `memory_search(query)` | Keyword search across error records |
+| `memory_record_error(...)` | Create new error record automatically |
+| `memory_increment_repeat(id)` | Bump repeat_count on recurrence |
+| `memory_list_projects()` | List registered projects |
+| `memory_sync_stats()` | Record count + search strategy recommendation |
 
 ## Search Strategy
 
@@ -74,16 +100,39 @@ records ≥ 200   →  LanceDB local vector search (pip install lancedb openai p
 multi-agent     →  Qdrant shared vector DB     (docker/docker-compose.yml)
 ```
 
-## Self-Evolution Loop
+## Self-Evolution Loop (Continuous Agent Upgrade)
 
 ```
-error occurs
-  → python3 scripts/memory.py new          (status: new)
-  → root cause analysis                    (status: reviewed)
-  → repeat_count ≥ 2 or severity=critical
-  → python3 scripts/memory.py promote      (status: promoted)
-  → rule written into instruction Gotchas
-  → next Agent session: error prevented
+error occurs during coding
+  → Agent calls memory_record_error(...)   [MCP tool, automatic]
+    OR python3 scripts/memory.py new       [CLI, manual]
+    ↓ status: new
+  → root cause analysis + review          status: reviewed
+    ↓
+  → repeat_count ≥ 2 OR severity=critical
+  → python3 scripts/memory.py promote <id>
+    ↓ status: promoted → rule written to instruction file
+  → python3 scripts/memory.py sync        push to ALL registered projects
+    ↓
+  → next Agent session in any project:
+      - loads index.md → sees category
+      - loads rules.md → reads gotcha
+      → error prevented 🎯
+```
+
+## Cross-Project Sharing
+
+```
+Agents-Memory (hub)
+├── memory/projects.md      # registry: synapse-network, spec2flow, ...
+├── sync                    # push promoted rules → project instruction files
+└── bridge-install          # install bridge in project's .github/instructions/
+
+Project (spoke) — e.g. Synapse-Network
+├── .github/instructions/agents-memory-bridge.instructions.md
+│     ↑ installed by bridge-install, tells agent to load index.md at start
+└── .github/instructions/python.instructions.md
+      ↑ auto-updated by sync with new Gotchas
 ```
 
 ## Error Record Schema (frontmatter)
@@ -106,7 +155,8 @@ tags:         list of keywords
 
 | Feature | Requirement |
 |---------|-------------|
-| Basic CLI (list/search/new) | Python 3.11+, stdlib only |
+| Basic CLI (list/search/new/sync/bridge-install) | Python 3.11+, stdlib only |
+| MCP Server | `pip install mcp` + Python 3.11+ |
 | Vector index build | `pip install lancedb openai pyarrow` + `OPENAI_API_KEY` |
 | Semantic search | Same as above + `vectors/` index built |
 | Shared multi-agent | Docker + `pip install qdrant-client` |
