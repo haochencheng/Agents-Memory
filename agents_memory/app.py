@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 
 from agents_memory.commands import integration as integration_commands
 from agents_memory.commands import records as record_commands
@@ -26,15 +27,15 @@ USAGE = """Agents-Memory CLI — 错误记录管理工具
   python3 memory.py register [path]            # 一键注册新项目（agent + bridge + mcp）
   python3 memory.py mcp-setup [project-id]     # 在已注册项目中写入 .vscode/mcp.json
   python3 memory.py doctor [project-id]        # 检查项目是否已完整接入 Agents-Memory
-    python3 memory.py docs-check [path]          # 校验文档入口、命令漂移与明显过期内容
+    python3 memory.py docs-check [path]          # 校验文档入口、contract/test/policy 漂移与明显过期内容
   python3 memory.py archive                    # 归档 90 天以上且无重复的记录
   python3 memory.py update-index               # 重新生成 index.md 统计数字
   python3 memory.py to-qdrant                  # 迁移向量索引到 Qdrant（多 Agent 共享）
 """
 
 
-def command_registry() -> dict[str, callable]:
-    registry: dict[str, callable] = {}
+def command_registry() -> dict[str, Callable]:
+    registry: dict[str, Callable] = {}
     registry.update(record_commands.register())
     registry.update(vector_commands.register())
     registry.update(integration_commands.register())

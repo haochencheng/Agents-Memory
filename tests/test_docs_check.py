@@ -43,12 +43,62 @@ class DocsCheckTests(unittest.TestCase):
 
             self.assertTrue(any(f.status == "FAIL" and f.key == "docs_readme_links" for f in findings))
 
+    def test_collect_docs_check_findings_flags_missing_contract_docs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_text(root / "README.md", "# Demo\n")
+            _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
+            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
+
+            findings = collect_docs_check_findings(root)
+
+            self.assertTrue(any(f.status == "FAIL" and f.key == "contract_files" for f in findings))
+
+    def test_collect_docs_check_findings_flags_missing_policy_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_text(root / "README.md", "# Demo\n")
+            _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
+            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
+            (root / "tests").mkdir(parents=True, exist_ok=True)
+
+            findings = collect_docs_check_findings(root)
+
+            self.assertTrue(any(f.status == "FAIL" and f.key == "policy_files" for f in findings))
+
     def test_cmd_docs_check_returns_zero_for_minimal_healthy_repo(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             ctx = self._build_context(root)
             _write_text(root / "README.md", "# Demo\n")
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n- [Ops](ops.md)\n")
+            _write_text(
+                root / "docs" / "ai-engineering-operating-system.md",
+                "\n".join(
+                    [
+                        "Shared Engineering Brain",
+                        "Memory",
+                        "Standards",
+                        "Planning",
+                        "Validation",
+                    ]
+                ),
+            )
+            _write_text(
+                root / "docs" / "foundation-hardening.md",
+                "\n".join(
+                    [
+                        "Behavior change",
+                        "=> code change",
+                        "=> docs change",
+                        "=> test or validation change",
+                    ]
+                ),
+            )
             _write_text(
                 root / "docs" / "getting-started.md",
                 "\n".join(
@@ -72,6 +122,7 @@ class DocsCheckTests(unittest.TestCase):
                         "python3 scripts/memory.py archive",
                         "python3 scripts/memory.py update-index",
                         "python3 scripts/memory.py to-qdrant",
+                        "python3.12 -m unittest discover -s tests -p 'test_*.py'",
                     ]
                 ),
             )
@@ -99,9 +150,44 @@ class DocsCheckTests(unittest.TestCase):
                         "python3 scripts/memory.py archive",
                         "python3 scripts/memory.py to-qdrant",
                         "python3 scripts/memory.py update-index",
+                        "python3.12 -m unittest discover -s tests -p 'test_*.py'",
                     ]
                 ),
             )
+            _write_text(
+                root / "standards" / "docs" / "docs-sync.instructions.md",
+                "docs\ncode\ntests\n",
+            )
+            _write_text(
+                root / "standards" / "validation" / "docs-check.rules.md",
+                "\n".join(
+                    [
+                        "docs entrypoint 完整",
+                        "核心 services 有单元测试",
+                        "行为变更必须同时看到 code diff、docs diff、test diff 中至少两层联动",
+                    ]
+                ),
+            )
+            _write_text(
+                root / "standards" / "planning" / "harness-engineering.md",
+                "docs、code、validation\nplan / task graph / validation route\n",
+            )
+            _write_text(
+                root / "standards" / "planning" / "review-checklist.md",
+                "docs / code / tests\n最小验证结果\n",
+            )
+            _write_text(
+                root / "standards" / "planning" / "spec-kit.md",
+                "spec-first\n验收标准必须可被测试或命令验证\n",
+            )
+            for test_file in [
+                "test_runtime_bootstrap.py",
+                "test_projects_service.py",
+                "test_records_service.py",
+                "test_integration_service.py",
+                "test_docs_check.py",
+            ]:
+                _write_text(root / "tests" / test_file, "import unittest\n")
 
             buffer = io.StringIO()
             with redirect_stdout(buffer):

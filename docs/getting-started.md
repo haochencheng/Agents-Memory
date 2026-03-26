@@ -127,7 +127,7 @@ python3 scripts/memory.py doctor .
 # 输出: 当前项目的接入健康检查（注册 / bridge / MCP / 环境）
 
 python3 scripts/memory.py docs-check .
-# 输出: 文档入口、命令漂移、明显过期表述检查
+# 输出: 文档入口、contract/test/policy 漂移、明显过期表述检查
 
 python3 scripts/memory.py to-qdrant
 # 输出: 把本地向量索引迁移到共享 Qdrant（可选）

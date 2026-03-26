@@ -403,13 +403,16 @@ Applied profile: python-service
 
 给所有项目提供统一的文档校验能力，而不是只靠人工 review。
 
-### 第一版校验范围
+### 第二版校验范围
 
 1. 必需入口文档是否存在
 2. README / AGENTS / docs index 是否互相可达
 3. 命令示例是否存在明显死链或无效路径
 4. 术语是否符合 glossary
 5. 行为变更文档是否缺同步
+6. contract 文档与关键工程语义是否齐备
+7. 测试目录、关键测试文件、验证命令是否齐备
+8. policy / standards 文件与治理语义是否齐备
 
 ### 建议命令形态
 
@@ -535,7 +538,7 @@ profile apply   = 项目装配执行
 1. `amem profile-list`
 2. `amem profile-show`
 3. `amem profile-apply`
-4. `amem docs-check`（已完成第一版）
+4. `amem docs-check`（已完成第二版）
 
 ### MVP-5
 
@@ -587,6 +590,6 @@ Shared Engineering Brain =
 1. `standards/` 目录设计与首批标准文件：已完成
 2. `profiles/` 目录设计与 `python-service` profile
 3. `amem profile-apply` 命令实现
-4. `amem docs-check` 命令实现：已完成第一版
+4. `amem docs-check` 命令实现：已完成第二版
 
 这四步做完，Agents-Memory 才会从“共享错误记忆系统”升级成真正可执行的工程治理底座。

@@ -4,7 +4,7 @@
 
 ## 规则
 
-1. 行为变更必须同步更新对应文档
+1. 行为变更必须同步更新对应 docs、code、tests 或 validation
 2. CLI 命令变更必须同步更新 README、docs/getting-started、llms.txt
 3. 产品定位变更必须同步更新产品文档和 docs 入口
 4. 新模板、新目录、新校验命令必须写入 docs map

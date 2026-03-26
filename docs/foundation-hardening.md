@@ -142,13 +142,16 @@
 
 #### Layer C. 文档校验命令
 
-第一版 `docs-check` 应校验：
+第二版 `docs-check` 应校验：
 
 1. 必需入口文件存在
 2. `docs/README.md` 中的链接文件存在
 3. 关键命令在 README 与 docs 中没有明显冲突
 4. 废弃文档列表为空，或被明确标注 deprecated
 5. 绝对路径、私有路径、过时结构引用被标记
+6. contract 文档与核心语义是否齐备
+7. 测试目录、关键测试文件、验证命令是否齐备
+8. policy / standards 文件与治理语义是否齐备
 
 ### 3.2 代码复杂度防膨胀方案
 
@@ -282,7 +285,7 @@ python3 -m py_compile $(find agents_memory scripts -name '*.py' -print)
 
 1. `standards/` 目录：已完成
 2. `tests/` 目录：已完成
-3. `docs-check` 命令：已完成第一版
+3. `docs-check` 命令：已完成第二版（含 contract/test/policy）
 4. Python / TDD / DRY / docs-sync 标准文件：已完成第一版
 5. 过期文档清理清单：已完成第一版
 
@@ -290,8 +293,8 @@ python3 -m py_compile $(find agents_memory scripts -name '*.py' -print)
 
 1. `profiles/` 目录
 2. `profile-apply` 命令
-3. 结构测试 / policy-check
-4. contract-check / test-check / standards-check
+3. 结构测试 / standards-check
+4. profile consistency check / doctor 扩展
 
 ---
 
@@ -332,7 +335,7 @@ python3 -m py_compile $(find agents_memory scripts -name '*.py' -print)
 
 1. 新增 `standards/` 首批文件：已完成
 2. 新增 `tests/` 和最小单元测试：已完成
-3. 实现 `docs-check`：已完成第一版
+3. 实现 `docs-check`：已完成第二版
 4. 清理过期文档表述：已完成第一批
 5. 再进入 `profiles/` 与 `profile-apply`
 

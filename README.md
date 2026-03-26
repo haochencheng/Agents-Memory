@@ -148,7 +148,7 @@ python scripts/memory.py copilot-setup spec2flow
 # 将错误标记为已升级到 instruction
 python scripts/memory.py promote 2026-03-26-spec2flow-001
 
-# 检查文档入口、命令漂移和明显过期内容
+# 检查 docs/contract/test/policy 漂移和明显过期内容
 python scripts/memory.py docs-check .
 
 # 归档 90 天以上无重复的记录
