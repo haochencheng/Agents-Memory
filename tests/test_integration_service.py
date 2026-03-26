@@ -441,10 +441,13 @@ class IntegrationServiceTests(unittest.TestCase):
                 cmd_doctor(ctx, str(project_root), write_state=True, write_checklist=True)
 
             checklist_path = project_root / "docs" / "plans" / "bootstrap-checklist.md"
+            refactor_watch_path = project_root / "docs" / "plans" / "refactor-watch.md"
             state_path = project_root / ".agents-memory" / "onboarding-state.json"
             self.assertTrue(checklist_path.exists())
+            self.assertTrue(refactor_watch_path.exists())
             self.assertTrue(state_path.exists())
             self.assertIn("# Bootstrap Checklist", checklist_path.read_text(encoding="utf-8"))
+            self.assertIn("# Refactor Watch", refactor_watch_path.read_text(encoding="utf-8"))
             self.assertIn('"project_id": "demo-project"', state_path.read_text(encoding="utf-8"))
             self.assertIn('"recommended_next_command": "amem mcp-setup ."', state_path.read_text(encoding="utf-8"))
             self.assertIn('"recommended_next_safe_to_auto_execute": true', state_path.read_text(encoding="utf-8"))

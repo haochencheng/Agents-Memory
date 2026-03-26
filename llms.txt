@@ -159,7 +159,7 @@ VS Code config: local `.vscode/mcp.json` generated from `templates/mcp.example.j
 | `memory_list_projects()` | List registered projects |
 | `memory_sync_stats()` | Record count + search strategy recommendation |
 
-`doctor` now also emits `refactor_watch` findings for Python functions that are approaching configured complexity thresholds or are complex without guiding comments.
+`doctor` now also emits `refactor_watch` findings for Python functions that are approaching configured complexity thresholds or are complex without guiding comments; with `--write-checklist` it also exports `docs/plans/refactor-watch.md`.
 
 ## Search Strategy
 

@@ -128,7 +128,7 @@ python3 scripts/memory.py doctor .
 # 提示: 现在还会输出 refactor_watch，提醒哪些 Python 函数已经逼近复杂度重构阈值
 
 python3 scripts/memory.py doctor . --write-checklist --write-state
-# 输出: 在 docs/plans/bootstrap-checklist.md 和 .agents-memory/onboarding-state.json 导出 onboarding 工件
+# 输出: 在 docs/plans/bootstrap-checklist.md、docs/plans/refactor-watch.md 和 .agents-memory/onboarding-state.json 导出 onboarding / hotspot 工件
 # 提示: agent 可优先读取 onboarding-state.json 中的 recommended_next_command / recommended_verify_command
 
 python3 scripts/memory.py onboarding-execute .

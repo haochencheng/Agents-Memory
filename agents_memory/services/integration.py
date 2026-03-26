@@ -738,6 +738,54 @@ def _doctor_checklist_markdown(
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _doctor_refactor_watch_markdown(
+    project_id: str,
+    project_root: Path,
+    grouped_checks: list[tuple[str, list[tuple[str, str, str]]]],
+) -> str:
+    refactor_findings = [
+        (status, detail)
+        for _group_name, group_checks in grouped_checks
+        for status, key, detail in group_checks
+        if key == "refactor_watch"
+    ]
+    lines = [
+        "# Refactor Watch",
+        "",
+        f"- Project: `{project_id}`",
+        f"- Root: `{project_root}`",
+        "",
+        "## Purpose",
+        "",
+        "Track Python functions that are already high-complexity or are approaching the configured refactor thresholds.",
+        "",
+        "## Thresholds",
+        "",
+        "- Hard gate: more than 40 effective lines, more than 5 control-flow branches, nesting depth >= 4, or more than 8 local variables.",
+        "- Watch zone: around 30 effective lines, 4 branches, nesting depth 3, or 6 local variables.",
+        "- Complex logic should include a short guiding comment when it cannot be cleanly decomposed yet.",
+        "",
+        "## Hotspots",
+    ]
+    if not refactor_findings:
+        lines.extend(["", "- No current refactor hotspots detected."])
+    else:
+        lines.append("")
+        for index, (status, detail) in enumerate(refactor_findings, start=1):
+            lines.append(f"{index}. [{status}] {detail}")
+    lines.extend(
+        [
+            "",
+            "## Suggested Action",
+            "",
+            "1. Refactor the highest-signal hotspots before adding more branching behavior.",
+            "2. If a hotspot cannot be split yet, add a guiding comment that explains the main decision path and risk boundaries.",
+            "3. Re-run `amem doctor .` after the change and confirm `refactor_watch` findings shrink or disappear.",
+        ]
+    )
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def onboarding_state_path(project_root: Path) -> Path:
     return project_root / ".agents-memory" / "onboarding-state.json"
 
@@ -1122,6 +1170,14 @@ def _write_doctor_artifacts(
         )
         log_file_update(ctx.logger, action="write_doctor_checklist", path=checklist_path, detail=f"project_id={project_id};overall={overall}")
         written.append(checklist_path)
+        refactor_watch_path = project_root / "docs" / "plans" / "refactor-watch.md"
+        refactor_watch_path.parent.mkdir(parents=True, exist_ok=True)
+        refactor_watch_path.write_text(
+            _doctor_refactor_watch_markdown(project_id, project_root, grouped_checks),
+            encoding="utf-8",
+        )
+        log_file_update(ctx.logger, action="write_refactor_watch", path=refactor_watch_path, detail=f"project_id={project_id};overall={overall}")
+        written.append(refactor_watch_path)
     if write_state:
         state_path = project_root / ".agents-memory" / "onboarding-state.json"
         state_path.parent.mkdir(parents=True, exist_ok=True)

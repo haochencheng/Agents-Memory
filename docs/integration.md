@@ -219,6 +219,7 @@ amem doctor . --write-state --write-checklist
 
 1. `.agents-memory/onboarding-state.json`
 2. `docs/plans/bootstrap-checklist.md`
+3. `docs/plans/refactor-watch.md`
 
 其中 `onboarding-state.json` 顶层会直接给出：
 
@@ -258,7 +259,7 @@ amem onboarding-execute . --approve-unsafe
 ```
 
 此外，`amem doctor .` 现在会输出 `refactor_watch`，扫描当前项目 Python 函数是否逼近复杂度门槛。
-它不会阻塞 bootstrap readiness，但会提示哪些函数应先重构，哪些复杂逻辑还缺少解释性注释。
+它不会阻塞 bootstrap readiness，但会提示哪些函数应先重构，哪些复杂逻辑还缺少解释性注释；当你使用 `--write-checklist` 时，这些热点还会沉淀到 `docs/plans/refactor-watch.md`。
 
 如果你想把这个状态直接落成可执行 planning 工件：
 
