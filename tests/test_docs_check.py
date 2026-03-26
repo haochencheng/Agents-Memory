@@ -133,6 +133,7 @@ class DocsCheckTests(unittest.TestCase):
                         "python3 scripts/memory.py register .",
                         "python3 scripts/memory.py mcp-setup demo",
                         "python3 scripts/memory.py doctor demo",
+                        "python3 scripts/memory.py plan-init sample-task .",
                         "python3 scripts/memory.py profile-list",
                         "python3 scripts/memory.py profile-show python-service",
                         "python3 scripts/memory.py profile-apply python-service .",
@@ -167,6 +168,7 @@ class DocsCheckTests(unittest.TestCase):
                         "python3 scripts/memory.py register [path]",
                         "python3 scripts/memory.py mcp-setup [project-id]",
                         "python3 scripts/memory.py doctor [project-id]",
+                        "python3 scripts/memory.py plan-init <task-name> [path]",
                         "python3 scripts/memory.py profile-list",
                         "python3 scripts/memory.py profile-show python-service",
                         "python3 scripts/memory.py profile-apply python-service .",
@@ -228,6 +230,7 @@ class DocsCheckTests(unittest.TestCase):
                 "test_projects_service.py",
                 "test_records_service.py",
                 "test_integration_service.py",
+                "test_planning_service.py",
                 "test_docs_check.py",
             ]:
                 _write_text(root / "tests" / test_file, "import unittest\n")

@@ -45,7 +45,7 @@ amem stats
 
 ### 最小安装（CLI 基础功能，零依赖）
 
-CLI 的 `new / list / stats / search / register / copilot-setup / agent-list / agent-setup / bridge-install / mcp-setup / doctor / profile-list / profile-show / profile-apply / profile-diff / standards-sync / profile-check / docs-check / sync / archive / update-index` 命令使用纯标准库，**无需任何额外 pip 安装**。直接运行：
+CLI 的 `new / list / stats / search / register / copilot-setup / agent-list / agent-setup / bridge-install / mcp-setup / doctor / plan-init / profile-list / profile-show / profile-apply / profile-diff / standards-sync / profile-check / docs-check / sync / archive / update-index` 命令使用纯标准库，**无需任何额外 pip 安装**。直接运行：
 
 ```bash
 python3 scripts/memory.py list
@@ -125,6 +125,9 @@ python3 scripts/memory.py vsearch "type guard"
 
 python3 scripts/memory.py doctor .
 # 输出: 当前项目的接入健康检查（注册 / bridge / MCP / 环境）
+
+python3 scripts/memory.py plan-init "shared engineering brain task" .
+# 输出: 在 docs/plans/<slug>/ 生成 spec / plan / task-graph / validation bundle
 
 python3 scripts/memory.py profile-list
 # 输出: 当前内置 profile 列表

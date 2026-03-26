@@ -4,6 +4,7 @@ import sys
 from collections.abc import Callable
 
 from agents_memory.commands import integration as integration_commands
+from agents_memory.commands import planning as planning_commands
 from agents_memory.commands import profiles as profile_commands
 from agents_memory.commands import records as record_commands
 from agents_memory.commands import validation as validation_commands
@@ -28,6 +29,7 @@ USAGE = """Agents-Memory CLI — 错误记录管理工具
   python3 memory.py register [path]            # 一键注册新项目（agent + bridge + mcp）
   python3 memory.py mcp-setup [project-id]     # 在已注册项目中写入 .vscode/mcp.json
   python3 memory.py doctor [project-id]        # 检查项目是否已完整接入 Agents-Memory
+  python3 memory.py plan-init <task> [path]    # 初始化 spec / plan / task-graph / validation bundle
     python3 memory.py profile-list               # 查看可用 profile 列表
     python3 memory.py profile-show <profile-id>  # 查看指定 profile 的装配内容
     python3 memory.py profile-apply <id> [path]  # 把 profile 安装到目标项目
@@ -46,6 +48,7 @@ def command_registry() -> dict[str, Callable]:
     registry.update(record_commands.register())
     registry.update(vector_commands.register())
     registry.update(integration_commands.register())
+    registry.update(planning_commands.register())
     registry.update(profile_commands.register())
     registry.update(validation_commands.register())
     return registry

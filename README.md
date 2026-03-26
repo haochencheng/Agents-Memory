@@ -26,7 +26,7 @@ Shared Engineering Brain
 
 1. 结构化错误记录、关键词搜索、向量搜索、规则升级与跨项目同步。
 2. MCP server、bridge instruction、GitHub Copilot adapter 接入链路。
-3. `profiles/`、`standards/`、`profile-apply`、`profile-check`、`docs-check` 第一版能力。
+3. `profiles/`、`standards/`、`plan-init`、`profile-apply`、`profile-check`、`docs-check` 第一版能力。
 4. 面向“AI Engineering Operating System”的目标架构和治理文档。
 
 当前还在持续推进的方向：
@@ -148,7 +148,8 @@ python3 scripts/memory.py copilot-setup .
 python3 scripts/memory.py bridge-install your-project
 python3 scripts/memory.py mcp-setup .
 
-# Shared Engineering Brain 第一版能力
+# Planning / Shared Engineering Brain 第一版能力
+python3 scripts/memory.py plan-init "shared engineering brain task" .
 python3 scripts/memory.py profile-list
 python3 scripts/memory.py profile-show python-service
 python3 scripts/memory.py profile-diff python-service .
@@ -188,7 +189,7 @@ python3 scripts/memory.py docs-check .
 3. `standards/planning/*`
 4. `standards/validation/*`
 5. `profiles/*.yaml`
-6. `profile-apply`, `standards-sync`, `profile-check`, `docs-check`
+6. `plan-init`, `profile-apply`, `standards-sync`, `profile-check`, `docs-check`
 
 ## 开源与本地运行数据边界
 

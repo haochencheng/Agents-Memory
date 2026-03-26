@@ -8,6 +8,7 @@ from agents_memory.services.integration import (
     cmd_register,
     cmd_sync,
 )
+from agents_memory.services.planning import cmd_plan_init
 from agents_memory.services.profiles import cmd_profile_apply, cmd_profile_list, cmd_profile_show, cmd_standards_sync
 from agents_memory.services.projects import parse_projects, resolve_project_target
 from agents_memory.services.records import (

@@ -530,6 +530,8 @@ profile apply   = 项目装配执行
 2. 提供 `requirement -> plan -> task graph -> validation` 模板
 3. 进入 `profile-apply` 的默认安装集
 
+当前进度：`plan-init` 第一版已完成，可在目标项目的 `docs/plans/<task>/` 下生成 planning bundle。
+
 ### Spec Kit
 
 结论：接受为统一 spec-first 规范来源。
@@ -576,10 +578,11 @@ profile apply   = 项目装配执行
 
 1. `amem profile-list`
 2. `amem profile-show`
-3. `amem profile-apply`
-4. `amem standards-sync`（已完成第一版）
-5. `amem profile-check`（已完成第一版）
-6. `amem docs-check`（已完成第二版）
+3. `amem plan-init`（已完成第一版）
+4. `amem profile-apply`
+5. `amem standards-sync`（已完成第一版）
+6. `amem profile-check`（已完成第一版）
+7. `amem docs-check`（已完成第二版）
 
 ### MVP-5
 

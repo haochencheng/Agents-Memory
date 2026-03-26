@@ -25,6 +25,7 @@ CORE_DOC_COMMANDS = [
     "register",
     "mcp-setup",
     "doctor",
+    "plan-init",
     "profile-list",
     "profile-show",
     "profile-apply",
@@ -68,6 +69,7 @@ REQUIRED_TEST_FILES = [
     Path(TESTS_DIR) / "test_projects_service.py",
     Path(TESTS_DIR) / "test_records_service.py",
     Path(TESTS_DIR) / "test_integration_service.py",
+    Path(TESTS_DIR) / "test_planning_service.py",
     Path(TESTS_DIR) / "test_docs_check.py",
 ]
 
