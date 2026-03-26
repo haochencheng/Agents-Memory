@@ -10,5 +10,7 @@
 - [CLI 命令参考](#cli-命令参考)
 - [自我进化闭环](#自我进化闭环)
 - [向量搜索扩展](#向量搜索扩展)
-- [运维文档](ops.md)
+- [本地启动与运维](getting-started.md)
+- [接入其他项目](integration.md)
+- [日常运维操作](ops.md)
 - [架构决策](architecture.md)
