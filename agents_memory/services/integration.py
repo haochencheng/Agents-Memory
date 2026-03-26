@@ -1690,6 +1690,68 @@ def _doctor_artifact_paths(project_root: Path, *, write_state: bool, write_check
     return artifacts
 
 
+def _preview_enable_profile_actions(ctx: AppContext, project_root: Path, *, full: bool) -> tuple[list[str], list[str], list[str]]:
+    capabilities: list[str] = []
+    planned_writes: list[str] = []
+    skipped_existing: list[str] = []
+
+    applied_profile_id = detect_applied_profile(project_root)
+    if full and not applied_profile_id:
+        recommended_profile_id = _recommended_enable_profile_id(project_root)
+        if not recommended_profile_id:
+            skipped_existing.append("profile auto-apply skipped: no default profile detected")
+            return capabilities, planned_writes, skipped_existing
+
+        capabilities.append(f"apply recommended profile `{recommended_profile_id}`")
+        profile = load_profile(ctx, recommended_profile_id)
+        expected = expected_profile_paths(profile, project_root)
+        planned_writes.extend(str(path) for path in expected["bootstrap_dirs"])
+        planned_writes.extend(str(path) for path in expected["standard_files"])
+        planned_writes.extend(str(path) for path in expected["template_files"])
+        planned_writes.append(str(project_root / PROFILE_MANIFEST_REL))
+        return capabilities, planned_writes, skipped_existing
+
+    if applied_profile_id:
+        skipped_existing.append(f"profile already applied: `{applied_profile_id}`")
+    else:
+        skipped_existing.append("profile auto-apply skipped in default mode")
+    return capabilities, planned_writes, skipped_existing
+
+
+def _preview_onboarding_bundle_actions(ctx: AppContext, project_root: Path) -> tuple[list[str], list[str]]:
+    report = _doctor_report(ctx, str(project_root))
+    recommended_key = "onboarding"
+    if isinstance(report, dict):
+        runbook_steps = report.get("runbook_steps")
+        if isinstance(runbook_steps, list) and runbook_steps and isinstance(runbook_steps[0], dict):
+            recommended_key = str(runbook_steps[0].get("key") or recommended_key)
+
+    onboarding_slug = f"onboarding-{recommended_key.replace('_', '-')}"
+    onboarding_plan_root = project_root / "docs" / "plans" / onboarding_slug
+    planned_writes = [
+        str(onboarding_plan_root / filename)
+        for filename in ("README.md", "spec.md", "plan.md", "task-graph.md", "validation.md")
+    ]
+    return ["generate onboarding planning bundle"], planned_writes
+
+
+def _preview_refactor_bundle_actions(project_root: Path) -> tuple[list[str], list[str], list[str]]:
+    hotspots = collect_refactor_watch_hotspots(project_root)
+    if not hotspots:
+        return [], [], ["refactor bundle generation skipped: no hotspots"]
+
+    hotspot = hotspots[0]
+    refactor_slug = f"refactor-{re.sub(r'[^a-zA-Z0-9]+', '-', f'{hotspot.relative_path}-{hotspot.function_name}'.lower()).strip('-') or 'untitled-task'}"
+    refactor_root = project_root / "docs" / "plans" / refactor_slug
+    planned_writes = [
+        str(refactor_root / filename)
+        for filename in ("README.md", "spec.md", "plan.md", "task-graph.md", "validation.md")
+    ]
+    planned_writes.append(str(project_root / ".agents-memory" / "onboarding-state.json"))
+    capability = f"generate refactor bundle for `{hotspot.identifier}` using `{hotspot.rank_token}`"
+    return [capability], planned_writes, []
+
+
 def _preview_enable_actions(ctx: AppContext, project_root: Path, *, project_id: str, full: bool) -> dict[str, object]:
     capabilities: list[str] = []
     planned_writes: list[str] = []
@@ -1712,24 +1774,10 @@ def _preview_enable_actions(ctx: AppContext, project_root: Path, *, project_id: 
     capabilities.append("merge agents-memory MCP server config")
     planned_writes.append(str(mcp_path))
 
-    recommended_profile_id = None
-    applied_profile_id = detect_applied_profile(project_root)
-    if full and not applied_profile_id:
-        recommended_profile_id = _recommended_enable_profile_id(project_root)
-        if recommended_profile_id:
-            capabilities.append(f"apply recommended profile `{recommended_profile_id}`")
-            profile = load_profile(ctx, recommended_profile_id)
-            expected = expected_profile_paths(profile, project_root)
-            planned_writes.extend(str(path) for path in expected["bootstrap_dirs"])
-            planned_writes.extend(str(path) for path in expected["standard_files"])
-            planned_writes.extend(str(path) for path in expected["template_files"])
-            planned_writes.append(str(project_root / PROFILE_MANIFEST_REL))
-        else:
-            skipped_existing.append("profile auto-apply skipped: no default profile detected")
-    elif applied_profile_id:
-        skipped_existing.append(f"profile already applied: `{applied_profile_id}`")
-    else:
-        skipped_existing.append("profile auto-apply skipped in default mode")
+    profile_capabilities, profile_writes, profile_skipped = _preview_enable_profile_actions(ctx, project_root, full=full)
+    capabilities.extend(profile_capabilities)
+    planned_writes.extend(profile_writes)
+    skipped_existing.extend(profile_skipped)
 
     if full:
         capabilities.append("install or update Copilot activation block")
@@ -1738,34 +1786,15 @@ def _preview_enable_actions(ctx: AppContext, project_root: Path, *, project_id: 
     capabilities.append("refresh doctor state and checklist artifacts")
     planned_writes.extend(str(path) for path in _doctor_artifact_paths(project_root, write_state=True, write_checklist=True))
 
-    report = _doctor_report(ctx, str(project_root))
-    recommended_key = "onboarding"
-    if isinstance(report, dict):
-        runbook_steps = report.get("runbook_steps")
-        if isinstance(runbook_steps, list) and runbook_steps and isinstance(runbook_steps[0], dict):
-            recommended_key = str(runbook_steps[0].get("key") or recommended_key)
-    onboarding_slug = f"onboarding-{recommended_key.replace('_', '-')}"
-    onboarding_plan_root = project_root / "docs" / "plans" / onboarding_slug
-    capabilities.append("generate onboarding planning bundle")
-    planned_writes.extend(
-        str(onboarding_plan_root / filename)
-        for filename in ("README.md", "spec.md", "plan.md", "task-graph.md", "validation.md")
-    )
+    onboarding_capabilities, onboarding_writes = _preview_onboarding_bundle_actions(ctx, project_root)
+    capabilities.extend(onboarding_capabilities)
+    planned_writes.extend(onboarding_writes)
 
     if full:
-        hotspots = collect_refactor_watch_hotspots(project_root)
-        if hotspots:
-            hotspot = hotspots[0]
-            refactor_slug = f"refactor-{re.sub(r'[^a-zA-Z0-9]+', '-', f'{hotspot.relative_path}-{hotspot.function_name}'.lower()).strip('-') or 'untitled-task'}"
-            refactor_root = project_root / "docs" / "plans" / refactor_slug
-            capabilities.append(f"generate refactor bundle for `{hotspot.identifier}` using `{hotspot.rank_token}`")
-            planned_writes.extend(
-                str(refactor_root / filename)
-                for filename in ("README.md", "spec.md", "plan.md", "task-graph.md", "validation.md")
-            )
-            planned_writes.append(str(project_root / ".agents-memory" / "onboarding-state.json"))
-        else:
-            skipped_existing.append("refactor bundle generation skipped: no hotspots")
+        refactor_capabilities, refactor_writes, refactor_skipped = _preview_refactor_bundle_actions(project_root)
+        capabilities.extend(refactor_capabilities)
+        planned_writes.extend(refactor_writes)
+        skipped_existing.extend(refactor_skipped)
 
     return {
         "status": "ok",
@@ -1795,48 +1824,164 @@ def _recommended_enable_profile_id(project_root: Path) -> str | None:
     return None
 
 
-def cmd_enable(ctx: AppContext, project_id_or_path: str = ".", *, full: bool = False, dry_run: bool = False, json_output: bool = False) -> int:
-    project_root = Path(project_id_or_path).expanduser().resolve()
+def _validate_enable_request(project_root: Path, *, dry_run: bool, json_output: bool) -> int | None:
     if not project_root.exists():
         print(f"路径不存在: {project_root}")
         return 1
     if not project_root.is_dir():
         print(f"目标不是目录: {project_root}")
         return 1
-
-    ctx.logger.info("enable_start | target=%s | full=%s | dry_run=%s | json_output=%s", project_root, full, dry_run, json_output)
     if json_output and not dry_run:
         print("--json 目前仅支持与 --dry-run 一起使用")
         return 1
+    return None
+
+
+def _print_enable_header(project_root: Path, *, full: bool, dry_run: bool) -> None:
+    print("\n=== Agents-Memory Enable ===")
+    print(f"Target: {project_root}")
+    print(f"Mode:   {'full' if full else 'default'}")
+    print(f"DryRun: {'yes' if dry_run else 'no'}")
+
+
+def _preview_strings(preview: dict[str, object], key: str) -> list[str]:
+    values = preview.get(key)
+    if not isinstance(values, list):
+        return []
+    return [str(item) for item in values]
+
+
+def _render_enable_preview(preview: dict[str, object], *, json_output: bool) -> None:
+    if json_output:
+        print(json.dumps(preview, ensure_ascii=False, indent=2))
+        return
+
+    print("\nCapabilities:")
+    for item in _preview_strings(preview, "capabilities"):
+        print(f"- {item}")
+    print("\nPlanned Writes:")
+    for path in _preview_strings(preview, "planned_writes"):
+        print(f"- {path}")
+    print("\nSkipped Existing:")
+    skipped_existing = _preview_strings(preview, "skipped_existing")
+    if skipped_existing:
+        for item in skipped_existing:
+            print(f"- {item}")
+    else:
+        print("- none")
+    print("\nNext:")
+    print("- Re-run without --dry-run to apply these changes")
+
+
+def _run_enable_dry_run(
+    ctx: AppContext,
+    project_root: Path,
+    *,
+    project_id: str,
+    full: bool,
+    json_output: bool,
+) -> int:
+    preview = _preview_enable_actions(ctx, project_root, project_id=project_id, full=full)
+    _render_enable_preview(preview, json_output=json_output)
+    ctx.logger.info(
+        "enable_preview | target=%s | full=%s | planned_writes=%s",
+        project_root,
+        full,
+        len(_preview_strings(preview, "planned_writes")),
+    )
+    return 0
+
+
+def _apply_enable_profile(ctx: AppContext, project_root: Path, *, full: bool) -> str | None:
+    applied_profile_id = detect_applied_profile(project_root)
+    if full and not applied_profile_id:
+        recommended_profile_id = _recommended_enable_profile_id(project_root)
+        if not recommended_profile_id:
+            print("- profile: skipped (no default profile detected)")
+            return None
+
+        profile = load_profile(ctx, recommended_profile_id)
+        profile_result = apply_profile(ctx, profile, project_root)
+        print(f"- profile: enabled ({profile_result.profile_id})")
+        return profile_result.profile_id
+
+    if applied_profile_id:
+        print(f"- profile: ready ({applied_profile_id})")
+        return applied_profile_id
+
+    print("- profile: skipped in default mode")
+    return None
+
+
+def _write_enable_refactor_followup(
+    ctx: AppContext,
+    project_root: Path,
+    *,
+    refactor_result: RefactorBundleResult,
+) -> None:
+    existing_state = load_onboarding_state(project_root)
+    hotspot_payload = {
+        "identifier": refactor_result.hotspot.identifier,
+        "rank_token": refactor_result.hotspot_token,
+        "relative_path": refactor_result.hotspot.relative_path,
+        "function_name": refactor_result.hotspot.function_name,
+        "qualified_name": refactor_result.hotspot.qualified_name,
+        "line": refactor_result.hotspot.line,
+        "status": refactor_result.hotspot.status,
+        "effective_lines": refactor_result.hotspot.effective_lines,
+        "branches": refactor_result.hotspot.branches,
+        "nesting": refactor_result.hotspot.nesting,
+        "local_vars": refactor_result.hotspot.local_vars,
+        "has_guiding_comment": refactor_result.hotspot.has_guiding_comment,
+        "issues": refactor_result.hotspot.issues,
+        "score": refactor_result.hotspot.score,
+    }
+    updated_state = _merge_refactor_followup_state(
+        existing_state,
+        project_root=project_root,
+        plan_root=refactor_result.plan_root,
+        hotspot_index=refactor_result.hotspot_index,
+        hotspot_token=refactor_result.hotspot_token,
+        hotspot=hotspot_payload,
+        task_name=refactor_result.task_name,
+        task_slug=refactor_result.task_slug,
+    )
+    _write_onboarding_state_file(ctx, project_root, updated_state)
+
+
+def _run_enable_full_followup(ctx: AppContext, project_root: Path) -> None:
+    hotspots = collect_refactor_watch_hotspots(project_root)
+    if not hotspots:
+        print("- refactor bundle: skipped (no hotspots)")
+        return
+
+    from agents_memory.services.planning import init_refactor_bundle
+
+    refactor_result = init_refactor_bundle(ctx, project_root, hotspot_token=hotspots[0].rank_token)
+    _write_enable_refactor_followup(ctx, project_root, refactor_result=refactor_result)
+    print(f"- refactor bundle: {refactor_result.plan_root.relative_to(project_root).as_posix()} ({refactor_result.hotspot_token})")
+
+
+def _print_enable_next_steps(*, full: bool) -> None:
+    print("\nNext:")
+    print("- Review onboarding-state.json and docs/plans/bootstrap-checklist.md")
+    print("- Run amem doctor . after your next structural change")
+    if full:
+        print("- If a refactor bundle was generated, review its spec.md before editing code")
+
+
+def cmd_enable(ctx: AppContext, project_id_or_path: str = ".", *, full: bool = False, dry_run: bool = False, json_output: bool = False) -> int:
+    project_root = Path(project_id_or_path).expanduser().resolve()
+    ctx.logger.info("enable_start | target=%s | full=%s | dry_run=%s | json_output=%s", project_root, full, dry_run, json_output)
+    validation_error = _validate_enable_request(project_root, dry_run=dry_run, json_output=json_output)
+    if validation_error is not None:
+        return validation_error
     if not json_output:
-        print("\n=== Agents-Memory Enable ===")
-        print(f"Target: {project_root}")
-        print(f"Mode:   {'full' if full else 'default'}")
-        print(f"DryRun: {'yes' if dry_run else 'no'}")
+        _print_enable_header(project_root, full=full, dry_run=dry_run)
 
     resolved_project_id, _resolved_root, _project = resolve_project_target(ctx, str(project_root))
     if dry_run:
-        preview = _preview_enable_actions(ctx, project_root, project_id=resolved_project_id, full=full)
-        if json_output:
-            print(json.dumps(preview, ensure_ascii=False, indent=2))
-        else:
-            print("\nCapabilities:")
-            for item in list(preview.get("capabilities", [])):
-                print(f"- {item}")
-            print("\nPlanned Writes:")
-            for path in list(preview.get("planned_writes", [])):
-                print(f"- {path}")
-            print("\nSkipped Existing:")
-            skipped_existing = list(preview.get("skipped_existing", []))
-            if skipped_existing:
-                for item in skipped_existing:
-                    print(f"- {item}")
-            else:
-                print("- none")
-            print("\nNext:")
-            print("- Re-run without --dry-run to apply these changes")
-        ctx.logger.info("enable_preview | target=%s | full=%s | planned_writes=%s", project_root, full, len(list(preview.get("planned_writes", []))))
-        return 0
+        return _run_enable_dry_run(ctx, project_root, project_id=resolved_project_id, full=full, json_output=json_output)
 
     project_id, registered_now = _ensure_registered_project(ctx, project_root)
     print(f"- registry: {'created' if registered_now else 'ready'} ({project_id})")
@@ -1846,20 +1991,7 @@ def cmd_enable(ctx: AppContext, project_id_or_path: str = ".", *, full: bool = F
     mcp_changed = write_vscode_mcp_json(ctx, project_root)
     print(f"- mcp config: {'updated' if mcp_changed else 'ready'}")
 
-    applied_profile_id = detect_applied_profile(project_root)
-    if full and not applied_profile_id:
-        recommended_profile_id = _recommended_enable_profile_id(project_root)
-        if recommended_profile_id:
-            profile = load_profile(ctx, recommended_profile_id)
-            profile_result = apply_profile(ctx, profile, project_root)
-            applied_profile_id = profile_result.profile_id
-            print(f"- profile: enabled ({applied_profile_id})")
-        else:
-            print("- profile: skipped (no default profile detected)")
-    elif applied_profile_id:
-        print(f"- profile: ready ({applied_profile_id})")
-    else:
-        print("- profile: skipped in default mode")
+    _apply_enable_profile(ctx, project_root, full=full)
 
     if full:
         print("- copilot activation: applying")
@@ -1867,54 +1999,14 @@ def cmd_enable(ctx: AppContext, project_id_or_path: str = ".", *, full: bool = F
 
     cmd_doctor(ctx, str(project_root), write_state=True, write_checklist=True)
 
-    from agents_memory.services.planning import init_onboarding_bundle, init_refactor_bundle
+    from agents_memory.services.planning import init_onboarding_bundle
 
     onboarding_result = init_onboarding_bundle(ctx, project_root)
     print(f"- onboarding bundle: {onboarding_result.plan_root.relative_to(project_root).as_posix()}")
 
     if full:
-        hotspots = collect_refactor_watch_hotspots(project_root)
-        if hotspots:
-            refactor_result = init_refactor_bundle(ctx, project_root, hotspot_token=hotspots[0].rank_token)
-            existing_state = load_onboarding_state(project_root)
-            hotspot_payload = {
-                "identifier": refactor_result.hotspot.identifier,
-                "rank_token": refactor_result.hotspot_token,
-                "relative_path": refactor_result.hotspot.relative_path,
-                "function_name": refactor_result.hotspot.function_name,
-                "qualified_name": refactor_result.hotspot.qualified_name,
-                "line": refactor_result.hotspot.line,
-                "status": refactor_result.hotspot.status,
-                "effective_lines": refactor_result.hotspot.effective_lines,
-                "branches": refactor_result.hotspot.branches,
-                "nesting": refactor_result.hotspot.nesting,
-                "local_vars": refactor_result.hotspot.local_vars,
-                "has_guiding_comment": refactor_result.hotspot.has_guiding_comment,
-                "issues": refactor_result.hotspot.issues,
-                "score": refactor_result.hotspot.score,
-            }
-            updated_state = _merge_refactor_followup_state(
-                existing_state,
-                project_root=project_root,
-                plan_root=refactor_result.plan_root,
-                hotspot_index=refactor_result.hotspot_index,
-                hotspot_token=refactor_result.hotspot_token,
-                hotspot=hotspot_payload,
-                task_name=refactor_result.task_name,
-                task_slug=refactor_result.task_slug,
-            )
-            state_path = onboarding_state_path(project_root)
-            state_path.parent.mkdir(parents=True, exist_ok=True)
-            state_path.write_text(json.dumps(updated_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            log_file_update(ctx.logger, action="enable_write_refactor_followup_state", path=state_path, detail=f"project_root={project_root};task_slug={refactor_result.task_slug}")
-            print(f"- refactor bundle: {refactor_result.plan_root.relative_to(project_root).as_posix()} ({refactor_result.hotspot_token})")
-        else:
-            print("- refactor bundle: skipped (no hotspots)")
+        _run_enable_full_followup(ctx, project_root)
 
-    print("\nNext:")
-    print("- Review onboarding-state.json and docs/plans/bootstrap-checklist.md")
-    print("- Run amem doctor . after your next structural change")
-    if full:
-        print("- If a refactor bundle was generated, review its spec.md before editing code")
+    _print_enable_next_steps(full=full)
     ctx.logger.info("enable_complete | target=%s | full=%s | dry_run=%s | project_id=%s", project_root, full, dry_run, project_id)
     return 0
