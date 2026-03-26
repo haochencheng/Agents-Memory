@@ -37,7 +37,7 @@ from agents_memory.services.projects import (
     resolve_bridge_rel,
     resolve_project_target,
 )
-from agents_memory.services.profiles import PROFILE_MANIFEST_REL, apply_profile, detect_applied_profile, load_profile, expected_profile_paths
+from agents_memory.services.profiles import PROFILE_MANIFEST_REL, ProfileStandardsSyncResult, apply_profile, detect_applied_profile, load_profile, expected_profile_paths, sync_profile_standards
 from agents_memory.services.validation import collect_plan_check_findings, collect_profile_check_findings, collect_refactor_watch_findings, collect_refactor_watch_hotspots
 
 if TYPE_CHECKING:
@@ -1606,7 +1606,11 @@ def _preview_enable_profile_actions(ctx: AppContext, project_root: Path, *, full
         return capabilities, planned_writes, skipped_existing
 
     if applied_profile_id:
-        skipped_existing.append(f"profile already applied: `{applied_profile_id}`")
+        capabilities.append(f"refresh profile-managed standards for `{applied_profile_id}`")
+        profile = load_profile(ctx, applied_profile_id)
+        expected = expected_profile_paths(profile, project_root)
+        planned_writes.extend(str(path) for path in expected["standard_files"])
+        planned_writes.append(str(project_root / PROFILE_MANIFEST_REL))
     else:
         skipped_existing.append("profile auto-apply skipped in default mode")
     return capabilities, planned_writes, skipped_existing
@@ -1807,6 +1811,25 @@ def _apply_enable_profile(ctx: AppContext, project_root: Path, *, full: bool) ->
     return None
 
 
+def _print_enable_standards_sync(result: ProfileStandardsSyncResult) -> None:
+    if result.missing_sources:
+        missing = ", ".join(result.missing_sources)
+        print(f"- standards: incomplete (missing sources: {missing})")
+        return
+    if result.synced_standards or result.manifest_updated:
+        print(f"- standards: synced ({len(result.synced_standards)} updated)")
+        return
+    print("- standards: ready")
+
+
+def _sync_enable_profile_standards(ctx: AppContext, project_root: Path, profile_id: str | None) -> None:
+    if not profile_id:
+        return
+    profile = load_profile(ctx, profile_id)
+    result = sync_profile_standards(ctx, profile, project_root)
+    _print_enable_standards_sync(result)
+
+
 def _write_enable_refactor_followup(
     ctx: AppContext,
     project_root: Path,
@@ -1885,7 +1908,8 @@ def cmd_enable(ctx: AppContext, project_id_or_path: str = ".", *, full: bool = F
     mcp_changed = write_vscode_mcp_json(ctx, project_root)
     print(f"- mcp config: {'updated' if mcp_changed else 'ready'}")
 
-    _apply_enable_profile(ctx, project_root, full=full)
+    profile_id = _apply_enable_profile(ctx, project_root, full=full)
+    _sync_enable_profile_standards(ctx, project_root, profile_id)
 
     if full:
         print("- copilot activation: applying")

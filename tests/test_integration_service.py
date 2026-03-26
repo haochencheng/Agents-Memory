@@ -11,6 +11,7 @@ from pathlib import Path
 from agents_memory.runtime import build_context
 from agents_memory.commands.integration import _parse_doctor_args, _parse_enable_args, _parse_onboarding_execute_args
 from agents_memory.services.integration import _doctor_action_sequence, _doctor_bootstrap_checklist, _doctor_bridge_check, _doctor_group_checks, _doctor_group_remediations, _doctor_group_status, _doctor_group_summary, _doctor_planning_checks, _doctor_refactor_watch_checks, _doctor_overall, _doctor_runbook_steps, cmd_bridge_install, cmd_doctor, cmd_enable, execute_onboarding_next_action, onboarding_next_action, write_vscode_mcp_json
+from agents_memory.services.profiles import apply_profile, load_profile
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -114,7 +115,7 @@ class IntegrationServiceTests(unittest.TestCase):
                         "# Project Registry",
                         "",
                         "## demo-project",
-                        f"- **id**: demo-project",
+                        "- **id**: demo-project",
                         f"- **root**: {project_root}",
                         "- **bridge_instruction**: .github/instructions/agents-memory-bridge.instructions.md",
                         "- **active**: true",
@@ -1000,3 +1001,45 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertEqual(state["recommended_steps"][0]["key"], "refactor_bundle")
             self.assertIn("--token hotspot-", state["recommended_steps"][0]["command"])
             self.assertTrue(state["recommended_refactor_bundle"]["hotspot_token"].startswith("hotspot-"))
+
+    def test_cmd_enable_syncs_existing_profile_managed_standards(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(root / "templates" / "agents-memory-bridge.instructions.md", "root={{AGENTS_MEMORY_ROOT}}\nproject={{PROJECT_ID}}\n")
+            _write_text(root / "templates" / "agents-memory-copilot-instructions.md", "copilot {{PROJECT_ID}} {{AGENTS_MEMORY_ROOT}}\n")
+            for name in ["README.template.md", "spec.template.md", "plan.template.md", "task-graph.template.md", "validation.template.md"]:
+                _write_text(root / "templates" / "planning" / name, f"# {name}\nplanning bundle\n## Acceptance Criteria\n## Change Set\n## Work Items\n## Exit Criteria\n## Required Checks\n{{{{TASK_NAME}}}}\n")
+            _write_text(
+                root / "profiles" / "python-service.yaml",
+                json.dumps(
+                    {
+                        "id": "python-service",
+                        "display_name": "Python Service",
+                        "applies_to": ["backend", "python"],
+                        "standards": ["standards/docs/docs-sync.instructions.md"],
+                        "templates": ["templates/profile/python-service/docs/plans/README.example.md"],
+                        "commands": {"doctor": "amem doctor ."},
+                        "bootstrap": {"create": [".github/instructions/", "docs/", "tests/"]},
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            _write_text(root / "standards" / "docs" / "docs-sync.instructions.md", "docs sync v1\n")
+            _write_text(root / "templates" / "profile" / "python-service" / "docs" / "plans" / "README.example.md", "planning root\n")
+            _write_text(project_root / "pyproject.toml", "[project]\nname='demo'\n")
+
+            profile = load_profile(ctx, "python-service")
+            apply_profile(ctx, profile, project_root)
+
+            installed_standard = project_root / ".github" / "instructions" / "agents-memory" / "standards" / "docs" / "docs-sync.instructions.md"
+            installed_standard.write_text("docs sync v0\n", encoding="utf-8")
+            _write_text(root / "standards" / "docs" / "docs-sync.instructions.md", "docs sync v2\n")
+
+            with redirect_stdout(StringIO()):
+                exit_code = cmd_enable(ctx, str(project_root))
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(installed_standard.read_text(encoding="utf-8"), "docs sync v2\n")

@@ -69,14 +69,16 @@ amem enable . --full --dry-run --json
 1. 注册项目
 2. 安装 bridge instruction
 3. 写入 `.vscode/mcp.json`
-4. 导出 `doctor` state/checklist
-5. 生成 onboarding bundle
+4. 如果项目已安装 profile，则刷新 profile 管理的 standards
+5. 导出 `doctor` state/checklist
+6. 生成 onboarding bundle
 
 `--full` 会继续：
 
 1. 自动应用推荐 profile
-2. 安装或更新 `.github/copilot-instructions.md`
-3. 为第一条 refactor hotspot 生成 bundle，并把 follow-up 写回 onboarding state
+2. 后续再次执行 `amem enable .` 时，会继续自动同步该 profile 管理的标准文件
+3. 安装或更新 `.github/copilot-instructions.md`
+4. 为第一条 refactor hotspot 生成 bundle，并把 follow-up 写回 onboarding state
 
 如果你仍然想逐项确认或手动控制每一步，也可以继续使用交互式 `amem register`：
 
@@ -118,6 +120,8 @@ Domains (逗号分隔) [frontend, python]: ↵
 > **提示 3**：`enable` 默认模式不会自动写 `.github/copilot-instructions.md`；如果你要连同 repo-wide Copilot 激活一起接上，请用 `amem enable . --full`。
 
 > **提示 4**：`enable --dry-run` 不会写任何文件，适合先评估将要启用的能力和目标路径。
+
+> **提示 5**：当前目标项目里的 agent 读取入口是 `.github/copilot-instructions.md`、`.github/instructions/agents-memory-bridge.instructions.md`、`.github/instructions/agents-memory/standards/*` 和 `.vscode/mcp.json`。这条接入链路不要求目标项目额外生成 `llms.txt` 才能生效；`llms.txt` 仍主要用于 Agents-Memory 仓库自身的机器可读地图。
 
 ---
 

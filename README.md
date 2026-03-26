@@ -136,6 +136,8 @@ python3 scripts/memory.py enable .
 python3 scripts/memory.py enable . --dry-run
 python3 scripts/memory.py enable . --full --dry-run --json
 python3 scripts/memory.py enable . --full
+# 如果项目已经安装过 profile，重新执行 enable 也会刷新 profile-managed standards
+python3 scripts/memory.py enable .
 
 # 错误记录与搜索
 python3 scripts/memory.py new
@@ -195,6 +197,8 @@ python3 scripts/memory.py docs-check .
 2. `agent-list`, `agent-setup`, `copilot-setup`
 3. `templates/agents-memory-bridge.instructions.md`
 4. `templates/agents-memory-copilot-instructions.md`
+
+`enable` 现在会在目标项目已安装 profile 的情况下自动补跑 standards refresh，所以当 Agents-Memory 新增了 profile-managed 标准文件时，目标项目只需要重新执行 `amem enable .`，不必再额外手动执行一次 `amem standards-sync .`。当前接入链路里，agent 读取的是目标项目中的 `.github/copilot-instructions.md`、`.github/instructions/agents-memory-bridge.instructions.md`、`.github/instructions/agents-memory/standards/*` 和 `.vscode/mcp.json`，并不依赖目标项目额外生成一份 `llms.txt`。
 
 MCP 侧现在除了 onboarding tools，还新增了 `memory_get_refactor_hotspots()` 和 `memory_init_refactor_bundle()`：前者让 agent 直接拿结构化 hotspot 列表，不必依赖 doctor 导出文件，而且每个 hotspot 都会带稳定的 `rank_token`；后者则可直接用这个 token 生成对应的 refactor planning bundle，避免后续 hotspot 排序变化导致 bundle 指向漂移。生成成功后，bundle 路径和 follow-up step 还会回写到 `.agents-memory/onboarding-state.json`，让 refactor 进入统一推荐动作队列。
 

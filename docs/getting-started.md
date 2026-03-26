@@ -139,6 +139,9 @@ python3 scripts/memory.py enable . --full --dry-run --json
 python3 scripts/memory.py enable . --full
 # 输出: 在默认模式基础上继续启用推荐 profile、Copilot 激活，以及第一条 refactor hotspot 对应的 bundle / follow-up state
 
+python3 scripts/memory.py enable .
+# 输出: 如果项目已经安装 profile，会顺便刷新 profile 管理的 standards，把新增标准文件同步到目标项目
+
 python3 scripts/memory.py doctor . --write-checklist --write-state
 # 输出: 在 docs/plans/bootstrap-checklist.md、docs/plans/refactor-watch.md 和 .agents-memory/onboarding-state.json 导出 onboarding / hotspot 工件
 # 提示: agent 可优先读取 onboarding-state.json 中的 recommended_next_command / recommended_verify_command
@@ -177,6 +180,8 @@ python3 scripts/memory.py profile-apply python-service . --dry-run
 
 python3 scripts/memory.py standards-sync .
 # 输出: 将 profile 管理的组织标准文件同步到当前项目
+
+# 说明: 如果项目已经通过 profile-apply 或 enable --full 安装过 profile，重新执行 enable 也会自动完成同一轮标准刷新
 
 python3 scripts/memory.py profile-check .
 # 输出: 当前项目已安装 profile 的一致性检查结果
