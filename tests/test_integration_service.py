@@ -9,7 +9,7 @@ from io import StringIO
 from pathlib import Path
 
 from agents_memory.runtime import build_context
-from agents_memory.services.integration import _doctor_action_sequence, _doctor_bridge_check, _doctor_group_checks, _doctor_group_remediations, _doctor_group_status, _doctor_group_summary, _doctor_planning_checks, _doctor_overall, cmd_bridge_install, cmd_doctor, write_vscode_mcp_json
+from agents_memory.services.integration import _doctor_action_sequence, _doctor_bridge_check, _doctor_group_checks, _doctor_group_remediations, _doctor_group_status, _doctor_group_summary, _doctor_planning_checks, _doctor_overall, _doctor_runbook_steps, cmd_bridge_install, cmd_doctor, write_vscode_mcp_json
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -205,6 +205,22 @@ class IntegrationServiceTests(unittest.TestCase):
         self.assertTrue(action_sequence[2].startswith("Integration (required):"))
         self.assertTrue(action_sequence[3].startswith("Optional (recommended):"))
 
+    def test_doctor_runbook_steps_include_command_and_done_when(self) -> None:
+        steps = _doctor_runbook_steps(
+            [
+                ("Core", [("WARN", "registry", "not registered")]),
+                ("Planning", [("WARN", "planning_root", "missing docs/plans")]),
+            ]
+        )
+
+        self.assertEqual(len(steps), 2)
+        self.assertEqual(steps[0]["group"], "Core")
+        self.assertEqual(steps[0]["key"], "registry")
+        self.assertIn("amem register .", steps[0]["command"])
+        self.assertIn("Done when", f"Done when: {steps[0]['done_when']}")
+        self.assertEqual(steps[1]["group"], "Planning")
+        self.assertIn('amem plan-init "<task-name>" .', steps[1]["command"])
+
     def test_cmd_doctor_surfaces_planning_root_warning_for_applied_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -269,6 +285,7 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertIn("Core:", output)
             self.assertIn("Summary:", output)
             self.assertIn("Action Sequence:", output)
+            self.assertIn("Onboarding Runbook:", output)
             self.assertIn("Integration:", output)
             self.assertIn("Optional:", output)
             self.assertIn("bridge not configured for this project", output)

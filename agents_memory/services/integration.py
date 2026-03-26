@@ -40,6 +40,73 @@ DOCTOR_GROUP_PRIORITY = {
     "Integration": "required",
     "Optional": "recommended",
 }
+DOCTOR_RUNBOOK = {
+    "registry": {
+        "action": "Register the repository into the shared project registry so sync and doctor can reason about it.",
+        "command": "amem register .",
+        "done_when": "`amem doctor .` shows `[OK] registry` for this project.",
+    },
+    "active": {
+        "action": "Make sure the registered project is marked active before relying on sync or governance checks.",
+        "command": "amem register .",
+        "done_when": "`amem doctor .` shows `[OK] active`.",
+    },
+    "root": {
+        "action": "Repair the project root mapping so Agents-Memory resolves the correct repository path.",
+        "command": "amem register .",
+        "done_when": "`amem doctor .` shows `[OK] root` with the expected absolute path.",
+    },
+    PYTHON_BIN: {
+        "action": f"Install `{PYTHON_BIN}` or expose it on PATH for runtime checks and MCP startup.",
+        "command": f"{PYTHON_BIN} --version",
+        "done_when": f"`amem doctor .` shows `[OK] {PYTHON_BIN}`.",
+    },
+    "mcp_package": {
+        "action": "Install the MCP package into the Python environment used by Agents-Memory.",
+        "command": f"{PYTHON_BIN} -m pip install mcp",
+        "done_when": "`amem doctor .` shows `[OK] mcp_package`.",
+    },
+    "profile_manifest": {
+        "action": "Apply a project profile so the repo has an explicit engineering contract.",
+        "command": "amem profile-apply <profile> .",
+        "done_when": "`amem doctor .` shows `[OK] profile_manifest`.",
+    },
+    "profile_consistency": {
+        "action": "Repair missing or drifted profile-managed files before continuing onboarding.",
+        "command": "amem profile-check .",
+        "done_when": "`amem doctor .` shows `[OK] profile_consistency`.",
+    },
+    "planning_root": {
+        "action": "Seed the planning workspace so specs, plans, task graphs, and validation bundles have a home.",
+        "command": 'amem plan-init "<task-name>" .',
+        "done_when": "`amem doctor .` shows `[OK] planning_root`.",
+    },
+    "planning_bundle": {
+        "action": "Repair the planning bundle so the repository has a valid spec-first execution package.",
+        "command": "amem plan-check .",
+        "done_when": "`amem doctor .` shows `[OK] planning_bundle`.",
+    },
+    "bridge_instruction": {
+        "action": "Install the bridge instruction so agents can load shared startup context automatically.",
+        "command": "amem bridge-install <project-id>",
+        "done_when": "`amem doctor .` shows `[OK] bridge_instruction`.",
+    },
+    "mcp_config": {
+        "action": "Create or repair the MCP configuration so IDE agents can call Agents-Memory tools.",
+        "command": "amem mcp-setup .",
+        "done_when": "`amem doctor .` shows `[OK] mcp_config`.",
+    },
+    "copilot_activation": {
+        "action": "Install repo-wide Copilot activation so the default agent loads the shared brain automatically.",
+        "command": "amem copilot-setup .",
+        "done_when": "`amem doctor .` shows `[OK] copilot_activation`.",
+    },
+    "agents_read_order": {
+        "action": "Add the bridge reference to AGENTS.md or docs/AGENTS.md so humans and agents share the same startup order.",
+        "command": 'rg -n "agents-memory-bridge" AGENTS.md docs/AGENTS.md',
+        "done_when": "`amem doctor .` shows `[INFO] agents_read_order bridge referenced in AGENTS/docs/AGENTS`.",
+    },
+}
 DOCTOR_GROUP_REMEDIATION = {
     "Core": {
         "registry": "Register the project in memory/projects.md or re-run `amem register`.",
@@ -460,6 +527,36 @@ def _doctor_action_sequence(grouped_checks: list[tuple[str, list[tuple[str, str,
     return actions
 
 
+def _doctor_runbook_steps(grouped_checks: list[tuple[str, list[tuple[str, str, str]]]]) -> list[dict[str, str]]:
+    steps: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for group_name, group_checks in grouped_checks:
+        priority = DOCTOR_GROUP_PRIORITY.get(group_name, "recommended")
+        for status, key, detail in group_checks:
+            if status not in {"WARN", "FAIL"}:
+                continue
+            runbook = DOCTOR_RUNBOOK.get(key)
+            if runbook is None:
+                continue
+            step_id = (group_name, key)
+            if step_id in seen:
+                continue
+            steps.append(
+                {
+                    "group": group_name,
+                    "priority": priority,
+                    "key": key,
+                    "status": status,
+                    "detail": detail,
+                    "action": runbook["action"],
+                    "command": runbook["command"],
+                    "done_when": runbook["done_when"],
+                }
+            )
+            seen.add(step_id)
+    return steps
+
+
 def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
     project_id, project_root, project = resolve_project_target(ctx, project_id_or_path)
     ctx.logger.info("doctor_start | target=%s | resolved_project_id=%s | project_root=%s", project_id_or_path, project_id, project_root)
@@ -515,6 +612,17 @@ def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
         print("Action Sequence:")
         for index, action in enumerate(action_sequence, start=1):
             print(f"{index}. {action}")
+        print()
+
+    runbook_steps = _doctor_runbook_steps(grouped_checks)
+    if runbook_steps:
+        print("Onboarding Runbook:")
+        for index, step in enumerate(runbook_steps, start=1):
+            print(f"{index}. {step['group']} / {step['key']} [{step['priority']}]")
+            print(f"   Trigger: {step['detail']}")
+            print(f"   Action: {step['action']}")
+            print(f"   Command: {step['command']}")
+            print(f"   Done when: {step['done_when']}")
         print()
 
     print("\nNext:")
