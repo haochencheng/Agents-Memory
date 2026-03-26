@@ -1,0 +1,117 @@
+# Agents-Memory
+
+> Agent 共享记忆系统 — 结构化错误记录 + 规则升级 + 向量语义搜索
+
+## Purpose
+
+让 AI Agent 在构建代码时持续自我进化——错误记录 → 规则提炼 → instruction Gotcha 写入，形成闭环。
+
+## Repository Map
+
+```
+Agents-Memory/
+├── index.md                        # HOT: Agent 启动必加载，≤ 400 tokens
+├── llms.txt                        # 机器可读的项目结构地图（本文件）
+├── README.md                       # 人类可读的项目介绍 + 设计方案
+│
+├── schema/
+│   └── error-record.md             # 错误记录 frontmatter + 正文格式规范
+│
+├── errors/                         # COLD: 所有错误记录（按需检索）
+│   ├── YYYY-MM-DD-<project>-<seq>.md
+│   └── archive/                    # 90 天以上归档记录
+│
+├── memory/                         # WARM: 升级后的规则摘要
+│   └── rules.md                    # 已 promoted 的防范规则，按语言/框架分组
+│
+├── vectors/                        # LOCAL VECTOR INDEX (gitignored)
+│   └── errors.lance                # LanceDB 索引，由 embed 命令生成
+│
+├── docker/
+│   ├── docker-compose.yml          # Qdrant 向量数据库（多 Agent 共享场景）
+│   └── .env.example                # 环境变量模板
+│
+├── docs/
+│   ├── README.md                   # 文档入口
+│   ├── architecture.md             # 架构决策记录（ADR-001 ~ ADR-005）
+│   └── ops.md                      # 运维手册：CLI 用法 / 向量搜索 / Docker
+│
+└── scripts/
+    └── memory.py                   # CLI 主入口（所有命令）
+```
+
+## Key Files
+
+| File | Role | Loaded By |
+|------|------|-----------|
+| `index.md` | Hot-tier summary, ≤ 400 tokens | Agent on every session start |
+| `memory/rules.md` | Promoted prevention rules | Agent when domain matches |
+| `errors/*.md` | Full error records | On search hit |
+| `schema/error-record.md` | Format spec | Human / Agent when creating records |
+| `scripts/memory.py` | CLI tool | Human / CI |
+| `docker/docker-compose.yml` | Qdrant service | Human (`docker-compose up -d`) |
+
+## CLI Quick Reference
+
+```bash
+python3 scripts/memory.py new                 # create error record
+python3 scripts/memory.py list                # list active records
+python3 scripts/memory.py stats               # distribution stats
+python3 scripts/memory.py search <keyword>    # full-text search  (< 200 records)
+python3 scripts/memory.py embed               # build LanceDB vector index
+python3 scripts/memory.py vsearch <query>     # semantic search   (≥ 200 records)
+python3 scripts/memory.py promote <id>        # promote to instruction Gotcha
+python3 scripts/memory.py archive             # archive old records
+python3 scripts/memory.py to-qdrant           # migrate to shared Qdrant
+python3 scripts/memory.py update-index        # regenerate index.md stats
+```
+
+## Search Strategy
+
+```
+records < 200   →  grep-style keyword search  (zero deps, stdlib only)
+records ≥ 200   →  LanceDB local vector search (pip install lancedb openai pyarrow)
+multi-agent     →  Qdrant shared vector DB     (docker/docker-compose.yml)
+```
+
+## Self-Evolution Loop
+
+```
+error occurs
+  → python3 scripts/memory.py new          (status: new)
+  → root cause analysis                    (status: reviewed)
+  → repeat_count ≥ 2 or severity=critical
+  → python3 scripts/memory.py promote      (status: promoted)
+  → rule written into instruction Gotchas
+  → next Agent session: error prevented
+```
+
+## Error Record Schema (frontmatter)
+
+```yaml
+id:           YYYY-MM-DD-<project>-<seq>
+date:         YYYY-MM-DD
+project:      synapse-network | spec2flow | provider-service | gateway | admin-front | gateway-admin | other
+domain:       finance | frontend | python | docs | config | infra | other
+category:     type-error | logic-error | finance-safety | arch-violation | test-failure |
+              docs-drift | config-error | build-error | runtime-error | security
+severity:     critical | warning | info
+status:       new → reviewed → promoted → archived
+promoted_to:  path to instruction file (filled on promote)
+repeat_count: integer (increment on recurrence)
+tags:         list of keywords
+```
+
+## Dependencies
+
+| Feature | Requirement |
+|---------|-------------|
+| Basic CLI (list/search/new) | Python 3.11+, stdlib only |
+| Vector index build | `pip install lancedb openai pyarrow` + `OPENAI_API_KEY` |
+| Semantic search | Same as above + `vectors/` index built |
+| Shared multi-agent | Docker + `pip install qdrant-client` |
+
+## Related Projects
+
+- Synapse-Network instructions: `/Users/cliff/workspace/Synapse-Network/.github/instructions/`
+- Spec2Flow hooks: `/Users/cliff/workspace/Spec2Flow/packages/web/src/hooks/`

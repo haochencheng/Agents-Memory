@@ -23,8 +23,8 @@
 
 ## 检索指引
 
-- 写代码前：查 `memory/rules.md` 匹配项目领域的规则
-- 代码出错后：用错误类型关键词检索 `errors/` 目录
+- 写代码前：查 `memory/rules.md` 匹配项目领域规则
+- 代码出错后：`python3 scripts/memory.py search  <keyword>`
 - 写 Finance 代码：额外加载 `memory/rules.md`（Finance 段）
 - 做文档变更：检查 docs-drift 类别的错误记录
 
