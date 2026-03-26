@@ -10,20 +10,20 @@
 
 ```
 Agents-Memory/
-├── index.md                        # HOT: Agent 启动必加载，≤ 400 tokens
+├── index.md                        # HOT runtime file, locally generated from templates, gitignored
 ├── llms.txt                        # 机器可读的项目结构地图（本文件）
 ├── README.md                       # 人类可读的项目介绍 + 设计方案
 │
 ├── schema/
 │   └── error-record.md             # 错误记录 frontmatter + 正文格式规范
 │
-├── errors/                         # COLD: 所有错误记录（按需检索）
+├── errors/                         # COLD runtime dir: local error records (gitignored except .gitkeep)
 │   ├── YYYY-MM-DD-<project>-<seq>.md
 │   └── archive/                    # 90 天以上归档记录
 │
-├── memory/                         # WARM: 升级后的规则摘要 + 项目注册表
-│   ├── rules.md                    # 已 promoted 的防范规则，按语言/框架分组
-│   └── projects.md                 # 注册项目注册表（sync + bridge-install 使用）
+├── memory/                         # WARM runtime dir: local rules + project registry
+│   ├── rules.md                    # local generated rules file, gitignored
+│   └── projects.md                 # local project registry, gitignored
 │
 ├── logs/                           # RUNTIME LOGS (gitignored)
 │   └── agents-memory.log           # CLI / MCP / 文件写入统一日志
@@ -49,6 +49,10 @@ Agents-Memory/
 ├── templates/
 │   ├── agents-memory-bridge.instructions.md   # bridge 模板（bridge-install 使用）
 │   └── agents-memory-copilot-instructions.md  # 仓库级 Copilot 激活模板
+│   ├── index.example.md            # public-safe local hot-tier bootstrap
+│   ├── projects.example.md         # public-safe local registry bootstrap
+│   ├── rules.example.md            # public-safe local rules bootstrap
+│   └── mcp.example.json            # public-safe VS Code MCP example
 │
 ├── docs/
 │   ├── README.md                   # 文档入口
@@ -67,11 +71,12 @@ Agents-Memory/
 
 | File | Role | Loaded By |
 |------|------|-----------|
-| `index.md` | Hot-tier summary, ≤ 400 tokens | Agent on every session start |
-| `memory/rules.md` | Promoted prevention rules | Agent when domain matches |
-| `memory/projects.md` | Registered projects registry | `sync` and `bridge-install` commands |
-| `errors/*.md` | Full error records | On search hit |
+| `index.md` | Local hot-tier summary generated from template | Agent on every session start |
+| `memory/rules.md` | Local promoted prevention rules | Agent when domain matches |
+| `memory/projects.md` | Local registered projects registry | `sync` and `bridge-install` commands |
+| `errors/*.md` | Local full error records | On search hit |
 | `schema/error-record.md` | Format spec | Human / Agent when creating records |
+| `templates/*.example.*` | Public-safe bootstrap examples | Human / first local run |
 | `scripts/memory.py` | Thin CLI wrapper → `agents_memory.app` | Human / CI |
 | `scripts/mcp_server.py` | Thin MCP wrapper → `agents_memory.mcp_app` | AI Agent via tool calls |
 | `agents_memory/app.py` | CLI command registry entrypoint | Human / CI |
@@ -111,7 +116,7 @@ python3 scripts/memory.py update-index                 # regenerate index.md sta
 ## MCP Server Tools (for AI Agents)
 
 Start server: `python3 scripts/mcp_server.py`
-VS Code config: `.vscode/mcp.json`
+VS Code config: local `.vscode/mcp.json` generated from `templates/mcp.example.json` or via `mcp-setup`
 
 | Tool | Description |
 |------|-------------|
@@ -156,7 +161,7 @@ error occurs during coding
 
 ```
 Agents-Memory (hub)
-├── memory/projects.md      # registry: synapse-network, spec2flow, ...
+├── memory/projects.md      # local registry: synapse-network, spec2flow, ...
 ├── sync                    # push promoted rules → project instruction files
 └── bridge-install          # install bridge in project's .github/instructions/
 
@@ -197,5 +202,4 @@ tags:         list of keywords
 
 ## Related Projects
 
-- Synapse-Network instructions: `/Users/cliff/workspace/Synapse-Network/.github/instructions/`
-- Spec2Flow hooks: `/Users/cliff/workspace/Spec2Flow/packages/web/src/hooks/`
+- Public repo note: replace local absolute paths with your own machine paths after clone.

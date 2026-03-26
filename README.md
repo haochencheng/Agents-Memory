@@ -53,13 +53,40 @@ TurboQuant（ICLR 2026）解决的是**LLM 推理时 KV Cache 的服务端压缩
 
 ---
 
+## 开源仓库与本地运行数据
+
+公开仓库只提交代码、模板和文档；下面这些是真实运行时数据，默认不再提交：
+
+```text
+index.md
+memory/projects.md
+memory/rules.md
+errors/*.md
+.vscode/mcp.json
+logs/
+vectors/
+```
+
+首次运行 CLI 时，会自动从 `templates/` 生成公开安全的本地默认文件：
+
+```text
+templates/index.example.md
+templates/projects.example.md
+templates/rules.example.md
+templates/mcp.example.json
+```
+
+---
+
 ## 目录结构
 
 ```
 Agents-Memory/
-├── index.md
+├── index.md                     # 本地生成，gitignored
 ├── memory/
-├── errors/
+│   ├── projects.md              # 本地生成，gitignored
+│   └── rules.md                 # 本地生成，gitignored
+├── errors/                      # 本地错误记录目录，*.md gitignored
 ├── templates/
 ├── scripts/                    # thin wrappers
 └── agents_memory/              # 真正的运行时与业务逻辑
@@ -164,6 +191,8 @@ export AGENTS_MEMORY_LOG_STDERR=1
 ```
 
 `AGENTS_MEMORY_LOG_STDERR=1` 会在保留文件日志的同时，把同样内容打印到 stderr，方便本地调试 CLI / MCP server。
+
+如果你准备开源，请不要把 `logs/`、`index.md`、`memory/*.md`、`errors/*.md`、`.vscode/mcp.json` 推到公开仓库。
 
 ## Copilot 自动激活
 

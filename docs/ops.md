@@ -138,7 +138,7 @@ docker-compose down -v        # 清除所有向量数据（危险！）
 
 | 用途 | 存储方式 |
 |------|----------|
-| 错误记录（结构化文本）| `errors/*.md`（Git 版本化）|
+| 错误记录（结构化文本）| `errors/*.md`（本地运行数据，默认不进入公开仓库）|
 | 向量索引（本地）| `vectors/` LanceDB（gitignored）|
 | 向量索引（共享）| Qdrant（单独容器）|
 | 业务数据库 | 已有 PostgreSQL（无需改动）|
@@ -151,8 +151,8 @@ docker-compose down -v        # 清除所有向量数据（危险！）
 
 | 数据 | 备份方式 | 频率 |
 |------|---------|------|
-| `errors/` | Git push | 每次新增记录后 |
-| `memory/rules.md` | Git push | 每次 promote 后 |
+| `errors/` | 私有备份 / 私有仓库 / 本地磁盘快照 | 每次新增记录后 |
+| `memory/rules.md` | 私有备份 / 私有仓库 | 每次 promote 后 |
 | `vectors/` | 不备份（可从 errors/ 重新 embed）| — |
 | Qdrant `data/qdrant/` | 本地目录挂载，自动持久化 | Docker volume |
 

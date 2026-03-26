@@ -6,6 +6,16 @@ vectors/
 # Docker 数据目录（大文件，本地持久化即可）
 docker/data/
 
+# VS Code / MCP 本机配置（含本地绝对路径）
+.vscode/
+
+# 运行期共享记忆数据（包含私有项目路径、错误记录与本地热区索引）
+index.md
+memory/projects.md
+memory/rules.md
+errors/*.md
+errors/archive/
+
 # Runtime logs
 logs/
 
