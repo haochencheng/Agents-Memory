@@ -128,5 +128,7 @@ def append_project_entry(ctx: AppContext, entry: str) -> None:
 
 def resolve_bridge_rel(project: dict | None) -> str:
     if project:
-        return project.get("bridge_instruction", DEFAULT_BRIDGE_INSTRUCTION_REL).strip()
+        raw = project.get("bridge_instruction", DEFAULT_BRIDGE_INSTRUCTION_REL).strip()
+        normalized = raw.strip('"').strip("'").strip()
+        return normalized
     return DEFAULT_BRIDGE_INSTRUCTION_REL

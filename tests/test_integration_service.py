@@ -9,7 +9,7 @@ from io import StringIO
 from pathlib import Path
 
 from agents_memory.runtime import build_context
-from agents_memory.services.integration import _doctor_planning_checks, cmd_bridge_install, cmd_doctor, write_vscode_mcp_json
+from agents_memory.services.integration import _doctor_bridge_check, _doctor_planning_checks, cmd_bridge_install, cmd_doctor, write_vscode_mcp_json
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -149,6 +149,12 @@ class IntegrationServiceTests(unittest.TestCase):
 
             self.assertTrue(any(check[0] == "OK" and check[1] == "planning_bundle" for check in checks))
 
+    def test_doctor_bridge_check_treats_missing_bridge_as_info(self) -> None:
+        status, key, detail = _doctor_bridge_check(Path("/tmp/demo-project"), None)
+
+        self.assertEqual((status, key), ("INFO", "bridge_instruction"))
+        self.assertIn("bridge not configured", detail)
+
     def test_cmd_doctor_surfaces_planning_root_warning_for_applied_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -183,3 +189,32 @@ class IntegrationServiceTests(unittest.TestCase):
                 cmd_doctor(ctx, str(project_root))
 
             self.assertIn("planning_root", buffer.getvalue())
+
+    def test_cmd_doctor_skips_bridge_noise_when_registry_disables_bridge(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(
+                root / "memory" / "projects.md",
+                "\n".join(
+                    [
+                        "# Project Registry",
+                        "",
+                        "## demo-project",
+                        "- **id**: demo-project",
+                        f"- **root**: {project_root}",
+                        '- **bridge_instruction**: ""',
+                        "- **active**: true",
+                    ]
+                ),
+            )
+
+            buffer = StringIO()
+            with redirect_stdout(buffer):
+                cmd_doctor(ctx, str(project_root))
+
+            output = buffer.getvalue()
+            self.assertIn("bridge not configured for this project", output)
+            self.assertIn("bridge not configured; AGENTS read order check skipped", output)

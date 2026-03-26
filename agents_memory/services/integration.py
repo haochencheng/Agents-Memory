@@ -274,9 +274,11 @@ def _doctor_registry_checks(project_id: str, project_root: Path, project: dict |
 
 
 def _doctor_bridge_check(project_root: Path, bridge_rel: str | None) -> tuple[str, str, str]:
-    bridge_file = project_root / bridge_rel if bridge_rel else None
+    if not bridge_rel:
+        return "INFO", "bridge_instruction", "bridge not configured for this project"
+    bridge_file = project_root / bridge_rel
     bridge_status = "FAIL"
-    bridge_detail = str(bridge_file) if bridge_file else "bridge path missing"
+    bridge_detail = str(bridge_file)
     if bridge_file and bridge_file.exists():
         bridge_status = "OK"
     return bridge_status, "bridge_instruction", bridge_detail
@@ -385,8 +387,11 @@ def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
     checks.append(_doctor_mcp_check(ctx, project_root))
     checks.extend(_doctor_runtime_checks())
 
-    agents_ref_exists = project_agents_reference_exists(project_root, bridge_rel) if bridge_rel else False
-    checks.append((("INFO" if agents_ref_exists else "WARN"), "agents_read_order", "bridge referenced in AGENTS/docs/AGENTS" if agents_ref_exists else "bridge not referenced in AGENTS.md or docs/AGENTS.md (optional but recommended)"))
+    if bridge_rel:
+        agents_ref_exists = project_agents_reference_exists(project_root, bridge_rel)
+        checks.append((("INFO" if agents_ref_exists else "WARN"), "agents_read_order", "bridge referenced in AGENTS/docs/AGENTS" if agents_ref_exists else "bridge not referenced in AGENTS.md or docs/AGENTS.md (optional but recommended)"))
+    else:
+        checks.append(("INFO", "agents_read_order", "bridge not configured; AGENTS read order check skipped"))
     checks.extend(_doctor_profile_checks(ctx, project_root))
     checks.extend(_doctor_planning_checks(project_root))
 
