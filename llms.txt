@@ -125,6 +125,7 @@ python3 scripts/memory.py bridge-install <project-id>  # install bridge instruct
 python3 scripts/memory.py mcp-setup [project-id]       # write .vscode/mcp.json for a registered project
 python3 scripts/memory.py doctor [project-id]          # verify a project's full integration health
 python3 scripts/memory.py plan-init <task-name> [path] # scaffold spec / plan / task-graph / validation bundle
+python3 scripts/memory.py plan-check [path]            # validate planning bundles under docs/plans
 python3 scripts/memory.py profile-list                 # list installable project profiles
 python3 scripts/memory.py profile-show <profile-id>    # show one profile contract
 python3 scripts/memory.py profile-apply <id> [path]    # install profile into target project

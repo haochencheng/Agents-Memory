@@ -26,6 +26,7 @@ CORE_DOC_COMMANDS = [
     "mcp-setup",
     "doctor",
     "plan-init",
+    "plan-check",
     "profile-list",
     "profile-show",
     "profile-apply",
@@ -52,6 +53,15 @@ TESTS_DIR = "tests"
 LICENSE_FILE = "LICENSE"
 CONTRIBUTING_FILE = "CONTRIBUTING.md"
 PYPROJECT_FILE = "pyproject.toml"
+PLAN_BUNDLES_DIR = Path(DOCS_DIR) / "plans"
+
+PLAN_FILE_REQUIREMENTS = {
+    "README.md": ["planning bundle"],
+    "spec.md": ["## Acceptance Criteria"],
+    "plan.md": ["## Change Set"],
+    "task-graph.md": ["## Work Items", "## Exit Criteria"],
+    "validation.md": ["## Required Checks"],
+}
 
 CONTRACT_REQUIREMENTS = {
     "engineering_brain": {
@@ -337,6 +347,58 @@ def _collect_open_source_findings(project_root: Path) -> list[ValidationFinding]
     return findings
 
 
+def _resolve_plan_bundle_targets(project_root: Path, target_path: Path) -> tuple[Path, list[Path]]:
+    resolved = target_path.expanduser().resolve()
+    if resolved.is_dir() and resolved.name in {"plans"} and resolved.parent.name == DOCS_DIR:
+        return resolved.parent.parent, sorted(path for path in resolved.iterdir() if path.is_dir())
+    if resolved.is_dir() and (resolved / "spec.md").exists() and (resolved / "task-graph.md").exists():
+        return resolved.parent.parent.parent, [resolved]
+    root = resolved if resolved.is_dir() else project_root
+    plans_root = root / PLAN_BUNDLES_DIR
+    bundles = sorted(path for path in plans_root.iterdir() if path.is_dir()) if plans_root.exists() else []
+    return root, bundles
+
+
+def collect_plan_check_findings(project_root: Path, target_path: str = ".") -> list[ValidationFinding]:
+    root, bundles = _resolve_plan_bundle_targets(project_root, Path(target_path))
+    plans_root = root / PLAN_BUNDLES_DIR
+    findings: list[ValidationFinding] = [
+        ValidationFinding(
+            "OK" if plans_root.exists() else "WARN",
+            "plan_root",
+            f"present: {PLAN_BUNDLES_DIR.as_posix()}" if plans_root.exists() else f"missing planning root: {PLAN_BUNDLES_DIR.as_posix()}",
+        )
+    ]
+    if not bundles:
+        findings.append(ValidationFinding("WARN", "plan_bundles", f"no planning bundles found under {PLAN_BUNDLES_DIR.as_posix()}"))
+        return findings
+
+    for bundle in bundles:
+        bundle_rel = bundle.relative_to(root).as_posix()
+        findings.append(ValidationFinding("OK", "plan_bundle", f"bundle: {bundle_rel}"))
+        for filename, phrases in PLAN_FILE_REQUIREMENTS.items():
+            file_path = bundle / filename
+            file_key = "plan_files"
+            findings.append(
+                ValidationFinding(
+                    "OK" if file_path.exists() else "FAIL",
+                    file_key,
+                    f"present: {bundle_rel}/{filename}" if file_path.exists() else f"missing required file: {bundle_rel}/{filename}",
+                )
+            )
+            if not file_path.exists():
+                continue
+            findings.append(
+                _collect_phrase_coverage_findings(
+                    "plan_semantics",
+                    f"{bundle_rel}/{filename}",
+                    _read_if_exists(file_path),
+                    phrases,
+                )
+            )
+    return findings
+
+
 def collect_profile_check_findings(ctx: AppContext, project_root: Path, profile_id: str | None = None) -> list[ValidationFinding]:
     findings: list[ValidationFinding] = []
     manifest = read_profile_manifest(project_root)
@@ -398,6 +460,42 @@ def collect_docs_check_findings(project_root: Path) -> list[ValidationFinding]:
     findings.extend(_collect_open_source_findings(project_root))
     findings.extend(_collect_hygiene_findings(project_root, searchable_files))
     return findings
+
+
+def cmd_plan_check(ctx: AppContext, project_id_or_path: str = ".", *, strict: bool = False, output_format: str = "text") -> int:
+    project_root = Path(project_id_or_path).expanduser().resolve()
+    findings = collect_plan_check_findings(project_root, project_id_or_path)
+    has_fail = any(finding.status == "FAIL" for finding in findings)
+    has_warn = any(finding.status == "WARN" for finding in findings)
+    if has_fail:
+        overall = "FAIL"
+    elif has_warn:
+        overall = "PARTIAL"
+    else:
+        overall = "OK"
+    ctx.logger.info("plan_check | target=%s | overall=%s | strict=%s", project_id_or_path, overall, strict)
+
+    if output_format == "json":
+        print(
+            json.dumps(
+                {
+                    "target": project_id_or_path,
+                    "overall": overall,
+                    "strict": strict,
+                    "findings": [asdict(finding) for finding in findings],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+    else:
+        print("\n=== Plan Check ===")
+        print(f"Target:  {project_id_or_path}")
+        print(f"Overall: {overall}\n")
+        for finding in findings:
+            print(f"[{finding.status:<4}] {finding.key:<28} {finding.detail}")
+
+    return 1 if has_fail or (strict and has_warn) else 0
 
 
 def cmd_docs_check(ctx: AppContext, project_id_or_path: str = ".", *, strict: bool = False, output_format: str = "text") -> int:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from agents_memory.services.validation import cmd_docs_check, cmd_profile_check
+from agents_memory.services.validation import cmd_docs_check, cmd_plan_check, cmd_profile_check
 
 
 def _parse_validation_flags(args: list[str]) -> tuple[str, bool, str, str | None]:
@@ -37,8 +37,14 @@ def _handle_profile_check(ctx, args: list[str]) -> None:
     raise SystemExit(cmd_profile_check(ctx, target, profile_id=profile_id, strict=strict, output_format=output_format))
 
 
+def _handle_plan_check(ctx, args: list[str]) -> None:
+    target, strict, output_format, _profile_id = _parse_validation_flags(args)
+    raise SystemExit(cmd_plan_check(ctx, target, strict=strict, output_format=output_format))
+
+
 def register() -> dict[str, Callable]:
     return {
         "docs-check": _handle_docs_check,
         "profile-check": _handle_profile_check,
+        "plan-check": _handle_plan_check,
     }

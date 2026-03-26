@@ -1,6 +1,6 @@
 # Agents-Memory 项目文档
 
-> AI Agent 的共享记忆系统：结构化错误记录 → 规则提炼 → 自动写入 instruction，形成持续自我进化闭环。
+> Shared Engineering Brain for AI coding agents：Memory + Standards + Planning + Validation。
 
 ## 目录
 
@@ -15,6 +15,7 @@
 - [Copilot 自动激活设计](copilot-auto-activation.md)
 - [模块化与插件化结构](modular-architecture.md)
 - [AI Engineering Operating System](ai-engineering-operating-system.md)
+- [Planning Bundle Example](plans/planning-governance-gate/README.md)
 - [Foundation Hardening Plan](foundation-hardening.md)
 - [Stale Cleanup Inventory](stale-cleanup.md)
 - [Profiles](ai-engineering-operating-system.md#7-profiles-目录设计)

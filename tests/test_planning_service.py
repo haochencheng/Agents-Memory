@@ -7,6 +7,7 @@ from pathlib import Path
 
 from agents_memory.runtime import build_context
 from agents_memory.services.planning import init_plan_bundle, slugify_task_name
+from agents_memory.services.validation import cmd_plan_check, collect_plan_check_findings
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -64,3 +65,34 @@ class PlanningServiceTests(unittest.TestCase):
             self.assertFalse((target / "docs" / "plans" / "dry-run-plan").exists())
             self.assertIn("docs/plans/dry-run-plan/spec.md", result.wrote_files)
             self.assertTrue(result.dry_run)
+
+    def test_collect_plan_check_findings_flags_missing_required_bundle_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "target"
+            bundle = target / "docs" / "plans" / "demo-task"
+            bundle.mkdir(parents=True)
+            ctx = self._build_context(root)
+            _write_text(bundle / "README.md", "# Demo\nplanning bundle\n")
+            _write_text(bundle / "spec.md", "## Acceptance Criteria\n")
+            _write_text(bundle / "plan.md", "## Change Set\n")
+            _write_text(bundle / "validation.md", "## Required Checks\n")
+
+            findings = collect_plan_check_findings(target, str(target))
+
+            self.assertTrue(any(f.status == "FAIL" and f.key == "plan_files" for f in findings))
+
+    def test_cmd_plan_check_returns_zero_for_healthy_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "target"
+            target.mkdir()
+            ctx = self._build_context(root)
+            for name in ["README.template.md", "spec.template.md", "plan.template.md", "task-graph.template.md", "validation.template.md"]:
+                _write_text(root / "templates" / "planning" / name, f"# {name}\nplanning bundle\n## Acceptance Criteria\n## Change Set\n## Work Items\n## Exit Criteria\n## Required Checks\n{{{{TASK_NAME}}}}\n")
+
+            init_plan_bundle(ctx, "Healthy Bundle", target)
+
+            exit_code = cmd_plan_check(ctx, str(target))
+
+            self.assertEqual(exit_code, 0)
