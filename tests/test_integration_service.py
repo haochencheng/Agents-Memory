@@ -535,7 +535,93 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertEqual(state["last_execution_status"], "verified")
             self.assertEqual(state["last_verified_action"]["key"], "mcp_config")
 
-    def test_cmd_doctor_preserves_refactor_followup_metadata_when_rewriting_state(self) -> None:
+    def test_cmd_doctor_preserves_live_refactor_followup_metadata_when_rewriting_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(
+                project_root / "service.py",
+                "\n".join(
+                    [
+                        "def heavy(value):",
+                        "    total = 0",
+                        "    items = []",
+                        "    results = {}",
+                        "    status = None",
+                        "    errors = []",
+                        "    flags = set()",
+                        "    cache = {}",
+                        "    index = 0",
+                        "    if value > 0:",
+                        "        for outer in range(value):",
+                        "            if outer % 2 == 0:",
+                        "                for inner in range(3):",
+                        "                    if inner == 1:",
+                        "                        total += outer + inner",
+                        "                        items.append(total)",
+                        "                        results[outer] = inner",
+                        "                        status = 'hot'",
+                        "                    else:",
+                        "                        errors.append(inner)",
+                        "            else:",
+                        "                while index < 2:",
+                        "                    flags.add(index)",
+                        "                    index += 1",
+                        "    if total > 3:",
+                        "        cache['total'] = total",
+                        "    if items:",
+                        "        return total + len(items) + len(results) + len(errors) + len(flags) + len(cache)",
+                        "    return total",
+                    ]
+                )
+                + "\n",
+            )
+            _write_text(
+                root / "memory" / "projects.md",
+                "\n".join(
+                    [
+                        "# Project Registry",
+                        "",
+                        "## demo-project",
+                        "- **id**: demo-project",
+                        f"- **root**: {project_root}",
+                        '- **bridge_instruction**: ""',
+                        "- **active**: true",
+                    ]
+                ),
+            )
+            _write_text(
+                project_root / ".agents-memory" / "onboarding-state.json",
+                json.dumps(
+                    {
+                        "recommended_steps": [
+                            {
+                                "group": "Refactor",
+                                "key": "refactor_bundle",
+                                "bundle_path": "docs/plans/refactor-demo",
+                                "hotspot": {"identifier": "service.py::heavy"},
+                            }
+                        ],
+                        "recommended_refactor_bundle": {
+                            "bundle_path": "docs/plans/refactor-demo",
+                            "task_slug": "refactor-demo",
+                            "hotspot": {"identifier": "service.py::heavy"},
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+
+            with redirect_stdout(StringIO()):
+                cmd_doctor(ctx, str(project_root), write_state=True)
+
+            state = json.loads((project_root / ".agents-memory" / "onboarding-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["recommended_steps"][0]["key"], "refactor_bundle")
+            self.assertEqual(state["recommended_refactor_bundle"]["task_slug"], "refactor-demo")
+
+    def test_cmd_doctor_clears_stale_refactor_followup_metadata_when_rewriting_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             ctx = self._build_context(root)
@@ -564,11 +650,13 @@ class IntegrationServiceTests(unittest.TestCase):
                                 "group": "Refactor",
                                 "key": "refactor_bundle",
                                 "bundle_path": "docs/plans/refactor-demo",
+                                "hotspot": {"identifier": "service.py::heavy"},
                             }
                         ],
                         "recommended_refactor_bundle": {
                             "bundle_path": "docs/plans/refactor-demo",
                             "task_slug": "refactor-demo",
+                            "hotspot": {"identifier": "service.py::heavy"},
                         },
                     },
                     ensure_ascii=False,
@@ -579,8 +667,9 @@ class IntegrationServiceTests(unittest.TestCase):
                 cmd_doctor(ctx, str(project_root), write_state=True)
 
             state = json.loads((project_root / ".agents-memory" / "onboarding-state.json").read_text(encoding="utf-8"))
-            self.assertEqual(state["recommended_steps"][0]["key"], "refactor_bundle")
-            self.assertEqual(state["recommended_refactor_bundle"]["task_slug"], "refactor-demo")
+            self.assertNotIn("recommended_steps", state)
+            self.assertNotIn("recommended_refactor_bundle", state)
+            self.assertNotEqual(state["recommended_next_key"], "refactor_bundle")
 
     def test_execute_onboarding_next_action_requires_approval_for_unsafe_step(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

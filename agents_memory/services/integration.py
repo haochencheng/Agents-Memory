@@ -647,6 +647,7 @@ def _doctor_state_payload(
     existing_state: dict[str, object] | None = None,
 ) -> dict[str, object]:
     recommended_step = _doctor_recommended_step(runbook_steps)
+    preserved_steps, preserved_bundle = _reconcile_recommended_refactor_state(existing_state, project_root)
     groups = []
     for group_name, group_checks in grouped_checks:
         groups.append(
@@ -687,11 +688,15 @@ def _doctor_state_payload(
             "last_verified_action",
             "last_execution_status",
             "last_execution_at",
-            "recommended_steps",
-            "recommended_refactor_bundle",
         ):
             if key in existing_state:
                 payload[key] = existing_state[key]
+    if preserved_steps:
+        payload["recommended_steps"] = preserved_steps
+    if preserved_bundle is not None:
+        payload["recommended_refactor_bundle"] = preserved_bundle
+    if not runbook_steps and preserved_steps:
+        payload.update(_recommended_step_metadata(preserved_steps[0]))
     return payload
 
 
@@ -840,6 +845,46 @@ def _state_pending_steps(state: dict[str, object]) -> list[dict[str, object]]:
 def _state_recommended_steps(state: dict[str, object]) -> list[dict[str, object]]:
     return _state_steps(state.get("recommended_steps"))
 
+def _recommended_step_metadata(step: dict[str, object]) -> dict[str, object]:
+    return {
+        "recommended_next_group": step.get("group"),
+        "recommended_next_key": step.get("key"),
+        "recommended_next_command": step.get("command"),
+        "recommended_verify_command": step.get("verify_with") or "amem doctor .",
+        "recommended_done_when": step.get("done_when") or "No pending onboarding steps remain.",
+        "recommended_next_safe_to_auto_execute": bool(step.get("safe_to_auto_execute")),
+        "recommended_next_approval_required": bool(step.get("approval_required")),
+        "recommended_next_approval_reason": step.get("approval_reason"),
+    }
+
+def _reconcile_recommended_refactor_state(existing_state: dict[str, object] | None, project_root: Path) -> tuple[list[dict[str, object]], dict[str, object] | None]:
+    if existing_state is None:
+        return [], None
+
+    active_identifiers = {hotspot.identifier for hotspot in collect_refactor_watch_hotspots(project_root)}
+    if not active_identifiers:
+        preserved_steps = [step for step in _state_recommended_steps(existing_state) if step.get("key") != "refactor_bundle"]
+        return preserved_steps, None
+
+    preserved_steps: list[dict[str, object]] = []
+    for step in _state_recommended_steps(existing_state):
+        if step.get("key") != "refactor_bundle":
+            preserved_steps.append(step)
+            continue
+        hotspot = step.get("hotspot")
+        identifier = hotspot.get("identifier") if isinstance(hotspot, dict) else None
+        if identifier in active_identifiers:
+            preserved_steps.append(step)
+
+    bundle = existing_state.get("recommended_refactor_bundle")
+    preserved_bundle: dict[str, object] | None = None
+    if isinstance(bundle, dict):
+        hotspot = bundle.get("hotspot")
+        identifier = hotspot.get("identifier") if isinstance(hotspot, dict) else None
+        if identifier in active_identifiers:
+            preserved_bundle = bundle
+    return preserved_steps, preserved_bundle
+
 
 def _merge_refactor_followup_state(
     state: dict[str, object] | None,
@@ -887,18 +932,9 @@ def _merge_refactor_followup_state(
         "task_slug": task_slug,
         "hotspot_index": hotspot_index,
         "hotspot": hotspot,
-        "command": command,
-        "verify_with": "amem doctor .",
     }
     if not _state_pending_steps(payload):
-        payload["recommended_next_group"] = step["group"]
-        payload["recommended_next_key"] = step["key"]
-        payload["recommended_next_command"] = step["command"]
-        payload["recommended_verify_command"] = step["verify_with"]
-        payload["recommended_done_when"] = step["done_when"]
-        payload["recommended_next_safe_to_auto_execute"] = bool(step["safe_to_auto_execute"])
-        payload["recommended_next_approval_required"] = bool(step["approval_required"])
-        payload["recommended_next_approval_reason"] = step["approval_reason"]
+        payload.update(_recommended_step_metadata(step))
     return payload
 
 
