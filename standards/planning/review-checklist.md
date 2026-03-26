@@ -1,0 +1,10 @@
+# Review Checklist
+
+每个重要变更至少检查：
+
+1. 是否符合 Shared Engineering Brain 新目标
+2. 是否保持模块边界清晰
+3. 是否同步更新 docs / code / tests
+4. 是否引入重复实现
+5. 是否引入新死路径或误导性文档
+6. 是否给出最小验证结果

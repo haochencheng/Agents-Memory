@@ -14,5 +14,7 @@
 - [接入其他项目](integration.md)
 - [Copilot 自动激活设计](copilot-auto-activation.md)
 - [模块化与插件化结构](modular-architecture.md)
+- [AI Engineering Operating System](ai-engineering-operating-system.md)
+- [Foundation Hardening Plan](foundation-hardening.md)
 - [日常运维操作](ops.md)
 - [架构决策](architecture.md)

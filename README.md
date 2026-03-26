@@ -221,6 +221,30 @@ python scripts/memory.py agent-setup github-copilot /path/to/project
 
 这层设计让后续扩展新 agent 时，不需要再把 `register`、`doctor`、MCP、错误记录逻辑重新拆一遍。
 
+## Foundation Hardening
+
+项目当前已经开始进入“先打地基，再扩系统”的阶段。基础治理方案见：
+
+1. `docs/ai-engineering-operating-system.md`
+2. `docs/foundation-hardening.md`
+3. `standards/`
+
+第一批正式纳入仓库的代码规范包括：
+
+1. TDD
+2. DRY
+3. 代码复用优先
+4. 可插拔优先
+5. 模块化边界清晰
+6. 文档、代码、测试同步更新
+
+当前最小验证入口：
+
+```bash
+python3.12 -m unittest discover -s tests -p 'test_*.py'
+python3.12 -m py_compile $(find agents_memory scripts -name '*.py' -print)
+```
+
 ---
 
 ## 未来扩展路径（不需要现在做）
