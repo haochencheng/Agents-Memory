@@ -8,21 +8,18 @@
 
 默认模式的一键接入命令。自动完成当前项目的基础 Shared Engineering Brain 接入：
 
-- 自动注册项目到 `memory/projects.md`（如尚未注册）
-- 安装 bridge instruction
-- 写入 `.vscode/mcp.json`
-- 运行 `doctor --write-checklist --write-state`
-- 生成 onboarding bundle
 
 适合首次接入项目，目标是最小成本启用可运行链路。
+
+### `amem enable . --dry-run`
+
+预览模式。只展示当前项目将启用哪些能力、将写哪些文件，不落任何文件。
+
+适合在正式接入前先检查影响面。
 
 ### `amem enable . --full`
 
 全量模式的一键接入命令。在默认模式基础上继续：
-
-- 自动识别并应用推荐 profile
-- 安装 Copilot repo-wide activation
-- 为当前第一条 refactor hotspot 生成 refactor bundle
 - 把 refactor follow-up 写回 onboarding state
 
 适合希望一次性把 Shared Engineering Brain 核心能力全部打开的项目。

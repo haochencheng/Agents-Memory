@@ -380,10 +380,18 @@ class IntegrationServiceTests(unittest.TestCase):
         self.assertTrue(approve_unsafe)
 
     def test_parse_enable_args_supports_full_mode(self) -> None:
-        project_id_or_path, full = _parse_enable_args(["demo-project", "--full"])
+        project_id_or_path, full, dry_run = _parse_enable_args(["demo-project", "--full"])
 
         self.assertEqual(project_id_or_path, "demo-project")
         self.assertTrue(full)
+        self.assertFalse(dry_run)
+
+    def test_parse_enable_args_supports_dry_run(self) -> None:
+        project_id_or_path, full, dry_run = _parse_enable_args(["demo-project", "--dry-run"])
+
+        self.assertEqual(project_id_or_path, "demo-project")
+        self.assertFalse(full)
+        self.assertTrue(dry_run)
 
     def test_cmd_doctor_surfaces_planning_root_warning_for_applied_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -781,6 +789,31 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertTrue((project_root / ".agents-memory" / "onboarding-state.json").exists())
             self.assertTrue((project_root / "docs" / "plans" / "bootstrap-checklist.md").exists())
             self.assertTrue(any(path.is_dir() for path in (project_root / "docs" / "plans").glob("onboarding-*")))
+
+    def test_cmd_enable_dry_run_does_not_write_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(root / "templates" / "agents-memory-bridge.instructions.md", "root={{AGENTS_MEMORY_ROOT}}\nproject={{PROJECT_ID}}\n")
+            _write_text(root / "templates" / "agents-memory-copilot-instructions.md", "copilot {{PROJECT_ID}} {{AGENTS_MEMORY_ROOT}}\n")
+            for name in ["README.template.md", "spec.template.md", "plan.template.md", "task-graph.template.md", "validation.template.md"]:
+                _write_text(root / "templates" / "planning" / name, f"# {name}\nplanning bundle\n## Acceptance Criteria\n## Change Set\n## Work Items\n## Exit Criteria\n## Required Checks\n{{{{TASK_NAME}}}}\n")
+
+            buffer = StringIO()
+            with redirect_stdout(buffer):
+                exit_code = cmd_enable(ctx, str(project_root), dry_run=True)
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Planned Actions:", buffer.getvalue())
+            self.assertIn("Planned Writes:", buffer.getvalue())
+            projects_file = root / "memory" / "projects.md"
+            if projects_file.exists():
+                self.assertNotIn("## demo-project", projects_file.read_text(encoding="utf-8"))
+            self.assertFalse((project_root / ".vscode" / "mcp.json").exists())
+            self.assertFalse((project_root / ".agents-memory" / "onboarding-state.json").exists())
+            self.assertFalse((project_root / "docs" / "plans").exists())
 
     def test_cmd_enable_full_mode_applies_profile_and_refactor_followup(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

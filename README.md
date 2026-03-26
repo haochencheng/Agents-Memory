@@ -133,6 +133,7 @@ bash scripts/install-cli.sh
 ```bash
 # 一键接入 Shared Engineering Brain
 python3 scripts/memory.py enable .
+python3 scripts/memory.py enable . --dry-run
 python3 scripts/memory.py enable . --full
 
 # 错误记录与搜索

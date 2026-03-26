@@ -122,7 +122,7 @@ python3 scripts/memory.py copilot-setup [project-id]   # install repo-wide Copil
 python3 scripts/memory.py agent-list                   # list built-in agent adapters
 python3 scripts/memory.py agent-setup <agent> [path]   # install a specific agent adapter
 python3 scripts/memory.py register [path]              # one-command project registration + default agent + bridge install
-python3 scripts/memory.py enable [path] [--full]       # one-command Shared Engineering Brain enable; --full adds profile, Copilot, and refactor follow-up
+python3 scripts/memory.py enable [path] [--full] [--dry-run] # one-command Shared Engineering Brain enable; --full adds profile, Copilot, and refactor follow-up, --dry-run previews planned writes
 python3 scripts/memory.py bridge-install <project-id>  # install bridge instruction in a project
 python3 scripts/memory.py mcp-setup [project-id]       # write .vscode/mcp.json for a registered project
 python3 scripts/memory.py doctor [project-id] [--write-checklist] [--write-state] # verify a project's full integration health

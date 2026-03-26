@@ -1,12 +1,12 @@
 # 接入其他项目
 
-> 把任意项目的 AI Agent 接入 Agents-Memory 共享记忆系统，全程约 2 分钟。
+> 把任意项目的 AI Agent 接入 Agents-Memory Shared Engineering Brain，全程约 2 分钟。
 
 ---
 
 ## 接入需要做什么？
 
-接入共 4 步，`amem register` **全部自动完成**：
+接入共 4 步，推荐通过 `amem enable .` 一次编排完成：
 
 | 步骤 | 做什么 | 效果 |
 |------|--------|------|
@@ -37,10 +37,42 @@ bash Agents-Memory/scripts/install-cli.sh
 
 ```bash
 cd /path/to/your-project
+amem enable .
+```
+
+如果你想先看影响面，不立刻写文件：
+
+```bash
+amem enable . --dry-run
+```
+
+如果你想把 profile、Copilot 激活和第一条 refactor follow-up 也一起打开：
+
+```bash
+amem enable . --full
+```
+
+默认模式会自动完成：
+
+1. 注册项目
+2. 安装 bridge instruction
+3. 写入 `.vscode/mcp.json`
+4. 导出 `doctor` state/checklist
+5. 生成 onboarding bundle
+
+`--full` 会继续：
+
+1. 自动应用推荐 profile
+2. 安装或更新 `.github/copilot-instructions.md`
+3. 为第一条 refactor hotspot 生成 bundle，并把 follow-up 写回 onboarding state
+
+如果你仍然想逐项确认或手动控制每一步，也可以继续使用交互式 `amem register`：
+
+```bash
 amem register
 ```
 
-所有步骤直接回车确认默认值即可：
+交互式 `register` 中，所有步骤直接回车确认默认值即可：
 
 ```
 🔍 检测到项目 ID: my-service  (来源: git remote / 目录名)
@@ -71,7 +103,9 @@ Domains (逗号分隔) [frontend, python]: ↵
 
 > **提示 2**：如果目标项目已有 `.vscode/mcp.json`（含其他 MCP server），命令会**合并写入** `agents-memory` 条目，不覆盖现有配置。
 
-> **提示 3**：`register` 当前默认安装的是 `github-copilot` adapter。后续如果你要试吃其他 agent，可先运行 `amem agent-list` 查看内置 adapters，再用 `amem agent-setup <agent> <target>` 单独安装。
+> **提示 3**：`enable` 默认模式不会自动写 `.github/copilot-instructions.md`；如果你要连同 repo-wide Copilot 激活一起接上，请用 `amem enable . --full`。
+
+> **提示 4**：`enable --dry-run` 不会写任何文件，适合先评估将要启用的能力和目标路径。
 
 ---
 

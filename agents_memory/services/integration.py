@@ -11,6 +11,7 @@ from pathlib import Path
 
 from agents_memory.constants import (
     BRIDGE_TEMPLATE_NAME,
+    COPILOT_INSTRUCTIONS_REL,
     DEFAULT_BRIDGE_INSTRUCTION_REL,
     MCP_CONFIG_NAME,
     PYTHON_BIN,
@@ -32,6 +33,7 @@ from agents_memory.services.projects import (
     resolve_project_target,
 )
 from agents_memory.services.profiles import apply_profile, detect_applied_profile, load_profile
+from agents_memory.services.profiles import PROFILE_MANIFEST_REL, expected_profile_paths
 from agents_memory.services.records import collect_errors
 from agents_memory.services.validation import collect_plan_check_findings, collect_profile_check_findings, collect_refactor_watch_findings, collect_refactor_watch_hotspots
 
@@ -1678,6 +1680,96 @@ def _ensure_registered_project(ctx: AppContext, project_root: Path) -> tuple[str
     return project_id, True
 
 
+def _doctor_artifact_paths(project_root: Path, *, write_state: bool, write_checklist: bool) -> list[Path]:
+    artifacts: list[Path] = []
+    if write_checklist:
+        artifacts.append(project_root / "docs" / "plans" / "bootstrap-checklist.md")
+        artifacts.append(project_root / "docs" / "plans" / "refactor-watch.md")
+    if write_state:
+        artifacts.append(project_root / ".agents-memory" / "onboarding-state.json")
+    return artifacts
+
+
+def _preview_enable_actions(ctx: AppContext, project_root: Path, *, project_id: str, full: bool) -> tuple[list[str], list[str]]:
+    actions: list[str] = []
+    paths: list[str] = []
+
+    if not project_already_registered(ctx, project_id):
+        actions.append(f"register project `{project_id}`")
+        paths.append(str(ctx.projects_file))
+    else:
+        actions.append(f"reuse registered project `{project_id}`")
+
+    bridge_path = project_root / DEFAULT_BRIDGE_INSTRUCTION_REL
+    if not bridge_path.exists():
+        actions.append("install bridge instruction")
+        paths.append(str(bridge_path))
+    else:
+        actions.append("reuse existing bridge instruction")
+
+    mcp_path = project_root / VSCODE_DIRNAME / MCP_CONFIG_NAME
+    actions.append("merge agents-memory MCP server config")
+    paths.append(str(mcp_path))
+
+    recommended_profile_id = None
+    applied_profile_id = detect_applied_profile(project_root)
+    if full and not applied_profile_id:
+        recommended_profile_id = _recommended_enable_profile_id(project_root)
+        if recommended_profile_id:
+            actions.append(f"apply recommended profile `{recommended_profile_id}`")
+            profile = load_profile(ctx, recommended_profile_id)
+            expected = expected_profile_paths(profile, project_root)
+            paths.extend(str(path) for path in expected["bootstrap_dirs"])
+            paths.extend(str(path) for path in expected["standard_files"])
+            paths.extend(str(path) for path in expected["template_files"])
+            paths.append(str(project_root / PROFILE_MANIFEST_REL))
+        else:
+            actions.append("skip profile auto-apply (no default profile detected)")
+    elif applied_profile_id:
+        actions.append(f"reuse applied profile `{applied_profile_id}`")
+    else:
+        actions.append("skip profile auto-apply in default mode")
+
+    if full:
+        actions.append("install or update Copilot activation block")
+        paths.append(str(project_root / COPILOT_INSTRUCTIONS_REL))
+
+    actions.append("refresh doctor state and checklist artifacts")
+    paths.extend(str(path) for path in _doctor_artifact_paths(project_root, write_state=True, write_checklist=True))
+
+    report = _doctor_report(ctx, str(project_root))
+    recommended_key = "onboarding"
+    if isinstance(report, dict):
+        runbook_steps = report.get("runbook_steps")
+        if isinstance(runbook_steps, list) and runbook_steps and isinstance(runbook_steps[0], dict):
+            recommended_key = str(runbook_steps[0].get("key") or recommended_key)
+    onboarding_slug = f"onboarding-{recommended_key.replace('_', '-')}"
+    onboarding_plan_root = project_root / "docs" / "plans" / onboarding_slug
+    actions.append("generate onboarding planning bundle")
+    paths.extend(
+        str(onboarding_plan_root / filename)
+        for filename in ("README.md", "spec.md", "plan.md", "task-graph.md", "validation.md")
+    )
+
+    if full:
+        hotspots = collect_refactor_watch_hotspots(project_root)
+        if hotspots:
+            hotspot = hotspots[0]
+            refactor_slug = f"refactor-{re.sub(r'[^a-zA-Z0-9]+', '-', f'{hotspot.relative_path}-{hotspot.function_name}'.lower()).strip('-') or 'untitled-task'}"
+            refactor_root = project_root / "docs" / "plans" / refactor_slug
+            actions.append(f"generate refactor bundle for `{hotspot.identifier}` using `{hotspot.rank_token}`")
+            paths.extend(
+                str(refactor_root / filename)
+                for filename in ("README.md", "spec.md", "plan.md", "task-graph.md", "validation.md")
+            )
+            paths.append(str(project_root / ".agents-memory" / "onboarding-state.json"))
+        else:
+            actions.append("skip refactor bundle generation (no hotspots)")
+
+    deduped_paths = list(dict.fromkeys(paths))
+    return actions, deduped_paths
+
+
 def _recommended_enable_profile_id(project_root: Path) -> str | None:
     if detect_applied_profile(project_root):
         return None
@@ -1694,7 +1786,7 @@ def _recommended_enable_profile_id(project_root: Path) -> str | None:
     return None
 
 
-def cmd_enable(ctx: AppContext, project_id_or_path: str = ".", *, full: bool = False) -> int:
+def cmd_enable(ctx: AppContext, project_id_or_path: str = ".", *, full: bool = False, dry_run: bool = False) -> int:
     project_root = Path(project_id_or_path).expanduser().resolve()
     if not project_root.exists():
         print(f"路径不存在: {project_root}")
@@ -1703,10 +1795,25 @@ def cmd_enable(ctx: AppContext, project_id_or_path: str = ".", *, full: bool = F
         print(f"目标不是目录: {project_root}")
         return 1
 
-    ctx.logger.info("enable_start | target=%s | full=%s", project_root, full)
+    ctx.logger.info("enable_start | target=%s | full=%s | dry_run=%s", project_root, full, dry_run)
     print("\n=== Agents-Memory Enable ===")
     print(f"Target: {project_root}")
     print(f"Mode:   {'full' if full else 'default'}")
+    print(f"DryRun: {'yes' if dry_run else 'no'}")
+
+    resolved_project_id, _resolved_root, _project = resolve_project_target(ctx, str(project_root))
+    if dry_run:
+        actions, paths = _preview_enable_actions(ctx, project_root, project_id=resolved_project_id, full=full)
+        print("\nPlanned Actions:")
+        for item in actions:
+            print(f"- {item}")
+        print("\nPlanned Writes:")
+        for path in paths:
+            print(f"- {path}")
+        print("\nNext:")
+        print("- Re-run without --dry-run to apply these changes")
+        ctx.logger.info("enable_preview | target=%s | full=%s | planned_writes=%s", project_root, full, len(paths))
+        return 0
 
     project_id, registered_now = _ensure_registered_project(ctx, project_root)
     print(f"- registry: {'created' if registered_now else 'ready'} ({project_id})")
@@ -1786,5 +1893,5 @@ def cmd_enable(ctx: AppContext, project_id_or_path: str = ".", *, full: bool = F
     print("- Run amem doctor . after your next structural change")
     if full:
         print("- If a refactor bundle was generated, review its spec.md before editing code")
-    ctx.logger.info("enable_complete | target=%s | full=%s | project_id=%s", project_root, full, project_id)
+    ctx.logger.info("enable_complete | target=%s | full=%s | dry_run=%s | project_id=%s", project_root, full, dry_run, project_id)
     return 0

@@ -53,22 +53,25 @@ def _run_onboarding_execute(ctx, args: list[str]) -> None:
     cmd_onboarding_execute(ctx, project_id_or_path, verify=verify, approve_unsafe=approve_unsafe)
 
 
-def _parse_enable_args(args: list[str]) -> tuple[str, bool]:
+def _parse_enable_args(args: list[str]) -> tuple[str, bool, bool]:
     project_id_or_path = "."
     full = False
+    dry_run = False
     for arg in args:
         if arg == "--full":
             full = True
+        elif arg == "--dry-run":
+            dry_run = True
         elif arg.startswith("--"):
             print(f"未知参数: {arg}")
         else:
             project_id_or_path = arg
-    return project_id_or_path, full
+    return project_id_or_path, full, dry_run
 
 
 def _run_enable(ctx, args: list[str]) -> None:
-    project_id_or_path, full = _parse_enable_args(args)
-    raise SystemExit(cmd_enable(ctx, project_id_or_path, full=full))
+    project_id_or_path, full, dry_run = _parse_enable_args(args)
+    raise SystemExit(cmd_enable(ctx, project_id_or_path, full=full, dry_run=dry_run))
 
 
 def register() -> dict[str, Callable]:

@@ -359,7 +359,7 @@ def init_onboarding_bundle(
 
     plan_result = init_plan_bundle(ctx, task_name, target_root, task_slug=resolved_slug, dry_run=dry_run)
     relative_state_path = " .agents-memory/onboarding-state.json".strip()
-    wrote_files: list[str] = []
+    wrote_files: list[str] = list(plan_result.wrote_files)
     refreshed_files: list[str] = []
     skipped_files: list[str] = []
 

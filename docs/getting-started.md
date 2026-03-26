@@ -130,6 +130,9 @@ python3 scripts/memory.py doctor .
 python3 scripts/memory.py enable .
 # 输出: 一键启用当前项目的基础 Shared Engineering Brain 接入（自动注册、bridge、mcp、doctor 工件、onboarding bundle）
 
+python3 scripts/memory.py enable . --dry-run
+# 输出: 只预览将启用的能力和将写入的文件，不落任何文件
+
 python3 scripts/memory.py enable . --full
 # 输出: 在默认模式基础上继续启用推荐 profile、Copilot 激活，以及第一条 refactor hotspot 对应的 bundle / follow-up state
 
