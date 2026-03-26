@@ -226,9 +226,12 @@ amem doctor . --write-state --write-checklist
 2. `recommended_next_command`
 3. `recommended_verify_command`
 4. `recommended_done_when`
-5. `execution_history`
-6. `last_executed_action`
-7. `last_verified_action`
+5. `recommended_next_safe_to_auto_execute`
+6. `recommended_next_approval_required`
+7. `recommended_next_approval_reason`
+8. `execution_history`
+9. `last_executed_action`
+10. `last_verified_action`
 
 如果 agent 只想拿当前第一步动作，而不是整份 state，可优先调用 MCP tool：
 
@@ -239,13 +242,19 @@ memory_get_onboarding_next_action(project_root=".")
 如果 agent 希望直接执行第一步 onboarding action，并把执行/验证结果回写到 state，可调用：
 
 ```text
-memory_execute_onboarding_next_action(project_root=".", verify=true)
+memory_execute_onboarding_next_action(project_root=".", verify=true, approve_unsafe=false)
 ```
 
 CLI 对应命令：
 
 ```bash
 amem onboarding-execute .
+```
+
+如果 state 或 next-action payload 表明 `approval_required=true`，则默认不执行。此时应由人类明确批准，再运行：
+
+```bash
+amem onboarding-execute . --approve-unsafe
 ```
 
 如果你想把这个状态直接落成可执行 planning 工件：

@@ -31,22 +31,25 @@ def _parse_doctor_args(args: list[str]) -> tuple[str, bool, bool]:
     return project_id_or_path, write_state, write_checklist
 
 
-def _parse_onboarding_execute_args(args: list[str]) -> tuple[str, bool]:
+def _parse_onboarding_execute_args(args: list[str]) -> tuple[str, bool, bool]:
     project_id_or_path = "."
     verify = True
+    approve_unsafe = False
     for arg in args:
         if arg == "--no-verify":
             verify = False
+        elif arg == "--approve-unsafe":
+            approve_unsafe = True
         elif arg.startswith("--"):
             print(f"未知参数: {arg}")
         else:
             project_id_or_path = arg
-    return project_id_or_path, verify
+    return project_id_or_path, verify, approve_unsafe
 
 
 def _run_onboarding_execute(ctx, args: list[str]) -> None:
-    project_id_or_path, verify = _parse_onboarding_execute_args(args)
-    cmd_onboarding_execute(ctx, project_id_or_path, verify=verify)
+    project_id_or_path, verify, approve_unsafe = _parse_onboarding_execute_args(args)
+    cmd_onboarding_execute(ctx, project_id_or_path, verify=verify, approve_unsafe=approve_unsafe)
 
 
 def register() -> dict[str, Callable]:

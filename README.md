@@ -146,6 +146,7 @@ python3 scripts/memory.py register .
 python3 scripts/memory.py doctor .
 python3 scripts/memory.py doctor . --write-checklist --write-state
 python3 scripts/memory.py onboarding-execute .
+python3 scripts/memory.py onboarding-execute . --approve-unsafe
 python3 scripts/memory.py onboarding-bundle .
 python3 scripts/memory.py copilot-setup .
 python3 scripts/memory.py bridge-install your-project
@@ -198,9 +199,10 @@ python3 scripts/memory.py docs-check .
 `profile-apply` 现在会默认写出 `docs/plans/README.md` 入口模板，`doctor` 也会开始感知 planning root 和 planning bundle 健康状态。
 `doctor` 的输出现在按 `Core / Planning / Integration / Optional` 分组，并为每个分组生成健康小结、修复建议、按优先级排序的行动序列，以及带 `Command / Verify with / Next command / Done when` 的 onboarding runbook，同时给出 `Project Bootstrap Checklist`。
 如果加上 `--write-checklist --write-state`，它还会导出 `docs/plans/bootstrap-checklist.md` 和 `.agents-memory/onboarding-state.json`，把控制台状态沉淀成可复查工件。
-`onboarding-state.json` 现在包含 `project_bootstrap_ready`、`recommended_next_command`、`recommended_verify_command`，以及 `execution_history`、`last_executed_action`、`last_verified_action` 等闭环字段，方便 agent 在进入项目时先读 state，再决定是否先跑 `mcp-setup`、`plan-init` 或 `profile-check`，并保留最近一次执行/验证记录。
+`onboarding-state.json` 现在包含 `project_bootstrap_ready`、`recommended_next_command`、`recommended_verify_command`，以及 `recommended_next_safe_to_auto_execute`、`recommended_next_approval_required`、`execution_history`、`last_executed_action`、`last_verified_action` 等闭环字段，方便 agent 在进入项目时先读 state，再决定是否先跑 `mcp-setup`、`plan-init` 或 `profile-check`，并保留最近一次执行/验证记录。
 `onboarding-bundle` 则会基于当前 state 生成一个 onboarding task bundle，把推荐动作落到 `docs/plans/onboarding-*/` 的 spec / plan / task graph / validation 套件里。
-现在 MCP 还提供了更直接的 `memory_get_onboarding_next_action()`，agent 可以不解析整份 state，直接拿到当前第一步应执行的 onboarding action；如果希望系统直接执行并回写 state，则可调用 `memory_execute_onboarding_next_action()` 或 CLI `onboarding-execute`。
+现在 MCP 还提供了更直接的 `memory_get_onboarding_next_action()`，agent 可以不解析整份 state，直接拿到当前第一步应执行的 onboarding action；如果希望系统直接执行并回写 state，则可调用 `memory_execute_onboarding_next_action()` 或 CLI `onboarding-execute`。执行器现在默认只自动执行 `safe_to_auto_execute=true` 的低风险步骤；高风险步骤会返回 `approval_required`，需要显式批准后再运行。
+代码标准这边也新增了复杂度重构约束，落在 [standards/python/base.instructions.md](standards/python/base.instructions.md)：命中硬性条件或累计命中多个软性条件时，必须先重构再继续加功能，并附带了可直接复用的复杂度判定模板。
 
 ## 开源与本地运行数据边界
 

@@ -49,78 +49,104 @@ DOCTOR_RUNBOOK = {
         "command": "amem register .",
         "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] registry` for this project.",
+        "safe_to_auto_execute": False,
+        "approval_reason": "registration mutates shared project registry state and may install multiple integration files",
     },
     "active": {
         "action": "Make sure the registered project is marked active before relying on sync or governance checks.",
         "command": "amem register .",
         "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] active`.",
+        "safe_to_auto_execute": False,
+        "approval_reason": "fixing active status changes shared registry metadata and should be reviewed by a human owner",
     },
     "root": {
         "action": "Repair the project root mapping so Agents-Memory resolves the correct repository path.",
         "command": "amem register .",
         "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] root` with the expected absolute path.",
+        "safe_to_auto_execute": False,
+        "approval_reason": "repairing root mapping changes registry paths and can affect other automation flows",
     },
     PYTHON_BIN: {
         "action": f"Install `{PYTHON_BIN}` or expose it on PATH for runtime checks and MCP startup.",
         "command": f"{PYTHON_BIN} --version",
         "verify_with": "amem doctor .",
         "done_when": f"`amem doctor .` shows `[OK] {PYTHON_BIN}`.",
+        "safe_to_auto_execute": False,
+        "approval_reason": "runtime setup may require machine-level changes outside the repository",
     },
     "mcp_package": {
         "action": "Install the MCP package into the Python environment used by Agents-Memory.",
         "command": f"{PYTHON_BIN} -m pip install mcp",
         "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] mcp_package`.",
+        "safe_to_auto_execute": False,
+        "approval_reason": "package installation mutates the active Python environment",
     },
     "profile_manifest": {
         "action": "Apply a project profile so the repo has an explicit engineering contract.",
         "command": "amem profile-apply <profile> .",
         "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] profile_manifest`.",
+        "safe_to_auto_execute": False,
+        "approval_reason": "profile application writes multiple managed files and requires an explicit profile choice",
     },
     "profile_consistency": {
         "action": "Repair missing or drifted profile-managed files before continuing onboarding.",
         "command": "amem profile-check .",
         "verify_with": "amem profile-check .",
         "done_when": "`amem doctor .` shows `[OK] profile_consistency`.",
+        "safe_to_auto_execute": False,
+        "approval_reason": "this step diagnoses drift but manual repair choices still require a human decision",
     },
     "planning_root": {
         "action": "Seed the planning workspace so specs, plans, task graphs, and validation bundles have a home.",
         "command": 'amem plan-init "<task-name>" .',
         "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] planning_root`.",
+        "safe_to_auto_execute": False,
+        "approval_reason": "planning bootstrap requires a human task name and creates tracked planning artifacts",
     },
     "planning_bundle": {
         "action": "Repair the planning bundle so the repository has a valid spec-first execution package.",
         "command": "amem plan-check .",
         "verify_with": "amem plan-check .",
         "done_when": "`amem doctor .` shows `[OK] planning_bundle`.",
+        "safe_to_auto_execute": False,
+        "approval_reason": "plan-check only diagnoses issues; actual planning repairs should be reviewed before editing tracked docs",
     },
     "bridge_instruction": {
         "action": "Install the bridge instruction so agents can load shared startup context automatically.",
         "command": "amem bridge-install <project-id>",
         "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] bridge_instruction`.",
+        "safe_to_auto_execute": False,
+        "approval_reason": "bridge installation writes tracked repository instructions and may require project-specific review",
     },
     "mcp_config": {
         "action": "Create or repair the MCP configuration so IDE agents can call Agents-Memory tools.",
         "command": "amem mcp-setup .",
         "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] mcp_config`.",
+        "safe_to_auto_execute": True,
+        "approval_reason": "writes only local IDE MCP config under .vscode for the current project",
     },
     "copilot_activation": {
         "action": "Install repo-wide Copilot activation so the default agent loads the shared brain automatically.",
         "command": "amem copilot-setup .",
         "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] copilot_activation`.",
+        "safe_to_auto_execute": False,
+        "approval_reason": "copilot activation writes tracked repository instructions that should be explicitly approved",
     },
     "agents_read_order": {
         "action": "Add the bridge reference to AGENTS.md or docs/AGENTS.md so humans and agents share the same startup order.",
         "command": 'rg -n "agents-memory-bridge" AGENTS.md docs/AGENTS.md',
         "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[INFO] agents_read_order bridge referenced in AGENTS/docs/AGENTS`.",
+        "safe_to_auto_execute": False,
+        "approval_reason": "the current command is diagnostic only; updating AGENTS read order should be a human-reviewed doc edit",
     },
 }
 DOCTOR_GROUP_REMEDIATION = {
@@ -543,8 +569,8 @@ def _doctor_action_sequence(grouped_checks: list[tuple[str, list[tuple[str, str,
     return actions
 
 
-def _doctor_runbook_steps(grouped_checks: list[tuple[str, list[tuple[str, str, str]]]]) -> list[dict[str, str]]:
-    steps: list[dict[str, str]] = []
+def _doctor_runbook_steps(grouped_checks: list[tuple[str, list[tuple[str, str, str]]]]) -> list[dict[str, object]]:
+    steps: list[dict[str, object]] = []
     seen: set[tuple[str, str]] = set()
     for group_name, group_checks in grouped_checks:
         priority = DOCTOR_GROUP_PRIORITY.get(group_name, "recommended")
@@ -568,6 +594,9 @@ def _doctor_runbook_steps(grouped_checks: list[tuple[str, list[tuple[str, str, s
                     "command": runbook["command"],
                     "verify_with": runbook["verify_with"],
                     "done_when": runbook["done_when"],
+                    "safe_to_auto_execute": bool(runbook.get("safe_to_auto_execute", False)),
+                    "approval_required": not bool(runbook.get("safe_to_auto_execute", False)),
+                    "approval_reason": runbook.get("approval_reason", "manual approval required before this onboarding action can run"),
                 }
             )
             seen.add(step_id)
@@ -579,7 +608,7 @@ def _doctor_runbook_steps(grouped_checks: list[tuple[str, list[tuple[str, str, s
     return steps
 
 
-def _doctor_bootstrap_checklist(grouped_checks: list[tuple[str, list[tuple[str, str, str]]]], runbook_steps: list[dict[str, str]]) -> list[str]:
+def _doctor_bootstrap_checklist(grouped_checks: list[tuple[str, list[tuple[str, str, str]]]], runbook_steps: list[dict[str, object]]) -> list[str]:
     checklist: list[str] = []
     for group_name, group_checks in grouped_checks:
         group_status = _doctor_group_status(group_checks)
@@ -591,11 +620,11 @@ def _doctor_bootstrap_checklist(grouped_checks: list[tuple[str, list[tuple[str, 
     return checklist
 
 
-def _doctor_recommended_step(runbook_steps: list[dict[str, str]]) -> dict[str, str] | None:
+def _doctor_recommended_step(runbook_steps: list[dict[str, object]]) -> dict[str, object] | None:
     return runbook_steps[0] if runbook_steps else None
 
 
-def _doctor_required_steps_pending(runbook_steps: list[dict[str, str]]) -> bool:
+def _doctor_required_steps_pending(runbook_steps: list[dict[str, object]]) -> bool:
     return any(step.get("priority") == "required" for step in runbook_steps)
 
 
@@ -605,7 +634,7 @@ def _doctor_state_payload(
     overall: str,
     grouped_checks: list[tuple[str, list[tuple[str, str, str]]]],
     action_sequence: list[str],
-    runbook_steps: list[dict[str, str]],
+    runbook_steps: list[dict[str, object]],
     checklist: list[str],
     existing_state: dict[str, object] | None = None,
 ) -> dict[str, object]:
@@ -635,6 +664,9 @@ def _doctor_state_payload(
         "recommended_next_command": recommended_step["command"] if recommended_step else None,
         "recommended_verify_command": recommended_step["verify_with"] if recommended_step else "amem doctor .",
         "recommended_done_when": recommended_step["done_when"] if recommended_step else "No pending onboarding steps remain.",
+        "recommended_next_safe_to_auto_execute": bool(recommended_step.get("safe_to_auto_execute")) if recommended_step else False,
+        "recommended_next_approval_required": bool(recommended_step.get("approval_required")) if recommended_step else False,
+        "recommended_next_approval_reason": recommended_step.get("approval_reason") if recommended_step else None,
         "groups": groups,
         "action_sequence": action_sequence,
         "runbook_steps": runbook_steps,
@@ -653,7 +685,7 @@ def _doctor_checklist_markdown(
     overall: str,
     grouped_checks: list[tuple[str, list[tuple[str, str, str]]]],
     action_sequence: list[str],
-    runbook_steps: list[dict[str, str]],
+    runbook_steps: list[dict[str, object]],
     checklist: list[str],
 ) -> str:
     lines = [
@@ -681,6 +713,9 @@ def _doctor_checklist_markdown(
                     f"- Command: `{step['command']}`",
                     f"- Verify with: `{step['verify_with']}`",
                     f"- Next command: `{step['next_command']}`",
+                    f"- Safe To Auto Execute: `{step['safe_to_auto_execute']}`",
+                    f"- Approval Required: `{step['approval_required']}`",
+                    f"- Approval Reason: {step['approval_reason']}",
                     f"- Done when: {step['done_when']}",
                     "",
                 ]
@@ -789,6 +824,10 @@ def _merge_onboarding_execution_state(state: dict[str, object] | None, event: di
         "priority": event.get("priority"),
         "command": event.get("command"),
         "resolved_command": event.get("resolved_command"),
+        "safe_to_auto_execute": event.get("safe_to_auto_execute"),
+        "approval_required": event.get("approval_required"),
+        "approval_reason": event.get("approval_reason"),
+        "approve_unsafe": event.get("approve_unsafe"),
         "executed_at": event.get("executed_at"),
         "returncode": event.get("execution_returncode"),
         "success": event.get("execution_success"),
@@ -802,6 +841,10 @@ def _merge_onboarding_execution_state(state: dict[str, object] | None, event: di
             "key": event.get("key"),
             "verify_with": event.get("verify_with"),
             "resolved_verify_with": event.get("resolved_verify_with"),
+            "safe_to_auto_execute": event.get("safe_to_auto_execute"),
+            "approval_required": event.get("approval_required"),
+            "approval_reason": event.get("approval_reason"),
+            "approve_unsafe": event.get("approve_unsafe"),
             "verified_at": event.get("verified_at"),
             "returncode": event.get("verification_returncode"),
             "success": event.get("verification_success"),
@@ -882,6 +925,13 @@ def onboarding_next_action(project_root: Path) -> dict[str, object]:
             "recommended_command": "python3 scripts/memory.py doctor . --write-state --write-checklist",
         }
     first_step = _runbook_step_from_state(state)
+    if isinstance(runbook_steps, list) and runbook_steps and first_step is None:
+        return {
+            "status": "invalid",
+            "project_root": str(project_root),
+            "message": "Onboarding state is present but malformed.",
+            "recommended_command": "python3 scripts/memory.py doctor . --write-state --write-checklist",
+        }
     if first_step is None:
         return {
             "status": "ready",
@@ -907,6 +957,9 @@ def onboarding_next_action(project_root: Path) -> dict[str, object]:
         "verify_with": first_step.get("verify_with"),
         "done_when": first_step.get("done_when"),
         "next_command": first_step.get("next_command"),
+        "safe_to_auto_execute": bool(first_step.get("safe_to_auto_execute")),
+        "approval_required": bool(first_step.get("approval_required")),
+        "approval_reason": first_step.get("approval_reason"),
         "message": "Complete this onboarding action before deep work." if blocking else "Recommended onboarding follow-up is available.",
     }
 
@@ -916,6 +969,7 @@ def execute_onboarding_next_action(
     project_root: Path,
     *,
     verify: bool = True,
+    approve_unsafe: bool = False,
     refresh_artifacts: bool = True,
 ) -> dict[str, object]:
     state = load_onboarding_state(project_root)
@@ -932,6 +986,20 @@ def execute_onboarding_next_action(
             "recommended_command": "python3 scripts/memory.py doctor . --write-state --write-checklist",
         }
 
+    safe_to_auto_execute = bool(step.get("safe_to_auto_execute"))
+    approval_required = bool(step.get("approval_required", not safe_to_auto_execute))
+    if approval_required and not approve_unsafe:
+        return {
+            "status": "approval_required",
+            "project_root": str(project_root),
+            "step": step,
+            "state_updated": False,
+            "artifacts_refreshed": False,
+            "message": "This onboarding step is not marked safe for automatic execution.",
+            "approval_reason": step.get("approval_reason"),
+            "recommended_command": f"amem onboarding-execute {shlex.quote(str(project_root))} --approve-unsafe",
+        }
+
     executed_at = datetime.now(timezone.utc).isoformat()
     command_payload = _run_onboarding_command(ctx, project_root, str(step.get("command") or ""))
     event: dict[str, object] = {
@@ -942,6 +1010,10 @@ def execute_onboarding_next_action(
         "command": step.get("command"),
         "resolved_command": command_payload["resolved_command"],
         "verify_with": step.get("verify_with"),
+        "safe_to_auto_execute": safe_to_auto_execute,
+        "approval_required": approval_required,
+        "approval_reason": step.get("approval_reason"),
+        "approve_unsafe": approve_unsafe,
         "executed_at": executed_at,
         "execution_returncode": command_payload["returncode"],
         "execution_success": command_payload["success"],
@@ -962,6 +1034,7 @@ def execute_onboarding_next_action(
             "verify": None,
             "state_updated": True,
             "artifacts_refreshed": False,
+            "approval_used": approve_unsafe and approval_required,
         }
 
     verify_payload: dict[str, object] | None = None
@@ -1008,6 +1081,7 @@ def execute_onboarding_next_action(
         "state_updated": True,
         "artifacts_refreshed": artifacts_refreshed,
         "written_artifacts": [str(path) for path in written_artifacts],
+        "approval_used": approve_unsafe and approval_required,
         "next_action": onboarding_next_action(project_root),
     }
 
@@ -1019,7 +1093,7 @@ def _write_doctor_artifacts(
     overall: str,
     grouped_checks: list[tuple[str, list[tuple[str, str, str]]]],
     action_sequence: list[str],
-    runbook_steps: list[dict[str, str]],
+    runbook_steps: list[dict[str, object]],
     checklist: list[str],
     *,
     write_state: bool,
@@ -1103,6 +1177,9 @@ def cmd_doctor(
             print(f"   Command: {step['command']}")
             print(f"   Verify with: {step['verify_with']}")
             print(f"   Next command: {step['next_command']}")
+            print(f"   Safe to auto execute: {step['safe_to_auto_execute']}")
+            print(f"   Approval required: {step['approval_required']}")
+            print(f"   Approval reason: {step['approval_reason']}")
             print(f"   Done when: {step['done_when']}")
         print()
 
@@ -1141,7 +1218,13 @@ def cmd_doctor(
     ctx.logger.info("doctor_complete | project_id=%s | project_root=%s | overall=%s", project_id, project_root, overall)
 
 
-def cmd_onboarding_execute(ctx: AppContext, project_id_or_path: str = ".", *, verify: bool = True) -> None:
+def cmd_onboarding_execute(
+    ctx: AppContext,
+    project_id_or_path: str = ".",
+    *,
+    verify: bool = True,
+    approve_unsafe: bool = False,
+) -> None:
     _project_id, project_root, _project = resolve_project_target(ctx, project_id_or_path)
     if project_root is None:
         ctx.logger.warning("onboarding_execute_skip | target=%s | reason=unknown_project_or_path", project_id_or_path)
@@ -1149,13 +1232,22 @@ def cmd_onboarding_execute(ctx: AppContext, project_id_or_path: str = ".", *, ve
         print(REGISTER_HINT)
         return
 
-    result = execute_onboarding_next_action(ctx, project_root, verify=verify, refresh_artifacts=True)
+    result = execute_onboarding_next_action(
+        ctx,
+        project_root,
+        verify=verify,
+        approve_unsafe=approve_unsafe,
+        refresh_artifacts=True,
+    )
     status = str(result.get("status"))
-    if status in {"missing", "ready", "invalid"}:
+    if status in {"missing", "ready", "invalid", "approval_required"}:
         print("\n=== Onboarding Execute ===")
         print(f"Project Root: {project_root}")
         print(f"Status:       {status}")
         print(f"Message:      {result.get('message')}")
+        approval_reason = result.get("approval_reason")
+        if approval_reason:
+            print(f"Approval:     {approval_reason}")
         recommended_command = result.get("recommended_command")
         if recommended_command:
             print(f"Next:         {recommended_command}")
@@ -1194,6 +1286,7 @@ def cmd_onboarding_execute(ctx: AppContext, project_id_or_path: str = ".", *, ve
     print("\nState:")
     print(f"- Updated: {result.get('state_updated')}")
     print(f"- Artifacts refreshed: {result.get('artifacts_refreshed')}")
+    print(f"- Approval used: {result.get('approval_used')}")
     for path in result.get("written_artifacts", []):
         print(f"- {path}")
 

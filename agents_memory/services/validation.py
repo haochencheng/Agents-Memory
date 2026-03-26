@@ -25,6 +25,7 @@ CORE_DOC_COMMANDS = [
     "register",
     "mcp-setup",
     "doctor",
+    "onboarding-execute",
     "plan-init",
     "plan-check",
     "profile-list",
@@ -107,6 +108,10 @@ POLICY_REQUIREMENTS = {
     "spec_kit": {
         "path": Path("standards") / "planning" / "spec-kit.md",
         "phrases": ["spec-first", "验收标准必须可被测试或命令验证"],
+    },
+    "python_base": {
+        "path": Path("standards") / "python" / "base.instructions.md",
+        "phrases": ["复杂度", "重构", "40 行", "嵌套深度"],
     },
 }
 

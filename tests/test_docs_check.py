@@ -133,6 +133,7 @@ class DocsCheckTests(unittest.TestCase):
                         "python3 scripts/memory.py register .",
                         "python3 scripts/memory.py mcp-setup demo",
                         "python3 scripts/memory.py doctor demo",
+                        "python3 scripts/memory.py onboarding-execute .",
                         "python3 scripts/memory.py plan-init sample-task .",
                         "python3 scripts/memory.py plan-check .",
                         "python3 scripts/memory.py profile-list",
@@ -169,6 +170,7 @@ class DocsCheckTests(unittest.TestCase):
                         "python3 scripts/memory.py register [path]",
                         "python3 scripts/memory.py mcp-setup [project-id]",
                         "python3 scripts/memory.py doctor [project-id]",
+                        "python3 scripts/memory.py onboarding-execute [path]",
                         "python3 scripts/memory.py plan-init <task-name> [path]",
                         "python3 scripts/memory.py plan-check [path]",
                         "python3 scripts/memory.py profile-list",
@@ -226,6 +228,10 @@ class DocsCheckTests(unittest.TestCase):
             _write_text(
                 root / "standards" / "planning" / "spec-kit.md",
                 "spec-first\n验收标准必须可被测试或命令验证\n",
+            )
+            _write_text(
+                root / "standards" / "python" / "base.instructions.md",
+                "复杂度\n重构\n40 行\n嵌套深度\n",
             )
             for test_file in [
                 "test_runtime_bootstrap.py",

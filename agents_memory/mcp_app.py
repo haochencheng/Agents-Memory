@@ -80,11 +80,11 @@ def memory_get_onboarding_next_action(project_root: str = ".") -> str:
 
 
 @mcp.tool()
-def memory_execute_onboarding_next_action(project_root: str = ".", verify: bool = True) -> str:
-    _log_tool_start("memory_execute_onboarding_next_action", project_root=project_root, verify=verify)
+def memory_execute_onboarding_next_action(project_root: str = ".", verify: bool = True, approve_unsafe: bool = False) -> str:
+    _log_tool_start("memory_execute_onboarding_next_action", project_root=project_root, verify=verify, approve_unsafe=approve_unsafe)
     target_root = Path(project_root).expanduser().resolve()
-    payload = execute_onboarding_next_action(ctx, target_root, verify=verify, refresh_artifacts=True)
-    _log_tool_end("memory_execute_onboarding_next_action", status=payload.get("status"), project_root=target_root, verify=verify)
+    payload = execute_onboarding_next_action(ctx, target_root, verify=verify, approve_unsafe=approve_unsafe, refresh_artifacts=True)
+    _log_tool_end("memory_execute_onboarding_next_action", status=payload.get("status"), project_root=target_root, verify=verify, approve_unsafe=approve_unsafe)
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 

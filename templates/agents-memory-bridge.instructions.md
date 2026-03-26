@@ -19,7 +19,7 @@ memory_get_onboarding_next_action(project_root=".")
 ```
 If the first step is blocking and execution is safe to automate, prefer:
 ```
-memory_execute_onboarding_next_action(project_root=".", verify=true)
+memory_execute_onboarding_next_action(project_root=".", verify=true, approve_unsafe=false)
 ```
 
 If you need the full state payload, then call:
@@ -36,8 +36,11 @@ If the file exists:
 - Check `project_bootstrap_complete`
 - Check `recommended_next_command`
 - Check `recommended_verify_command`
+- Check `recommended_next_safe_to_auto_execute`
+- Check `recommended_next_approval_required`
 - If `project_bootstrap_ready` is `false`, finish the recommended onboarding step before deep code changes
 - If `project_bootstrap_ready` is `true` but `project_bootstrap_complete` is `false`, treat the next step as recommended cleanup rather than a blocker
+- If `recommended_next_approval_required` is `true`, do not auto-execute it without explicit human approval
 - After executing a step, re-read `.agents-memory/onboarding-state.json` or call `memory_get_onboarding_next_action(project_root=".")` again
 
 If the file does not exist yet:

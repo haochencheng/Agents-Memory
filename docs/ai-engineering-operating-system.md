@@ -538,6 +538,8 @@ profile apply   = 项目装配执行
 当前进度：系统已能根据 `onboarding-state.json` 直接生成 onboarding task bundle，并可通过 MCP tool 暴露结构化 state 给 agent。
 当前进度：系统已新增直接返回第一步动作的 MCP tool，并支持对已有 onboarding bundle 做增量刷新。
 当前进度：系统已新增执行第一步动作并回写 `execution_history` / `last_verified_action` 的 CLI 与 MCP 闭环，使 onboarding state 从“建议”升级为“可执行且可验证的运行状态”。
+当前进度：执行闭环已升级为可审批执行器，runbook step 会显式给出 `safe_to_auto_execute` 与 `approval_required`，agent 仅自动运行低风险步骤，高风险步骤需人工批准。
+当前进度：代码标准已纳入复杂度重构门槛，命中高复杂度标准的函数应先重构，再继续叠加能力。
 
 ### Spec Kit
 

@@ -132,10 +132,15 @@ python3 scripts/memory.py doctor . --write-checklist --write-state
 
 python3 scripts/memory.py onboarding-execute .
 # 输出: 执行当前第一条 onboarding action，随后验证并把 execution_history / last_verified_action 回写到 onboarding-state.json
+# 提示: 默认只自动执行 safe_to_auto_execute=true 的步骤；若返回 approval_required，则在人工确认后使用 --approve-unsafe
 
 python3 scripts/memory.py onboarding-bundle .
 # 输出: 根据 onboarding-state.json 生成 docs/plans/onboarding-*/ onboarding task bundle
 # 提示: 重复运行会增量刷新 bundle 里的受管 onboarding sections
+
+代码规范补充：
+1. `standards/python/base.instructions.md` 现在内置“高复杂度必须重构”的评判标准
+2. 命中任一硬性条件，或命中三条及以上软性条件，应优先重构后再扩展功能
 
 python3 scripts/memory.py plan-init "shared engineering brain task" .
 # 输出: 在 docs/plans/<slug>/ 生成 spec / plan / task-graph / validation bundle

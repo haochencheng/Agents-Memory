@@ -124,7 +124,7 @@ python3 scripts/memory.py register [path]              # one-command project reg
 python3 scripts/memory.py bridge-install <project-id>  # install bridge instruction in a project
 python3 scripts/memory.py mcp-setup [project-id]       # write .vscode/mcp.json for a registered project
 python3 scripts/memory.py doctor [project-id] [--write-checklist] [--write-state] # verify a project's full integration health
-python3 scripts/memory.py onboarding-execute [path]    # execute the first onboarding action and write execution/verification state back
+python3 scripts/memory.py onboarding-execute [path] [--approve-unsafe] # execute the first onboarding action; unsafe steps require explicit approval
 python3 scripts/memory.py onboarding-bundle [path]   # generate onboarding planning bundle from onboarding-state.json
 python3 scripts/memory.py plan-init <task-name> [path] # scaffold spec / plan / task-graph / validation bundle
 python3 scripts/memory.py plan-check [path]            # validate planning bundles under docs/plans
@@ -149,7 +149,7 @@ VS Code config: local `.vscode/mcp.json` generated from `templates/mcp.example.j
 |------|-------------|
 | `memory_get_index()` | Read index.md — call at session start |
 | `memory_get_onboarding_next_action(project_root)` | Read only the first actionable onboarding step for the current project |
-| `memory_execute_onboarding_next_action(project_root, verify)` | Execute the current onboarding step, verify it, and persist execution state |
+| `memory_execute_onboarding_next_action(project_root, verify, approve_unsafe)` | Execute the current onboarding step, verify it, and persist execution state |
 | `memory_get_onboarding_state(project_root)` | Read structured onboarding-state.json for the current project |
 | `memory_get_rules(domain)` | Read domain rules |
 | `memory_search(query)` | Keyword search across error records |

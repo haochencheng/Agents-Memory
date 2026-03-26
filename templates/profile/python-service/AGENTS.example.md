@@ -13,10 +13,11 @@
 ## Onboarding State
 
 1. If `.agents-memory/onboarding-state.json` exists, read `recommended_next_command` before deep implementation.
-2. If the next step is safe to automate, prefer `amem onboarding-execute .` so execution history and verification are written back into state.
-3. If the file is missing, run `amem doctor . --write-state --write-checklist`.
-4. If `project_bootstrap_ready` is `false`, finish the first runbook step before large edits.
-5. If only `project_bootstrap_complete` is `false`, treat the first step as recommended follow-up work.
+2. If `recommended_next_safe_to_auto_execute` is `true`, prefer `amem onboarding-execute .` so execution history and verification are written back into state.
+3. If `recommended_next_approval_required` is `true`, stop and get explicit approval before using `amem onboarding-execute . --approve-unsafe`.
+4. If the file is missing, run `amem doctor . --write-state --write-checklist`.
+5. If `project_bootstrap_ready` is `false`, finish the first runbook step before large edits.
+6. If only `project_bootstrap_complete` is `false`, treat the first step as recommended follow-up work.
 
 ## Validation
 

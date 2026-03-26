@@ -221,6 +221,8 @@ class IntegrationServiceTests(unittest.TestCase):
         self.assertIn("amem doctor .", steps[0]["verify_with"])
         self.assertIn('amem plan-init "<task-name>" .', steps[0]["next_command"])
         self.assertIn("Done when", f"Done when: {steps[0]['done_when']}")
+        self.assertFalse(steps[0]["safe_to_auto_execute"])
+        self.assertTrue(steps[0]["approval_required"])
         self.assertEqual(steps[1]["group"], "Planning")
         self.assertIn('amem plan-init "<task-name>" .', steps[1]["command"])
         self.assertIn("amem doctor .", steps[1]["next_command"])
@@ -255,6 +257,9 @@ class IntegrationServiceTests(unittest.TestCase):
                                 "verify_with": "amem doctor .",
                                 "done_when": "`amem doctor .` shows `[OK] mcp_config`.",
                                 "next_command": "amem doctor .",
+                                "safe_to_auto_execute": True,
+                                "approval_required": False,
+                                "approval_reason": "writes only local IDE config",
                             }
                         ],
                     },
@@ -267,6 +272,8 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertEqual(action["status"], "pending")
             self.assertEqual(action["command"], "amem mcp-setup .")
             self.assertTrue(action["blocking"])
+            self.assertTrue(action["safe_to_auto_execute"])
+            self.assertFalse(action["approval_required"])
 
     def test_parse_doctor_args_supports_export_flags(self) -> None:
         project_id_or_path, write_state, write_checklist = _parse_doctor_args(
@@ -278,10 +285,11 @@ class IntegrationServiceTests(unittest.TestCase):
         self.assertTrue(write_checklist)
 
     def test_parse_onboarding_execute_args_supports_no_verify(self) -> None:
-        project_id_or_path, verify = _parse_onboarding_execute_args(["demo-project", "--no-verify"])
+        project_id_or_path, verify, approve_unsafe = _parse_onboarding_execute_args(["demo-project", "--no-verify", "--approve-unsafe"])
 
         self.assertEqual(project_id_or_path, "demo-project")
         self.assertFalse(verify)
+        self.assertTrue(approve_unsafe)
 
     def test_cmd_doctor_surfaces_planning_root_warning_for_applied_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -350,6 +358,8 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertIn("Onboarding Runbook:", output)
             self.assertIn("Verify with:", output)
             self.assertIn("Next command:", output)
+            self.assertIn("Safe to auto execute:", output)
+            self.assertIn("Approval required:", output)
             self.assertIn("Project Bootstrap Checklist:", output)
             self.assertIn("Integration:", output)
             self.assertIn("Optional:", output)
@@ -388,6 +398,7 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertIn("# Bootstrap Checklist", checklist_path.read_text(encoding="utf-8"))
             self.assertIn('"project_id": "demo-project"', state_path.read_text(encoding="utf-8"))
             self.assertIn('"recommended_next_command": "amem mcp-setup ."', state_path.read_text(encoding="utf-8"))
+            self.assertIn('"recommended_next_safe_to_auto_execute": true', state_path.read_text(encoding="utf-8"))
             self.assertIn("Exported Artifacts:", buffer.getvalue())
 
     def test_cmd_doctor_preserves_execution_metadata_when_rewriting_state(self) -> None:
@@ -432,6 +443,45 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertEqual(state["last_execution_status"], "verified")
             self.assertEqual(state["last_verified_action"]["key"], "mcp_config")
 
+    def test_execute_onboarding_next_action_requires_approval_for_unsafe_step(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(
+                project_root / ".agents-memory" / "onboarding-state.json",
+                json.dumps(
+                    {
+                        "project_bootstrap_ready": False,
+                        "project_bootstrap_complete": False,
+                        "runbook_steps": [
+                            {
+                                "group": "Integration",
+                                "key": "demo_step",
+                                "priority": "required",
+                                "detail": "seed a demo marker",
+                                "command": "python3 -c \"from pathlib import Path; Path('.agents-memory/executed.txt').write_text('ok', encoding='utf-8')\"",
+                                "verify_with": "python3 -c \"from pathlib import Path; raise SystemExit(0 if Path('.agents-memory/executed.txt').exists() else 1)\"",
+                                "done_when": "marker file exists",
+                                "next_command": "amem doctor .",
+                                "safe_to_auto_execute": False,
+                                "approval_required": True,
+                                "approval_reason": "tracked file change needs human approval",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+
+            result = execute_onboarding_next_action(ctx, project_root)
+
+            self.assertEqual(result["status"], "approval_required")
+            self.assertFalse((project_root / ".agents-memory" / "executed.txt").exists())
+            self.assertFalse(result["state_updated"])
+            self.assertIn("--approve-unsafe", result["recommended_command"])
+
     def test_execute_onboarding_next_action_records_execution_and_verification(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -454,6 +504,9 @@ class IntegrationServiceTests(unittest.TestCase):
                                 "verify_with": "python3 -c \"from pathlib import Path; raise SystemExit(0 if Path('.agents-memory/executed.txt').exists() else 1)\"",
                                 "done_when": "marker file exists",
                                 "next_command": "amem doctor .",
+                                "safe_to_auto_execute": False,
+                                "approval_required": True,
+                                "approval_reason": "tracked file change needs human approval",
                             }
                         ],
                     },
@@ -461,7 +514,7 @@ class IntegrationServiceTests(unittest.TestCase):
                 ),
             )
 
-            result = execute_onboarding_next_action(ctx, project_root)
+            result = execute_onboarding_next_action(ctx, project_root, approve_unsafe=True)
 
             self.assertEqual(result["status"], "verified")
             self.assertTrue((project_root / ".agents-memory" / "executed.txt").exists())
@@ -470,4 +523,5 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertEqual(state["last_executed_action"]["key"], "demo_step")
             self.assertEqual(state["last_verified_action"]["key"], "demo_step")
             self.assertEqual(state["execution_history"][-1]["status"], "verified")
+            self.assertTrue(state["last_executed_action"]["approve_unsafe"])
             self.assertTrue((project_root / "docs" / "plans" / "bootstrap-checklist.md").exists())
