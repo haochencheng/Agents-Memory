@@ -31,8 +31,9 @@ from datetime import date, timedelta
 from pathlib import Path
 
 # ─── 路径常量 ────────────────────────────────────────────────────────────────
+# AGENTS_MEMORY_ROOT 可通过环境变量覆盖，供全局安装的 `amem` CLI 使用
 
-BASE_DIR      = Path(__file__).parent.parent
+BASE_DIR      = Path(os.environ.get("AGENTS_MEMORY_ROOT", Path(__file__).parent.parent))
 ERRORS_DIR    = BASE_DIR / "errors"
 ARCHIVE_DIR   = BASE_DIR / "errors" / "archive"
 MEMORY_DIR    = BASE_DIR / "memory"

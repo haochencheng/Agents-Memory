@@ -19,10 +19,23 @@
 
 ## 一键接入（推荐）
 
-在**目标项目根目录**运行：
+### 前置：安装 `amem` 全局命令（只需一次）
 
 ```bash
-python3 /Users/cliff/workspace/Agents-Memory/scripts/memory.py register
+# 克隆 Agents-Memory（如果还没有）
+git clone https://github.com/haochencheng/Agents-Memory.git
+
+# 安装 amem 到系统 PATH（创建符号链接到 /opt/homebrew/bin/amem）
+bash Agents-Memory/scripts/install-cli.sh
+```
+
+安装后 `amem` 在任意目录全局可用，无需 Python 环境配置、无需 pip。
+
+### 在目标项目根目录运行
+
+```bash
+cd /path/to/your-project
+amem register
 ```
 
 命令会依次完成：
@@ -183,7 +196,7 @@ python3 /Users/cliff/workspace/Agents-Memory/scripts/memory.py sync
 **步骤 2 — 安装 bridge instruction：**
 
 ```bash
-python3 /Users/cliff/workspace/Agents-Memory/scripts/memory.py bridge-install my-service
+amem bridge-install my-service
 ```
 
 **步骤 3 — 添加 `.vscode/mcp.json`（同上）**

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "agents-memory"
+version = "0.1.0"
+description = "Shared memory system for AI Agents — structured error recording + rule promotion + cross-project sync"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["agents", "memory", "mcp", "ai"]
+dependencies = [
+  "mcp>=1.0.0",
+]
+
+# 可选依赖，按需安装
+[project.optional-dependencies]
+vector = ["lancedb>=0.6.0", "openai>=1.0.0", "pyarrow>=14.0.0"]
+qdrant = ["qdrant-client>=1.8.0"]
+all    = ["agents-memory[vector,qdrant]"]
+
+[project.scripts]
+# 全局命令：amem <subcommand>
+amem = "agents_memory.cli:main"
+
+[project.urls]
+Repository = "https://github.com/haochencheng/Agents-Memory"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agents_memory*"]
