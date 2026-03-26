@@ -64,6 +64,43 @@ Agents-Memory 不依赖模型“自己记住”，而是把错误经验显式升
 
 架构文档已经明确了最终目标：[docs/ai-engineering-operating-system.md](docs/ai-engineering-operating-system.md)。当前仓库不是要停留在 error memory，而是继续把 `standards/`、`profiles/`、planning 模板和 validation gate 变成一等公民。
 
+### 4. 系统架构图
+
+```mermaid
+flowchart TD
+  A["AI Coding Agent"] --> B["index.md hot tier"]
+  A --> C["memory/rules.md warm tier"]
+  A --> D["errors/*.md cold tier"]
+  A --> E["profiles/*.yaml"]
+  A --> F["standards/*"]
+  A --> G["planning docs and templates"]
+
+  H["amem CLI / MCP"] --> I["services/records.py"]
+  H --> J["services/integration.py"]
+  H --> K["services/profiles.py"]
+  H --> L["services/validation.py"]
+
+  I --> D
+  I --> B
+  I --> C
+  J --> M["target project"]
+  K --> M
+  L --> M
+
+  K --> N["profile-manifest.json"]
+  N --> L
+  L --> O["docs-check"]
+  L --> P["profile-check"]
+  J --> Q["doctor"]
+  Q --> P
+
+  F --> K
+  G --> K
+  O --> R["delivery gate"]
+  P --> R
+  Q --> R
+```
+
 ## 快速开始
 
 ### 安装方式
