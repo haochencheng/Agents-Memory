@@ -12,9 +12,9 @@
 ## Onboarding State
 - state file: `.agents-memory/onboarding-state.json`
 - bootstrap ready: `yes`
-- bootstrap complete: `no`
-- next group: `Optional`
-- next key: `copilot_activation`
-- next command: `amem copilot-setup .`
+- bootstrap complete: `yes`
+- next group: `Unknown`
+- next key: `unknown`
+- next command: `amem doctor .`
 - verify with: `amem doctor .`
-- done when: `amem doctor .` shows `[OK] copilot_activation`.
+- done when: No pending onboarding steps remain.

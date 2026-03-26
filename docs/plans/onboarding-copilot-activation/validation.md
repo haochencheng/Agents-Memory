@@ -20,14 +20,14 @@ python3 scripts/memory.py docs-check .
 
 ## Onboarding Verification
 - primary verification command: `amem doctor .`
-- expected completion: `amem doctor .` shows `[OK] copilot_activation`.
+- expected completion: No pending onboarding steps remain.
 
 ## State Snapshot
 ```json
 {
   "project_bootstrap_ready": true,
-  "project_bootstrap_complete": false,
-  "recommended_next_command": "amem copilot-setup .",
+  "project_bootstrap_complete": true,
+  "recommended_next_command": "amem doctor .",
   "recommended_verify_command": "amem doctor ."
 }
 ```

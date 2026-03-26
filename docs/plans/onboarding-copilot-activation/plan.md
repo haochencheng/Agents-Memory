@@ -19,13 +19,13 @@
 - 测试改动：
 
 ## Onboarding Execution
-- run `amem copilot-setup .`
+- run `amem doctor .`
 - verify with `amem doctor .`
-- finish when: `amem doctor .` shows `[OK] copilot_activation`.
+- finish when: No pending onboarding steps remain.
 
 ## Action Sequence Snapshot
 ```json
 [
-  "Optional (recommended): Run `amem copilot-setup .` to add repo-wide Copilot auto-activation."
+  "Optional (recommended): Refactor flagged functions before adding more behavior, and add a short guiding comment when complex logic must remain in place."
 ]
 ```

@@ -1,0 +1,30 @@
+{
+  "profile_id": "agent-runtime",
+  "display_name": "Agent Runtime",
+  "applies_to": [
+    "agent",
+    "runtime",
+    "mcp"
+  ],
+  "standards": [
+    "standards/docs/docs-sync.instructions.md",
+    "standards/planning/harness-engineering.md",
+    "standards/planning/review-checklist.md"
+  ],
+  "templates": [
+    "templates/profile/agent-runtime/docs/plans/README.example.md"
+  ],
+  "commands": {
+    "standards_sync": "amem standards-sync .",
+    "plan_check": "amem plan-check .",
+    "docs_check": "amem docs-check .",
+    "doctor": "amem doctor ."
+  },
+  "bootstrap": {
+    "create": [
+      ".github/instructions/",
+      "docs/",
+      "runtime/"
+    ]
+  }
+}

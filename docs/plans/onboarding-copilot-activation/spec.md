@@ -30,7 +30,7 @@ Optional onboarding: copilot_activation
   {
     "name": "Core",
     "status": "HEALTHY",
-    "summary": "Core status=HEALTHY (ok=5, warn=0, fail=0, info=1)",
+    "summary": "Core status=HEALTHY (ok=7, warn=0, fail=0, info=0)",
     "checks": [
       {
         "status": "OK",
@@ -58,9 +58,14 @@ Optional onboarding: copilot_activation
         "detail": "mcp import OK"
       },
       {
-        "status": "INFO",
+        "status": "OK",
         "key": "profile_manifest",
-        "detail": "no applied profile manifest found"
+        "detail": "applied profile 'agent-runtime'"
+      },
+      {
+        "status": "OK",
+        "key": "profile_consistency",
+        "detail": "profile 'agent-runtime' consistency OK"
       }
     ]
   },
@@ -77,7 +82,7 @@ Optional onboarding: copilot_activation
       {
         "status": "OK",
         "key": "planning_bundle",
-        "detail": "2 planning bundle(s) passed plan-check"
+        "detail": "4 planning bundle(s) passed plan-check"
       }
     ]
   },
@@ -101,17 +106,42 @@ Optional onboarding: copilot_activation
   {
     "name": "Optional",
     "status": "WATCH",
-    "summary": "Optional status=WATCH (ok=0, warn=1, fail=0, info=1)",
+    "summary": "Optional status=WATCH (ok=1, warn=5, fail=0, info=1)",
     "checks": [
       {
-        "status": "WARN",
+        "status": "OK",
         "key": "copilot_activation",
-        "detail": "missing ./.github/copilot-instructions.md (recommended for repo-wide auto-activation)"
+        "detail": "Agents-Memory activation block present -> ./.github/copilot-instructions.md"
       },
       {
         "status": "INFO",
         "key": "agents_read_order",
         "detail": "bridge not configured; AGENTS read order check skipped"
+      },
+      {
+        "status": "WARN",
+        "key": "refactor_watch",
+        "detail": "agents_memory/services/integration.py::cmd_sync high complexity (lines=57>40, branches=11>5, locals=15>8, nesting=3)"
+      },
+      {
+        "status": "WARN",
+        "key": "refactor_watch",
+        "detail": "agents_memory/services/integration.py::cmd_register high complexity (lines=56>40, branches=7>5, locals=14>8)"
+      },
+      {
+        "status": "WARN",
+        "key": "refactor_watch",
+        "detail": "agents_memory/services/integration.py::execute_onboarding_next_action high complexity (lines=114>40, branches=7>5, locals=16>8)"
+      },
+      {
+        "status": "WARN",
+        "key": "refactor_watch",
+        "detail": "agents_memory/services/integration.py::_doctor_runbook_steps high complexity (branches=7>5, locals=12>8, lines=37, nesting=3, missing_guiding_comment)"
+      },
+      {
+        "status": "WARN",
+        "key": "refactor_watch",
+        "detail": "agents_memory/services/integration.py::_doctor_checklist_markdown high complexity (lines=49>40, locals=9>8, branches=5, missing_guiding_comment)"
       }
     ]
   }

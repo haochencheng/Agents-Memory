@@ -19,18 +19,5 @@
 
 ## Onboarding Task Steps
 ```json
-[
-  {
-    "group": "Optional",
-    "priority": "recommended",
-    "key": "copilot_activation",
-    "status": "WARN",
-    "detail": "missing ./.github/copilot-instructions.md (recommended for repo-wide auto-activation)",
-    "action": "Install repo-wide Copilot activation so the default agent loads the shared brain automatically.",
-    "command": "amem copilot-setup .",
-    "verify_with": "amem doctor .",
-    "done_when": "`amem doctor .` shows `[OK] copilot_activation`.",
-    "next_command": "amem doctor ."
-  }
-]
+[]
 ```
