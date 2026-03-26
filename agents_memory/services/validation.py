@@ -29,6 +29,7 @@ CORE_DOC_COMMANDS = [
     "profile-show",
     "profile-apply",
     "profile-diff",
+    "standards-sync",
     "profile-check",
     "docs-check",
     "archive",

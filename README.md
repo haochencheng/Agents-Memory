@@ -31,7 +31,7 @@ Shared Engineering Brain
 
 当前还在持续推进的方向：
 
-1. `standards-sync` 等更完整的组织级标准分发能力。
+1. `standards-sync` 的冲突检测、项目覆盖层和更细粒度同步策略。
 2. 更成熟的 planning workflow 模板和 spec-first 约束。
 3. 更强的 validation gate 和开源规范自动检查。
 
@@ -153,6 +153,7 @@ python3 scripts/memory.py profile-list
 python3 scripts/memory.py profile-show python-service
 python3 scripts/memory.py profile-diff python-service .
 python3 scripts/memory.py profile-apply python-service .
+python3 scripts/memory.py standards-sync .
 python3 scripts/memory.py profile-check .
 python3 scripts/memory.py docs-check .
 ```
@@ -187,7 +188,7 @@ python3 scripts/memory.py docs-check .
 3. `standards/planning/*`
 4. `standards/validation/*`
 5. `profiles/*.yaml`
-6. `profile-apply`, `profile-check`, `docs-check`
+6. `profile-apply`, `standards-sync`, `profile-check`, `docs-check`
 
 ## 开源与本地运行数据边界
 

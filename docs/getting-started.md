@@ -45,7 +45,7 @@ amem stats
 
 ### 最小安装（CLI 基础功能，零依赖）
 
-CLI 的 `new / list / stats / search / register / copilot-setup / agent-list / agent-setup / bridge-install / mcp-setup / doctor / profile-list / profile-show / profile-apply / profile-diff / profile-check / docs-check / sync / archive / update-index` 命令使用纯标准库，**无需任何额外 pip 安装**。直接运行：
+CLI 的 `new / list / stats / search / register / copilot-setup / agent-list / agent-setup / bridge-install / mcp-setup / doctor / profile-list / profile-show / profile-apply / profile-diff / standards-sync / profile-check / docs-check / sync / archive / update-index` 命令使用纯标准库，**无需任何额外 pip 安装**。直接运行：
 
 ```bash
 python3 scripts/memory.py list
@@ -134,6 +134,9 @@ python3 scripts/memory.py profile-show python-service
 
 python3 scripts/memory.py profile-apply python-service . --dry-run
 # 输出: profile 将创建的目录、标准文件和模板写入预览
+
+python3 scripts/memory.py standards-sync .
+# 输出: 将 profile 管理的组织标准文件同步到当前项目
 
 python3 scripts/memory.py profile-check .
 # 输出: 当前项目已安装 profile 的一致性检查结果

@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from agents_memory.runtime import build_context
-from agents_memory.services.profiles import PROFILE_MANIFEST_REL, apply_profile, list_profiles, load_profile
+from agents_memory.services.profiles import PROFILE_MANIFEST_REL, apply_profile, list_profiles, load_profile, sync_profile_standards
 from agents_memory.services.validation import collect_profile_check_findings
 
 
@@ -141,3 +141,49 @@ class ProfilesServiceTests(unittest.TestCase):
             findings = collect_profile_check_findings(ctx, target)
 
             self.assertTrue(any(f.status == "FAIL" and f.key == "profile_standard_files" for f in findings))
+
+    def test_sync_profile_standards_updates_managed_standard_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "target"
+            target.mkdir()
+            ctx = self._build_context(root)
+            _write_text(
+                root / "profiles" / "python-service.yaml",
+                '{"id":"python-service","display_name":"Python Service","applies_to":["backend"],"standards":["standards/python/base.instructions.md"],"templates":[],"commands":{"docs_check":"amem docs-check ."},"bootstrap":{"create":[]}}\n',
+            )
+            _write_text(root / "standards" / "python" / "base.instructions.md", "# Python Base v2\n")
+
+            profile = load_profile(ctx, "python-service")
+            apply_profile(ctx, profile, target)
+            installed_standard = target / ".github" / "instructions" / "agents-memory" / "standards" / "python" / "base.instructions.md"
+            installed_standard.write_text("# old\n", encoding="utf-8")
+
+            result = sync_profile_standards(ctx, profile, target)
+
+            self.assertEqual(installed_standard.read_text(encoding="utf-8"), "# Python Base v2\n")
+            self.assertIn(".github/instructions/agents-memory/standards/python/base.instructions.md", result.synced_standards)
+            self.assertFalse(result.missing_sources)
+
+    def test_sync_profile_standards_dry_run_does_not_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "target"
+            target.mkdir()
+            ctx = self._build_context(root)
+            _write_text(
+                root / "profiles" / "python-service.yaml",
+                '{"id":"python-service","display_name":"Python Service","applies_to":["backend"],"standards":["standards/python/base.instructions.md"],"templates":[],"commands":{"docs_check":"amem docs-check ."},"bootstrap":{"create":[]}}\n',
+            )
+            _write_text(root / "standards" / "python" / "base.instructions.md", "# Python Base v2\n")
+
+            profile = load_profile(ctx, "python-service")
+            apply_profile(ctx, profile, target)
+            installed_standard = target / ".github" / "instructions" / "agents-memory" / "standards" / "python" / "base.instructions.md"
+            installed_standard.write_text("# old\n", encoding="utf-8")
+
+            result = sync_profile_standards(ctx, profile, target, dry_run=True)
+
+            self.assertEqual(installed_standard.read_text(encoding="utf-8"), "# old\n")
+            self.assertIn(".github/instructions/agents-memory/standards/python/base.instructions.md", result.synced_standards)
+            self.assertTrue(result.dry_run)

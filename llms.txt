@@ -126,6 +126,7 @@ python3 scripts/memory.py profile-list                 # list installable projec
 python3 scripts/memory.py profile-show <profile-id>    # show one profile contract
 python3 scripts/memory.py profile-apply <id> [path]    # install profile into target project
 python3 scripts/memory.py profile-diff <id> [path]     # preview profile install plan
+python3 scripts/memory.py standards-sync [path]        # sync profile-managed organization standards into target project
 python3 scripts/memory.py profile-check [path]         # verify installed profile consistency
 python3 scripts/memory.py docs-check [path]            # validate docs entrypoints plus contract/test/policy drift
 python3 scripts/memory.py archive                      # archive old records

@@ -32,6 +32,7 @@ USAGE = """Agents-Memory CLI — 错误记录管理工具
     python3 memory.py profile-show <profile-id>  # 查看指定 profile 的装配内容
     python3 memory.py profile-apply <id> [path]  # 把 profile 安装到目标项目
     python3 memory.py profile-diff <id> [path]   # 预览 profile 将写入哪些内容
+    python3 memory.py standards-sync [path]      # 同步 profile 管理的组织标准文件
     python3 memory.py profile-check [path]       # 校验已安装 profile 的一致性
     python3 memory.py docs-check [path]          # 校验文档入口、contract/test/policy 漂移与明显过期内容
   python3 memory.py archive                    # 归档 90 天以上且无重复的记录

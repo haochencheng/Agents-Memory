@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agents_memory.services.profiles import cmd_profile_apply, cmd_profile_list, cmd_profile_show
+from agents_memory.services.profiles import cmd_profile_apply, cmd_profile_list, cmd_profile_show, cmd_standards_sync
 
 
 def _parse_profile_flags(args: list[str]) -> tuple[list[str], str]:
@@ -56,10 +56,31 @@ def _handle_profile_diff(ctx, args: list[str]) -> None:
     raise SystemExit(cmd_profile_apply(ctx, profile_id, target, dry_run=True))
 
 
+def _handle_standards_sync(ctx, args: list[str]) -> None:
+    dry_run = False
+    profile_id: str | None = None
+    positionals: list[str] = []
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--dry-run":
+            dry_run = True
+        elif arg == "--profile" and index + 1 < len(args):
+            profile_id = args[index + 1]
+            index += 1
+        else:
+            positionals.append(arg)
+        index += 1
+
+    target = positionals[0] if positionals else "."
+    raise SystemExit(cmd_standards_sync(ctx, target, profile_id=profile_id, dry_run=dry_run))
+
+
 def register() -> dict[str, callable]:
     return {
         "profile-list": _handle_profile_list,
         "profile-show": _handle_profile_show,
         "profile-apply": _handle_profile_apply,
         "profile-diff": _handle_profile_diff,
+        "standards-sync": _handle_standards_sync,
     }

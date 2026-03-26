@@ -500,6 +500,8 @@ Docs Check: PARTIAL
 1. 把 `standards/` 中的组织级标准同步到目标项目
 2. 支持项目覆盖层，不强行覆盖本地定制
 
+当前进度：`standards-sync` 第一版已完成，现已支持基于已安装 profile 同步受管标准文件。
+
 ### 10.3 `amem profile-apply`
 
 职责：
@@ -575,8 +577,9 @@ profile apply   = 项目装配执行
 1. `amem profile-list`
 2. `amem profile-show`
 3. `amem profile-apply`
-4. `amem profile-check`（已完成第一版）
-5. `amem docs-check`（已完成第二版）
+4. `amem standards-sync`（已完成第一版）
+5. `amem profile-check`（已完成第一版）
+6. `amem docs-check`（已完成第二版）
 
 ### MVP-5
 

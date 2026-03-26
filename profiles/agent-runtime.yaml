@@ -9,6 +9,7 @@
   ],
   "templates": [],
   "commands": {
+    "standards_sync": "amem standards-sync .",
     "docs_check": "amem docs-check .",
     "doctor": "amem doctor ."
   },

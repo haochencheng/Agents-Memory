@@ -17,6 +17,7 @@
     "templates/profile/python-service/docs-check.example.yml"
   ],
   "commands": {
+    "standards_sync": "amem standards-sync .",
     "docs_check": "amem docs-check .",
     "doctor": "amem doctor .",
     "profile_diff": "amem profile-diff python-service ."
