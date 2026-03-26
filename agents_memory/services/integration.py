@@ -34,6 +34,29 @@ from agents_memory.services.validation import collect_plan_check_findings, colle
 
 
 DOCTOR_GROUP_ORDER = ["Core", "Planning", "Integration", "Optional"]
+DOCTOR_GROUP_REMEDIATION = {
+    "Core": {
+        "registry": "Register the project in memory/projects.md or re-run `amem register`.",
+        "active": "Mark the project active in memory/projects.md before relying on sync or doctor.",
+        "root": "Fix the target path or run doctor from a valid project root.",
+        PYTHON_BIN: f"Install `{PYTHON_BIN}` or make sure it is on PATH.",
+        "mcp_package": "Install the `mcp` package in the Python environment used by Agents-Memory.",
+        "profile_consistency": "Re-run `amem profile-check .` and repair the missing profile-managed files.",
+        "profile_manifest": "Apply a profile with `amem profile-apply <profile> .` if this project should be profile-managed.",
+    },
+    "Planning": {
+        "planning_root": "Run `amem plan-init \"<task-name>\" .` or install a profile that seeds docs/plans/README.md.",
+        "planning_bundle": "Run `amem plan-check .`, then fill in or repair the missing planning bundle files.",
+    },
+    "Integration": {
+        "bridge_instruction": "Install the bridge with `amem bridge-install <project-id>` if this repo should use bridge-based startup context.",
+        "mcp_config": "Run `amem mcp-setup .` to repair or create the MCP server configuration.",
+    },
+    "Optional": {
+        "copilot_activation": "Run `amem copilot-setup .` to add repo-wide Copilot auto-activation.",
+        "agents_read_order": "Reference the bridge in AGENTS.md or docs/AGENTS.md if you want explicit read-order guidance.",
+    },
+}
 
 
 def render_bridge_instruction(ctx: AppContext, project_id: str) -> str:
@@ -387,6 +410,39 @@ def _doctor_group_checks(checks: list[tuple[str, str, str]]) -> list[tuple[str, 
     return [(name, grouped[name]) for name in DOCTOR_GROUP_ORDER if grouped[name]]
 
 
+def _doctor_group_status(group_checks: list[tuple[str, str, str]]) -> str:
+    statuses = [status for status, _key, _detail in group_checks]
+    if any(status == "FAIL" for status in statuses):
+        return "ATTENTION"
+    if any(status == "WARN" for status in statuses):
+        return "WATCH"
+    return "HEALTHY"
+
+
+def _doctor_group_summary(group_name: str, group_checks: list[tuple[str, str, str]]) -> str:
+    counts = {"OK": 0, "WARN": 0, "FAIL": 0, "INFO": 0}
+    for status, _key, _detail in group_checks:
+        counts[status] = counts.get(status, 0) + 1
+    return (
+        f"{group_name} status={_doctor_group_status(group_checks)} "
+        f"(ok={counts['OK']}, warn={counts['WARN']}, fail={counts['FAIL']}, info={counts['INFO']})"
+    )
+
+
+def _doctor_group_remediations(group_name: str, group_checks: list[tuple[str, str, str]]) -> list[str]:
+    suggestions: list[str] = []
+    seen: set[str] = set()
+    remediation_map = DOCTOR_GROUP_REMEDIATION.get(group_name, {})
+    for status, key, _detail in group_checks:
+        if status not in {"WARN", "FAIL"}:
+            continue
+        suggestion = remediation_map.get(key)
+        if suggestion and suggestion not in seen:
+            suggestions.append(suggestion)
+            seen.add(suggestion)
+    return suggestions
+
+
 def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
     project_id, project_root, project = resolve_project_target(ctx, project_id_or_path)
     ctx.logger.info("doctor_start | target=%s | resolved_project_id=%s | project_root=%s", project_id_or_path, project_id, project_root)
@@ -425,8 +481,14 @@ def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
     print(f"Overall: {overall}\n")
     for group_name, group_checks in _doctor_group_checks(checks):
         print(f"{group_name}:")
+        print(f"Summary: {_doctor_group_summary(group_name, group_checks)}")
         for status, key, detail in group_checks:
             print(f"[{status:<4}] {key:<18} {detail}")
+        remediations = _doctor_group_remediations(group_name, group_checks)
+        if remediations:
+            print("Remediation:")
+            for item in remediations:
+                print(f"- {item}")
         print()
 
     print("\nNext:")

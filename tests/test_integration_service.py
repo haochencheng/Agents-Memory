@@ -9,7 +9,7 @@ from io import StringIO
 from pathlib import Path
 
 from agents_memory.runtime import build_context
-from agents_memory.services.integration import _doctor_bridge_check, _doctor_group_checks, _doctor_planning_checks, _doctor_overall, cmd_bridge_install, cmd_doctor, write_vscode_mcp_json
+from agents_memory.services.integration import _doctor_bridge_check, _doctor_group_checks, _doctor_group_remediations, _doctor_group_status, _doctor_group_summary, _doctor_planning_checks, _doctor_overall, cmd_bridge_install, cmd_doctor, write_vscode_mcp_json
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -179,6 +179,16 @@ class IntegrationServiceTests(unittest.TestCase):
 
         self.assertEqual([name for name, _items in groups], ["Core", "Planning", "Integration", "Optional"])
 
+    def test_doctor_group_summary_and_remediation(self) -> None:
+        group_checks = [
+            ("OK", "mcp_config", "configured"),
+            ("WARN", "bridge_instruction", "missing bridge"),
+        ]
+
+        self.assertEqual(_doctor_group_status(group_checks), "WATCH")
+        self.assertIn("warn=1", _doctor_group_summary("Integration", group_checks))
+        self.assertTrue(_doctor_group_remediations("Integration", group_checks))
+
     def test_cmd_doctor_surfaces_planning_root_warning_for_applied_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -241,6 +251,7 @@ class IntegrationServiceTests(unittest.TestCase):
 
             output = buffer.getvalue()
             self.assertIn("Core:", output)
+            self.assertIn("Summary:", output)
             self.assertIn("Integration:", output)
             self.assertIn("Optional:", output)
             self.assertIn("bridge not configured for this project", output)

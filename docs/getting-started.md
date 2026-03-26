@@ -124,7 +124,7 @@ python3 scripts/memory.py vsearch "type guard"
 # 输出: 语义搜索结果（需先 embed）
 
 python3 scripts/memory.py doctor .
-# 输出: 当前项目的接入健康检查（按 Core / Planning / Integration / Optional 分组）
+# 输出: 当前项目的接入健康检查（按 Core / Planning / Integration / Optional 分组，并附带每组 Summary / Remediation）
 
 python3 scripts/memory.py plan-init "shared engineering brain task" .
 # 输出: 在 docs/plans/<slug>/ 生成 spec / plan / task-graph / validation bundle
@@ -136,7 +136,7 @@ python3 scripts/memory.py profile-list
 # 输出: 当前内置 profile 列表
 
 python3 scripts/memory.py doctor .
-# 输出: 当前项目的接入健康检查（现已包含 planning 感知与分组健康面板）
+# 输出: 当前项目的接入健康检查（现已包含 planning 感知、分组小结和修复建议）
 
 python3 scripts/memory.py profile-show python-service
 # 输出: python-service profile 的 standards / templates / bootstrap 详情
