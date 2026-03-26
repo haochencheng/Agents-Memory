@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import unittest
@@ -118,6 +119,66 @@ class PlanningServiceTests(unittest.TestCase):
             self.assertIn("amem mcp-setup .", (plan_dir / "plan.md").read_text(encoding="utf-8"))
             self.assertIn("project_bootstrap_ready", (plan_dir / "validation.md").read_text(encoding="utf-8"))
             self.assertNotIn(str(target), (plan_dir / "spec.md").read_text(encoding="utf-8"))
+
+    def test_init_onboarding_bundle_refreshes_managed_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "target"
+            target.mkdir()
+            ctx = self._build_context(root)
+            for name in ["README.template.md", "spec.template.md", "plan.template.md", "task-graph.template.md", "validation.template.md"]:
+                _write_text(root / "templates" / "planning" / name, f"# {name}\n{{{{TASK_NAME}}}}\n{{{{TASK_SLUG}}}}\n")
+            state_path = target / ".agents-memory" / "onboarding-state.json"
+            _write_text(
+                state_path,
+                json.dumps(
+                    {
+                        "project_bootstrap_ready": False,
+                        "project_bootstrap_complete": False,
+                        "recommended_next_group": "Integration",
+                        "recommended_next_key": "mcp_config",
+                        "recommended_next_command": "amem mcp-setup .",
+                        "recommended_verify_command": "amem doctor .",
+                        "recommended_done_when": "done-1",
+                        "action_sequence": ["step-1"],
+                        "runbook_steps": [{"group": "Integration", "key": "mcp_config"}],
+                        "groups": [{"name": "Integration", "status": "ATTENTION"}],
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+
+            first = init_onboarding_bundle(ctx, target)
+            plan_file = first.plan_root / "plan.md"
+            original = plan_file.read_text(encoding="utf-8")
+            customized = original.replace("## Onboarding Execution", "Custom note\n\n## Onboarding Execution", 1)
+            plan_file.write_text(customized, encoding="utf-8")
+            _write_text(
+                state_path,
+                json.dumps(
+                    {
+                        "project_bootstrap_ready": False,
+                        "project_bootstrap_complete": False,
+                        "recommended_next_group": "Planning",
+                        "recommended_next_key": "planning_root",
+                        "recommended_next_command": 'amem plan-init "task" .',
+                        "recommended_verify_command": "amem plan-check .",
+                        "recommended_done_when": "done-2",
+                        "action_sequence": ["step-2"],
+                        "runbook_steps": [{"group": "Planning", "key": "planning_root"}],
+                        "groups": [{"name": "Planning", "status": "WATCH"}],
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+
+            second = init_onboarding_bundle(ctx, target)
+            refreshed = plan_file.read_text(encoding="utf-8")
+
+            self.assertIn("Custom note", refreshed)
+            self.assertIn('amem plan-init "task" .', refreshed)
+            self.assertNotIn("amem mcp-setup .", refreshed)
+            self.assertIn("docs/plans/onboarding-mcp-config/plan.md", second.refreshed_files)
 
     def test_cmd_plan_check_returns_zero_for_healthy_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

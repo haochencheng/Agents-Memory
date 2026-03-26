@@ -132,6 +132,7 @@ python3 scripts/memory.py doctor . --write-checklist --write-state
 
 python3 scripts/memory.py onboarding-bundle .
 # 输出: 根据 onboarding-state.json 生成 docs/plans/onboarding-*/ onboarding task bundle
+# 提示: 重复运行会增量刷新 bundle 里的受管 onboarding sections
 
 python3 scripts/memory.py plan-init "shared engineering brain task" .
 # 输出: 在 docs/plans/<slug>/ 生成 spec / plan / task-graph / validation bundle

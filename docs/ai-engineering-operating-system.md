@@ -536,6 +536,7 @@ profile apply   = 项目装配执行
 当前进度：`doctor` 已开始感知 planning root 和 planning bundle 健康状态，并正在升级成带行动序列、推荐命令、验证动作、下一条命令与完成判定的 onboarding runbook，同时生成 project bootstrap checklist，并支持导出 markdown/json 工件。
 当前进度：导出的 `onboarding-state.json` 已开始承载 `project_bootstrap_ready`、`recommended_next_command` 等 agent 可直接消费的状态字段，可作为进入项目时的自动化前置输入。
 当前进度：系统已能根据 `onboarding-state.json` 直接生成 onboarding task bundle，并可通过 MCP tool 暴露结构化 state 给 agent。
+当前进度：系统已新增直接返回第一步动作的 MCP tool，并支持对已有 onboarding bundle 做增量刷新。
 
 ### Spec Kit
 

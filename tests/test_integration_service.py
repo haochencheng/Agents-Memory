@@ -10,7 +10,7 @@ from pathlib import Path
 
 from agents_memory.runtime import build_context
 from agents_memory.commands.integration import _parse_doctor_args
-from agents_memory.services.integration import _doctor_action_sequence, _doctor_bootstrap_checklist, _doctor_bridge_check, _doctor_group_checks, _doctor_group_remediations, _doctor_group_status, _doctor_group_summary, _doctor_planning_checks, _doctor_overall, _doctor_runbook_steps, cmd_bridge_install, cmd_doctor, write_vscode_mcp_json
+from agents_memory.services.integration import _doctor_action_sequence, _doctor_bootstrap_checklist, _doctor_bridge_check, _doctor_group_checks, _doctor_group_remediations, _doctor_group_status, _doctor_group_summary, _doctor_planning_checks, _doctor_overall, _doctor_runbook_steps, cmd_bridge_install, cmd_doctor, onboarding_next_action, write_vscode_mcp_json
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -236,6 +236,37 @@ class IntegrationServiceTests(unittest.TestCase):
         self.assertIn("[x] Core", checklist[0])
         self.assertIn("[ ] Planning", checklist[1])
         self.assertIn("[ ] Final verification", checklist[2])
+
+    def test_onboarding_next_action_returns_pending_step(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_text(
+                root / ".agents-memory" / "onboarding-state.json",
+                json.dumps(
+                    {
+                        "project_bootstrap_ready": False,
+                        "project_bootstrap_complete": False,
+                        "runbook_steps": [
+                            {
+                                "group": "Integration",
+                                "key": "mcp_config",
+                                "priority": "required",
+                                "command": "amem mcp-setup .",
+                                "verify_with": "amem doctor .",
+                                "done_when": "`amem doctor .` shows `[OK] mcp_config`.",
+                                "next_command": "amem doctor .",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+
+            action = onboarding_next_action(root)
+
+            self.assertEqual(action["status"], "pending")
+            self.assertEqual(action["command"], "amem mcp-setup .")
+            self.assertTrue(action["blocking"])
 
     def test_parse_doctor_args_supports_export_flags(self) -> None:
         project_id_or_path, write_state, write_checklist = _parse_doctor_args(

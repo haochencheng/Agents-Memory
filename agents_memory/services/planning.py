@@ -37,6 +37,7 @@ class OnboardingBundleResult:
     recommended_next_command: str | None
     verify_command: str | None
     wrote_files: list[str]
+    refreshed_files: list[str]
     skipped_files: list[str]
     dry_run: bool
 
@@ -57,6 +58,19 @@ def _render_template(source: Path, *, task_name: str, task_slug: str) -> str:
 
 def _target_plan_root(target_root: Path, task_slug: str) -> Path:
     return target_root / DEFAULT_PLAN_ROOT / task_slug
+
+
+def _default_onboarding_slug(target_root: Path, recommended_key: str, task_slug: str | None) -> str:
+    if task_slug:
+        return task_slug
+    plan_root = target_root / DEFAULT_PLAN_ROOT
+    existing = sorted(path.name for path in plan_root.glob("onboarding-*") if path.is_dir()) if plan_root.exists() else []
+    if len(existing) == 1:
+        return existing[0]
+    recommended_slug = f"onboarding-{recommended_key.replace('_', '-')}"
+    if recommended_slug in existing:
+        return recommended_slug
+    return recommended_slug
 
 
 def _render_onboarding_bundle_content(
@@ -152,7 +166,41 @@ def _render_onboarding_bundle_content(
         ],
     }
     appendix = appendix_map.get(filename, [])
-    return base + ("\n\n" + "\n".join(appendix) if appendix else "") + "\n"
+    appendix_text = "\n".join(appendix).rstrip()
+    return base + ("\n\n" + appendix_text if appendix_text else "") + "\n"
+
+
+def _onboarding_appendix_heading(filename: str) -> str:
+    heading_map = {
+        "README.md": "## Onboarding State",
+        "spec.md": "## Onboarding Inputs",
+        "plan.md": "## Onboarding Execution",
+        "task-graph.md": "## Onboarding Task Steps",
+        "validation.md": "## Onboarding Verification",
+    }
+    return heading_map[filename]
+
+
+def _merge_onboarding_refresh(existing_content: str, rendered_content: str, heading: str) -> str:
+    existing = existing_content.rstrip()
+    rendered = rendered_content.rstrip()
+    marker = f"\n{heading}\n"
+    rendered_heading_marker = f"\n{heading}\n"
+    if rendered_heading_marker in rendered:
+        rendered_suffix = rendered.split(rendered_heading_marker, 1)[1].lstrip()
+    elif rendered.startswith(f"{heading}\n"):
+        rendered_suffix = rendered.split(f"{heading}\n", 1)[1].lstrip()
+    else:
+        rendered_suffix = rendered
+    if marker in existing:
+        prefix = existing.split(marker, 1)[0].rstrip()
+        return prefix + "\n\n" + heading + "\n" + rendered_suffix + "\n"
+    if existing.startswith(f"{heading}\n"):
+        return heading + "\n" + rendered_suffix + "\n"
+    if existing.endswith(heading):
+        prefix = existing[: -len(heading)].rstrip()
+        return prefix + "\n\n" + heading + "\n" + rendered_suffix + "\n"
+    return existing + "\n\n" + heading + "\n" + rendered_suffix + "\n"
 
 
 def init_plan_bundle(
@@ -227,15 +275,16 @@ def init_onboarding_bundle(
     recommended_key = str(state.get("recommended_next_key") or "onboarding")
     recommended_group = str(state.get("recommended_next_group") or "Shared Engineering Brain")
     task_name = f"{recommended_group} onboarding: {recommended_key}"
-    resolved_slug = task_slug or f"onboarding-{recommended_key.replace('_', '-')}"
+    resolved_slug = _default_onboarding_slug(target_root, recommended_key, task_slug)
     templates_dir = _planning_templates_dir(ctx)
     if not templates_dir.exists():
         raise FileNotFoundError(f"planning templates directory not found: {templates_dir}")
 
     plan_result = init_plan_bundle(ctx, task_name, target_root, task_slug=resolved_slug, dry_run=dry_run)
     relative_state_path = " .agents-memory/onboarding-state.json".strip()
-    wrote_files = list(plan_result.wrote_files)
-    skipped_files = list(plan_result.skipped_files)
+    wrote_files: list[str] = []
+    refreshed_files: list[str] = []
+    skipped_files: list[str] = []
 
     for filename in ["README.md", "spec.md", "plan.md", "task-graph.md", "validation.md"]:
         destination = plan_result.plan_root / filename
@@ -250,12 +299,22 @@ def init_onboarding_bundle(
             relative_state_path=relative_state_path,
             target_root=target_root,
         )
-        if destination.exists() and relative in skipped_files:
+        heading = _onboarding_appendix_heading(filename)
+        if destination.exists():
+            merged = _merge_onboarding_refresh(destination.read_text(encoding="utf-8"), rendered, heading)
+            if merged == destination.read_text(encoding="utf-8"):
+                skipped_files.append(relative)
+                continue
+            refreshed_files.append(relative)
+            if dry_run:
+                continue
+            destination.write_text(merged, encoding="utf-8")
+            log_file_update(ctx.logger, action="onboarding_bundle_refresh", path=destination, detail=f"task_slug={resolved_slug}")
             continue
         if dry_run:
-            if relative not in wrote_files:
-                wrote_files.append(relative)
+            wrote_files.append(relative)
             continue
+        wrote_files.append(relative)
         destination.write_text(rendered, encoding="utf-8")
         log_file_update(ctx.logger, action="onboarding_bundle_file", path=destination, detail=f"task_slug={resolved_slug}")
 
@@ -268,6 +327,7 @@ def init_onboarding_bundle(
         recommended_next_command=str(state.get("recommended_next_command") or ""),
         verify_command=str(state.get("recommended_verify_command") or ""),
         wrote_files=wrote_files,
+        refreshed_files=refreshed_files,
         skipped_files=skipped_files,
         dry_run=dry_run,
     )
@@ -359,6 +419,10 @@ def _print_onboarding_bundle_summary(result: OnboardingBundleResult) -> None:
         print("\nWrote Files:")
         for item in result.wrote_files:
             print(f"- {item}")
+    if result.refreshed_files:
+        print("\nRefreshed Files:")
+        for item in result.refreshed_files:
+            print(f"- {item}")
     if result.skipped_files:
         print("\nSkipped Files:")
         for item in result.skipped_files:
@@ -399,7 +463,7 @@ def cmd_onboarding_bundle(
         result.task_slug,
         result.target_root,
         result.dry_run,
-        len(result.wrote_files),
+        len(result.wrote_files) + len(result.refreshed_files),
         len(result.skipped_files),
     )
     return 0

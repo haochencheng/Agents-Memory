@@ -15,6 +15,11 @@ applyTo: "**"
 **Step 0 — Read onboarding state first (if present):**
 Preferred via MCP:
 ```
+memory_get_onboarding_next_action(project_root=".")
+```
+
+If you need the full state payload, then call:
+```
 memory_get_onboarding_state(project_root=".")
 ```
 

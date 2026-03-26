@@ -5,8 +5,9 @@ When working in this repository, treat Agents-Memory as mandatory session contex
 
 ## Required startup sequence
 
-1. Before any substantial analysis or edits, call `memory_get_onboarding_state(project_root=".")` if the `agents-memory` MCP server is available.
-   If the MCP tool is unavailable, read `.agents-memory/onboarding-state.json` directly if it exists.
+1. Before any substantial analysis or edits, call `memory_get_onboarding_next_action(project_root=".")` if the `agents-memory` MCP server is available.
+   If you need full context, then call `memory_get_onboarding_state(project_root=".")`.
+   If MCP tools are unavailable, read `.agents-memory/onboarding-state.json` directly if it exists.
    If `project_bootstrap_ready` is `false`, follow `recommended_next_command`, then verify with `recommended_verify_command` before continuing.
    If `project_bootstrap_ready` is `true` but `project_bootstrap_complete` is `false`, treat `recommended_next_command` as a recommended follow-up instead of a blocker.
    If the file is missing, run `python3 {{AGENTS_MEMORY_ROOT}}/scripts/memory.py doctor . --write-state --write-checklist`.

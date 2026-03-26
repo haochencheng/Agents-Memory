@@ -704,6 +704,55 @@ def load_onboarding_state(project_root: Path) -> dict[str, object] | None:
     return data
 
 
+def onboarding_next_action(project_root: Path) -> dict[str, object]:
+    state = load_onboarding_state(project_root)
+    if state is None:
+        return {
+            "status": "missing",
+            "project_root": str(project_root),
+            "message": "No onboarding state found for this project.",
+            "recommended_command": "python3 scripts/memory.py doctor . --write-state --write-checklist",
+        }
+
+    runbook_steps = state.get("runbook_steps") or []
+    if not isinstance(runbook_steps, list) or not runbook_steps:
+        return {
+            "status": "ready",
+            "project_root": str(project_root),
+            "project_bootstrap_ready": bool(state.get("project_bootstrap_ready")),
+            "project_bootstrap_complete": bool(state.get("project_bootstrap_complete")),
+            "message": "No pending onboarding action. Continue with normal implementation flow.",
+            "recommended_command": None,
+            "verify_with": state.get("recommended_verify_command") or "amem doctor .",
+        }
+
+    first_step = runbook_steps[0]
+    if not isinstance(first_step, dict):
+        return {
+            "status": "invalid",
+            "project_root": str(project_root),
+            "message": "Onboarding state is present but malformed.",
+            "recommended_command": "python3 scripts/memory.py doctor . --write-state --write-checklist",
+        }
+
+    blocking = not bool(state.get("project_bootstrap_ready", False))
+    return {
+        "status": "pending",
+        "project_root": str(project_root),
+        "project_bootstrap_ready": bool(state.get("project_bootstrap_ready")),
+        "project_bootstrap_complete": bool(state.get("project_bootstrap_complete")),
+        "blocking": blocking,
+        "group": first_step.get("group"),
+        "key": first_step.get("key"),
+        "priority": first_step.get("priority"),
+        "command": first_step.get("command"),
+        "verify_with": first_step.get("verify_with"),
+        "done_when": first_step.get("done_when"),
+        "next_command": first_step.get("next_command"),
+        "message": "Complete this onboarding action before deep work." if blocking else "Recommended onboarding follow-up is available.",
+    }
+
+
 def _write_doctor_artifacts(
     ctx: AppContext,
     project_id: str,

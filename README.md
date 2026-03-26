@@ -199,6 +199,7 @@ python3 scripts/memory.py docs-check .
 如果加上 `--write-checklist --write-state`，它还会导出 `docs/plans/bootstrap-checklist.md` 和 `.agents-memory/onboarding-state.json`，把控制台状态沉淀成可复查工件。
 `onboarding-state.json` 现在包含 `project_bootstrap_ready`、`recommended_next_command`、`recommended_verify_command` 等顶层字段，方便 agent 在进入项目时先读 state，再决定是否先跑 `mcp-setup`、`plan-init` 或 `profile-check`。
 `onboarding-bundle` 则会基于当前 state 生成一个 onboarding task bundle，把推荐动作落到 `docs/plans/onboarding-*/` 的 spec / plan / task graph / validation 套件里。
+现在 MCP 还提供了更直接的 `memory_get_onboarding_next_action()`，agent 可以不解析整份 state，直接拿到当前第一步应执行的 onboarding action。
 
 ## 开源与本地运行数据边界
 

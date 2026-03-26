@@ -147,6 +147,7 @@ VS Code config: local `.vscode/mcp.json` generated from `templates/mcp.example.j
 | Tool | Description |
 |------|-------------|
 | `memory_get_index()` | Read index.md — call at session start |
+| `memory_get_onboarding_next_action(project_root)` | Read only the first actionable onboarding step for the current project |
 | `memory_get_onboarding_state(project_root)` | Read structured onboarding-state.json for the current project |
 | `memory_get_rules(domain)` | Read domain rules |
 | `memory_search(query)` | Keyword search across error records |

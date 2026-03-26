@@ -227,6 +227,12 @@ amem doctor . --write-state --write-checklist
 3. `recommended_verify_command`
 4. `recommended_done_when`
 
+如果 agent 只想拿当前第一步动作，而不是整份 state，可优先调用 MCP tool：
+
+```text
+memory_get_onboarding_next_action(project_root=".")
+```
+
 如果你想把这个状态直接落成可执行 planning 工件：
 
 ```bash
@@ -234,6 +240,7 @@ amem onboarding-bundle .
 ```
 
 它会在 `docs/plans/onboarding-*/` 下生成面向当前接入缺口的 task bundle。
+如果 bundle 已存在，重复运行会增量刷新其中受管的 onboarding sections。
 
 ---
 

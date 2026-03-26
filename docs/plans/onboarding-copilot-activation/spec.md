@@ -77,7 +77,7 @@ Optional onboarding: copilot_activation
       {
         "status": "OK",
         "key": "planning_bundle",
-        "detail": "1 planning bundle(s) passed plan-check"
+        "detail": "2 planning bundle(s) passed plan-check"
       }
     ]
   },
