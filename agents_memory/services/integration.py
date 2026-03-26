@@ -44,66 +44,79 @@ DOCTOR_RUNBOOK = {
     "registry": {
         "action": "Register the repository into the shared project registry so sync and doctor can reason about it.",
         "command": "amem register .",
+        "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] registry` for this project.",
     },
     "active": {
         "action": "Make sure the registered project is marked active before relying on sync or governance checks.",
         "command": "amem register .",
+        "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] active`.",
     },
     "root": {
         "action": "Repair the project root mapping so Agents-Memory resolves the correct repository path.",
         "command": "amem register .",
+        "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] root` with the expected absolute path.",
     },
     PYTHON_BIN: {
         "action": f"Install `{PYTHON_BIN}` or expose it on PATH for runtime checks and MCP startup.",
         "command": f"{PYTHON_BIN} --version",
+        "verify_with": "amem doctor .",
         "done_when": f"`amem doctor .` shows `[OK] {PYTHON_BIN}`.",
     },
     "mcp_package": {
         "action": "Install the MCP package into the Python environment used by Agents-Memory.",
         "command": f"{PYTHON_BIN} -m pip install mcp",
+        "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] mcp_package`.",
     },
     "profile_manifest": {
         "action": "Apply a project profile so the repo has an explicit engineering contract.",
         "command": "amem profile-apply <profile> .",
+        "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] profile_manifest`.",
     },
     "profile_consistency": {
         "action": "Repair missing or drifted profile-managed files before continuing onboarding.",
         "command": "amem profile-check .",
+        "verify_with": "amem profile-check .",
         "done_when": "`amem doctor .` shows `[OK] profile_consistency`.",
     },
     "planning_root": {
         "action": "Seed the planning workspace so specs, plans, task graphs, and validation bundles have a home.",
         "command": 'amem plan-init "<task-name>" .',
+        "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] planning_root`.",
     },
     "planning_bundle": {
         "action": "Repair the planning bundle so the repository has a valid spec-first execution package.",
         "command": "amem plan-check .",
+        "verify_with": "amem plan-check .",
         "done_when": "`amem doctor .` shows `[OK] planning_bundle`.",
     },
     "bridge_instruction": {
         "action": "Install the bridge instruction so agents can load shared startup context automatically.",
         "command": "amem bridge-install <project-id>",
+        "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] bridge_instruction`.",
     },
     "mcp_config": {
         "action": "Create or repair the MCP configuration so IDE agents can call Agents-Memory tools.",
         "command": "amem mcp-setup .",
+        "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] mcp_config`.",
     },
     "copilot_activation": {
         "action": "Install repo-wide Copilot activation so the default agent loads the shared brain automatically.",
         "command": "amem copilot-setup .",
+        "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[OK] copilot_activation`.",
     },
     "agents_read_order": {
         "action": "Add the bridge reference to AGENTS.md or docs/AGENTS.md so humans and agents share the same startup order.",
         "command": 'rg -n "agents-memory-bridge" AGENTS.md docs/AGENTS.md',
+        "verify_with": "amem doctor .",
         "done_when": "`amem doctor .` shows `[INFO] agents_read_order bridge referenced in AGENTS/docs/AGENTS`.",
     },
 }
@@ -550,11 +563,29 @@ def _doctor_runbook_steps(grouped_checks: list[tuple[str, list[tuple[str, str, s
                     "detail": detail,
                     "action": runbook["action"],
                     "command": runbook["command"],
+                    "verify_with": runbook["verify_with"],
                     "done_when": runbook["done_when"],
                 }
             )
             seen.add(step_id)
+    for index, step in enumerate(steps):
+        if index + 1 < len(steps):
+            step["next_command"] = steps[index + 1]["command"]
+        else:
+            step["next_command"] = "amem doctor ."
     return steps
+
+
+def _doctor_bootstrap_checklist(grouped_checks: list[tuple[str, list[tuple[str, str, str]]]], runbook_steps: list[dict[str, str]]) -> list[str]:
+    checklist: list[str] = []
+    for group_name, group_checks in grouped_checks:
+        group_status = _doctor_group_status(group_checks)
+        checked = "[x]" if group_status == "HEALTHY" else "[ ]"
+        checklist.append(f"{checked} {group_name} - {_doctor_group_summary(group_name, group_checks)}")
+    final_checked = "[x]" if not runbook_steps else "[ ]"
+    final_detail = "re-run `amem doctor .` and confirm no remaining WARN / FAIL steps" if runbook_steps else "latest `amem doctor .` already reflects the current healthy state"
+    checklist.append(f"{final_checked} Final verification - {final_detail}")
+    return checklist
 
 
 def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
@@ -622,7 +653,16 @@ def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
             print(f"   Trigger: {step['detail']}")
             print(f"   Action: {step['action']}")
             print(f"   Command: {step['command']}")
+            print(f"   Verify with: {step['verify_with']}")
+            print(f"   Next command: {step['next_command']}")
             print(f"   Done when: {step['done_when']}")
+        print()
+
+    checklist = _doctor_bootstrap_checklist(grouped_checks, runbook_steps)
+    if checklist:
+        print("Project Bootstrap Checklist:")
+        for item in checklist:
+            print(f"- {item}")
         print()
 
     print("\nNext:")
