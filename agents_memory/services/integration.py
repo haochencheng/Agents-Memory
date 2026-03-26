@@ -33,7 +33,7 @@ from agents_memory.services.projects import (
 )
 from agents_memory.services.profiles import detect_applied_profile
 from agents_memory.services.records import collect_errors
-from agents_memory.services.validation import collect_plan_check_findings, collect_profile_check_findings, collect_refactor_watch_findings
+from agents_memory.services.validation import collect_plan_check_findings, collect_profile_check_findings, collect_refactor_watch_findings, collect_refactor_watch_hotspots
 
 
 DOCTOR_GROUP_ORDER = ["Core", "Planning", "Integration", "Optional"]
@@ -681,7 +681,15 @@ def _doctor_state_payload(
         "bootstrap_checklist": checklist,
     }
     if existing_state:
-        for key in ("execution_history", "last_executed_action", "last_verified_action", "last_execution_status", "last_execution_at"):
+        for key in (
+            "execution_history",
+            "last_executed_action",
+            "last_verified_action",
+            "last_execution_status",
+            "last_execution_at",
+            "recommended_steps",
+            "recommended_refactor_bundle",
+        ):
             if key in existing_state:
                 payload[key] = existing_state[key]
     return payload
@@ -749,6 +757,7 @@ def _doctor_refactor_watch_markdown(
         for status, key, detail in group_checks
         if key == "refactor_watch"
     ]
+    hotspots = collect_refactor_watch_hotspots(project_root)
     lines = [
         "# Refactor Watch",
         "",
@@ -765,20 +774,35 @@ def _doctor_refactor_watch_markdown(
         "- Watch zone: around 30 effective lines, 4 branches, nesting depth 3, or 6 local variables.",
         "- Complex logic should include a short guiding comment when it cannot be cleanly decomposed yet.",
         "",
+        "## Workflow Entry",
+        "",
+        "- Primary command: `amem refactor-bundle .`",
+        "- Select another hotspot with: `amem refactor-bundle . --index <n>`",
+        "- The command creates or refreshes `docs/plans/refactor-<slug>/` using the first current hotspot as execution context.",
+        "",
         "## Hotspots",
     ]
     if not refactor_findings:
         lines.extend(["", "- No current refactor hotspots detected."])
     else:
         lines.append("")
-        for index, (status, detail) in enumerate(refactor_findings, start=1):
+        for index, hotspot in enumerate(hotspots, start=1):
+            command = f"amem refactor-bundle . --index {index}"
+            lines.append(
+                f"{index}. [{hotspot.status}] `{hotspot.identifier}` line={hotspot.line} "
+                f"metrics=(lines={hotspot.effective_lines}, branches={hotspot.branches}, nesting={hotspot.nesting}, locals={hotspot.local_vars})"
+            )
+            lines.append(f"   - issues: `{', '.join(hotspot.issues)}`")
+            lines.append(f"   - bundle command: `{command}`")
+        extra_findings = refactor_findings[len(hotspots):]
+        for index, (status, detail) in enumerate(extra_findings, start=len(hotspots) + 1):
             lines.append(f"{index}. [{status}] {detail}")
     lines.extend(
         [
             "",
             "## Suggested Action",
             "",
-            "1. Refactor the highest-signal hotspots before adding more branching behavior.",
+            "1. Run `amem refactor-bundle .` to materialize the first hotspot into an executable planning bundle.",
             "2. If a hotspot cannot be split yet, add a guiding comment that explains the main decision path and risk boundaries.",
             "3. Re-run `amem doctor .` after the change and confirm `refactor_watch` findings shrink or disappear.",
         ]
@@ -803,14 +827,89 @@ def load_onboarding_state(project_root: Path) -> dict[str, object] | None:
     return data
 
 
+def _state_steps(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _state_pending_steps(state: dict[str, object]) -> list[dict[str, object]]:
+    return _state_steps(state.get("runbook_steps"))
+
+
+def _state_recommended_steps(state: dict[str, object]) -> list[dict[str, object]]:
+    return _state_steps(state.get("recommended_steps"))
+
+
+def _merge_refactor_followup_state(
+    state: dict[str, object] | None,
+    *,
+    project_root: Path,
+    plan_root: Path,
+    hotspot_index: int,
+    hotspot: dict[str, object],
+    task_name: str,
+    task_slug: str,
+) -> dict[str, object]:
+    payload = dict(state or {})
+    payload.setdefault("project_root", str(project_root))
+    payload.setdefault("project_bootstrap_ready", True)
+    payload.setdefault("project_bootstrap_complete", True)
+    existing_recommended = _state_recommended_steps(payload)
+    bundle_rel = plan_root.relative_to(project_root).as_posix()
+    hotspot_identifier = str(hotspot.get("identifier") or f"index-{hotspot_index}")
+    command = f"python3 scripts/memory.py refactor-bundle . --index {hotspot_index}"
+    step = {
+        "group": "Refactor",
+        "priority": "recommended",
+        "key": "refactor_bundle",
+        "status": "WARN",
+        "detail": f"refactor bundle ready for {hotspot_identifier}",
+        "action": f"Review and execute the generated refactor bundle at {bundle_rel} before adding more behavior.",
+        "command": command,
+        "verify_with": "amem doctor .",
+        "done_when": f"`amem doctor .` no longer reports `{hotspot_identifier}` as the top refactor hotspot.",
+        "safe_to_auto_execute": True,
+        "approval_required": False,
+        "approval_reason": "refreshes generated planning docs only",
+        "next_command": "amem doctor .",
+        "bundle_path": bundle_rel,
+        "task_name": task_name,
+        "task_slug": task_slug,
+        "hotspot_index": hotspot_index,
+        "hotspot": hotspot,
+    }
+    filtered = [item for item in existing_recommended if item.get("key") != "refactor_bundle"]
+    payload["recommended_steps"] = [step, *filtered]
+    payload["recommended_refactor_bundle"] = {
+        "bundle_path": bundle_rel,
+        "task_name": task_name,
+        "task_slug": task_slug,
+        "hotspot_index": hotspot_index,
+        "hotspot": hotspot,
+        "command": command,
+        "verify_with": "amem doctor .",
+    }
+    if not _state_pending_steps(payload):
+        payload["recommended_next_group"] = step["group"]
+        payload["recommended_next_key"] = step["key"]
+        payload["recommended_next_command"] = step["command"]
+        payload["recommended_verify_command"] = step["verify_with"]
+        payload["recommended_done_when"] = step["done_when"]
+        payload["recommended_next_safe_to_auto_execute"] = bool(step["safe_to_auto_execute"])
+        payload["recommended_next_approval_required"] = bool(step["approval_required"])
+        payload["recommended_next_approval_reason"] = step["approval_reason"]
+    return payload
+
+
 def _runbook_step_from_state(state: dict[str, object]) -> dict[str, object] | None:
-    runbook_steps = state.get("runbook_steps") or []
-    if not isinstance(runbook_steps, list) or not runbook_steps:
-        return None
-    first_step = runbook_steps[0]
-    if not isinstance(first_step, dict):
-        return None
-    return first_step
+    pending_steps = _state_pending_steps(state)
+    if pending_steps:
+        return pending_steps[0]
+    recommended_steps = _state_recommended_steps(state)
+    if recommended_steps:
+        return recommended_steps[0]
+    return None
 
 
 def _quoted_command(parts: list[str]) -> str:
@@ -974,6 +1073,7 @@ def onboarding_next_action(project_root: Path) -> dict[str, object]:
         }
 
     runbook_steps = state.get("runbook_steps") or []
+    recommended_steps = state.get("recommended_steps") or []
     if runbook_steps and not isinstance(runbook_steps, list):
         return {
             "status": "invalid",
@@ -981,8 +1081,15 @@ def onboarding_next_action(project_root: Path) -> dict[str, object]:
             "message": "Onboarding state is present but malformed.",
             "recommended_command": "python3 scripts/memory.py doctor . --write-state --write-checklist",
         }
+    if recommended_steps and not isinstance(recommended_steps, list):
+        return {
+            "status": "invalid",
+            "project_root": str(project_root),
+            "message": "Onboarding state is present but malformed.",
+            "recommended_command": "python3 scripts/memory.py doctor . --write-state --write-checklist",
+        }
     first_step = _runbook_step_from_state(state)
-    if isinstance(runbook_steps, list) and runbook_steps and first_step is None:
+    if (isinstance(runbook_steps, list) and runbook_steps and first_step is None) or (isinstance(recommended_steps, list) and recommended_steps and first_step is None):
         return {
             "status": "invalid",
             "project_root": str(project_root),
@@ -1007,6 +1114,7 @@ def onboarding_next_action(project_root: Path) -> dict[str, object]:
         "project_bootstrap_ready": bool(state.get("project_bootstrap_ready")),
         "project_bootstrap_complete": bool(state.get("project_bootstrap_complete")),
         "blocking": blocking,
+        "step_source": "runbook" if _state_pending_steps(state) else "recommended",
         "group": first_step.get("group"),
         "key": first_step.get("key"),
         "priority": first_step.get("priority"),
@@ -1017,6 +1125,8 @@ def onboarding_next_action(project_root: Path) -> dict[str, object]:
         "safe_to_auto_execute": bool(first_step.get("safe_to_auto_execute")),
         "approval_required": bool(first_step.get("approval_required")),
         "approval_reason": first_step.get("approval_reason"),
+        "bundle_path": first_step.get("bundle_path"),
+        "hotspot": first_step.get("hotspot"),
         "message": "Complete this onboarding action before deep work." if blocking else "Recommended onboarding follow-up is available.",
     }
 

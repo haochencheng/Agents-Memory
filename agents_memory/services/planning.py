@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -9,10 +10,25 @@ from typing import Any
 from agents_memory.logging_utils import log_file_update
 from agents_memory.runtime import AppContext
 from agents_memory.services.integration import load_onboarding_state
+from agents_memory.services.validation import RefactorHotspot, collect_refactor_watch_hotspots
 
 
 PLANNING_TEMPLATE_DIR = Path("templates") / "planning"
 DEFAULT_PLAN_ROOT = Path("docs") / "plans"
+README_PLAN_FILE = "README.md"
+SPEC_PLAN_FILE = "spec.md"
+PLAN_PLAN_FILE = "plan.md"
+TASK_GRAPH_PLAN_FILE = "task-graph.md"
+VALIDATION_PLAN_FILE = "validation.md"
+MANAGED_BUNDLE_FILENAMES = (
+    README_PLAN_FILE,
+    SPEC_PLAN_FILE,
+    PLAN_PLAN_FILE,
+    TASK_GRAPH_PLAN_FILE,
+    VALIDATION_PLAN_FILE,
+)
+JSON_CODE_FENCE = "```json"
+NEXT_SECTION_HEADING = "\nNext:"
 
 
 @dataclass(frozen=True)
@@ -42,6 +58,20 @@ class OnboardingBundleResult:
     dry_run: bool
 
 
+@dataclass(frozen=True)
+class RefactorBundleResult:
+    task_name: str
+    task_slug: str
+    target_root: Path
+    plan_root: Path
+    hotspot_index: int
+    hotspot: RefactorHotspot
+    wrote_files: list[str]
+    refreshed_files: list[str]
+    skipped_files: list[str]
+    dry_run: bool
+
+
 def slugify_task_name(task_name: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9]+", "-", task_name.strip().lower()).strip("-")
     return cleaned or "untitled-task"
@@ -56,8 +86,46 @@ def _render_template(source: Path, *, task_name: str, task_slug: str) -> str:
     return content.replace("{{TASK_NAME}}", task_name).replace("{{TASK_SLUG}}", task_slug)
 
 
+def _merge_managed_section(existing_content: str, rendered_content: str, heading: str) -> str:
+    existing = existing_content.rstrip()
+    rendered = rendered_content.rstrip()
+    marker = f"\n{heading}\n"
+    rendered_heading_marker = f"\n{heading}\n"
+    if rendered_heading_marker in rendered:
+        rendered_suffix = rendered.split(rendered_heading_marker, 1)[1].lstrip()
+    elif rendered.startswith(f"{heading}\n"):
+        rendered_suffix = rendered.split(f"{heading}\n", 1)[1].lstrip()
+    else:
+        rendered_suffix = rendered
+    if marker in existing:
+        prefix = existing.split(marker, 1)[0].rstrip()
+        return prefix + "\n\n" + heading + "\n" + rendered_suffix + "\n"
+    if existing.startswith(f"{heading}\n"):
+        return heading + "\n" + rendered_suffix + "\n"
+    if existing.endswith(heading):
+        prefix = existing[: -len(heading)].rstrip()
+        return prefix + "\n\n" + heading + "\n" + rendered_suffix + "\n"
+    return existing + "\n\n" + heading + "\n" + rendered_suffix + "\n"
+
+
 def _target_plan_root(target_root: Path, task_slug: str) -> Path:
     return target_root / DEFAULT_PLAN_ROOT / task_slug
+
+
+def _sanitize_bundle_value(value: Any, target_root: Path) -> Any:
+    root_str = str(target_root)
+    if isinstance(value, str):
+        return value.replace(root_str, ".")
+    if isinstance(value, list):
+        return [_sanitize_bundle_value(item, target_root) for item in value]
+    if isinstance(value, dict):
+        return {key: _sanitize_bundle_value(item, target_root) for key, item in value.items()}
+    return value
+
+
+def _json_block(value: object, *, target_root: Path | None = None) -> str:
+    payload = _sanitize_bundle_value(value, target_root) if target_root is not None else value
+    return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
 def _default_onboarding_slug(target_root: Path, recommended_key: str, task_slug: str | None) -> str:
@@ -97,21 +165,8 @@ def _render_onboarding_bundle_content(
     runbook_steps = state.get("runbook_steps") or []
     groups = state.get("groups") or []
 
-    def _sanitize(value: Any) -> Any:
-        root_str = str(target_root)
-        if isinstance(value, str):
-            return value.replace(root_str, ".")
-        if isinstance(value, list):
-            return [_sanitize(item) for item in value]
-        if isinstance(value, dict):
-            return {key: _sanitize(item) for key, item in value.items()}
-        return value
-
-    def _json_block(value: object) -> str:
-        return json.dumps(_sanitize(value), ensure_ascii=False, indent=2)
-
     appendix_map = {
-        "README.md": [
+        README_PLAN_FILE: [
             "## Onboarding State",
             f"- state file: `{relative_state_path}`",
             f"- bootstrap ready: `{bootstrap_ready}`",
@@ -122,45 +177,46 @@ def _render_onboarding_bundle_content(
             f"- verify with: `{verify_command}`",
             f"- done when: {done_when}",
         ],
-        "spec.md": [
+        SPEC_PLAN_FILE: [
             "## Onboarding Inputs",
             f"- state file: `{relative_state_path}`",
             "",
-            "```json",
-            _json_block(groups),
+            JSON_CODE_FENCE,
+            _json_block(groups, target_root=target_root),
             "```",
         ],
-        "plan.md": [
+        PLAN_PLAN_FILE: [
             "## Onboarding Execution",
             f"- run `{recommended_next_command}`",
             f"- verify with `{verify_command}`",
             f"- finish when: {done_when}",
             "",
             "## Action Sequence Snapshot",
-            "```json",
-            _json_block(action_sequence),
+            JSON_CODE_FENCE,
+            _json_block(action_sequence, target_root=target_root),
             "```",
         ],
-        "task-graph.md": [
+        TASK_GRAPH_PLAN_FILE: [
             "## Onboarding Task Steps",
-            "```json",
-            _json_block(runbook_steps),
+            JSON_CODE_FENCE,
+            _json_block(runbook_steps, target_root=target_root),
             "```",
         ],
-        "validation.md": [
+        VALIDATION_PLAN_FILE: [
             "## Onboarding Verification",
             f"- primary verification command: `{verify_command}`",
             f"- expected completion: {done_when}",
             "",
             "## State Snapshot",
-            "```json",
+            JSON_CODE_FENCE,
             _json_block(
                 {
                     "project_bootstrap_ready": state.get("project_bootstrap_ready"),
                     "project_bootstrap_complete": state.get("project_bootstrap_complete"),
                     "recommended_next_command": recommended_next_command,
                     "recommended_verify_command": verify_command,
-                }
+                },
+                target_root=target_root,
             ),
             "```",
         ],
@@ -172,35 +228,53 @@ def _render_onboarding_bundle_content(
 
 def _onboarding_appendix_heading(filename: str) -> str:
     heading_map = {
-        "README.md": "## Onboarding State",
-        "spec.md": "## Onboarding Inputs",
-        "plan.md": "## Onboarding Execution",
-        "task-graph.md": "## Onboarding Task Steps",
-        "validation.md": "## Onboarding Verification",
+        README_PLAN_FILE: "## Onboarding State",
+        SPEC_PLAN_FILE: "## Onboarding Inputs",
+        PLAN_PLAN_FILE: "## Onboarding Execution",
+        TASK_GRAPH_PLAN_FILE: "## Onboarding Task Steps",
+        VALIDATION_PLAN_FILE: "## Onboarding Verification",
     }
     return heading_map[filename]
 
 
-def _merge_onboarding_refresh(existing_content: str, rendered_content: str, heading: str) -> str:
-    existing = existing_content.rstrip()
-    rendered = rendered_content.rstrip()
-    marker = f"\n{heading}\n"
-    rendered_heading_marker = f"\n{heading}\n"
-    if rendered_heading_marker in rendered:
-        rendered_suffix = rendered.split(rendered_heading_marker, 1)[1].lstrip()
-    elif rendered.startswith(f"{heading}\n"):
-        rendered_suffix = rendered.split(f"{heading}\n", 1)[1].lstrip()
-    else:
-        rendered_suffix = rendered
-    if marker in existing:
-        prefix = existing.split(marker, 1)[0].rstrip()
-        return prefix + "\n\n" + heading + "\n" + rendered_suffix + "\n"
-    if existing.startswith(f"{heading}\n"):
-        return heading + "\n" + rendered_suffix + "\n"
-    if existing.endswith(heading):
-        prefix = existing[: -len(heading)].rstrip()
-        return prefix + "\n\n" + heading + "\n" + rendered_suffix + "\n"
-    return existing + "\n\n" + heading + "\n" + rendered_suffix + "\n"
+def _refresh_managed_bundle_files(
+    ctx: AppContext,
+    *,
+    target_root: Path,
+    plan_root: Path,
+    filenames: tuple[str, ...],
+    created_now: set[str],
+    dry_run: bool,
+    render_content: Callable[[str], str],
+    resolve_heading: Callable[[str], str],
+    create_action: str,
+    refresh_action: str,
+    log_detail: str,
+) -> tuple[list[str], list[str]]:
+    refreshed_files: list[str] = []
+    skipped_files: list[str] = []
+    if dry_run:
+        return refreshed_files, skipped_files
+
+    for filename in filenames:
+        destination = plan_root / filename
+        if not destination.exists():
+            continue
+        relative = destination.relative_to(target_root).as_posix()
+        existing = destination.read_text(encoding="utf-8")
+        merged = _merge_managed_section(existing, render_content(filename), resolve_heading(filename))
+        if merged == existing:
+            if relative not in created_now:
+                skipped_files.append(relative)
+            continue
+        destination.write_text(merged, encoding="utf-8")
+        if relative in created_now:
+            log_file_update(ctx.logger, action=create_action, path=destination, detail=log_detail)
+            continue
+        refreshed_files.append(relative)
+        log_file_update(ctx.logger, action=refresh_action, path=destination, detail=log_detail)
+
+    return refreshed_files, skipped_files
 
 
 def init_plan_bundle(
@@ -288,37 +362,28 @@ def init_onboarding_bundle(
     refreshed_files: list[str] = []
     skipped_files: list[str] = []
 
-    for filename in ["README.md", "spec.md", "plan.md", "task-graph.md", "validation.md"]:
-        destination = plan_result.plan_root / filename
-        relative = destination.relative_to(target_root).as_posix()
-        template_path = templates_dir / f"{filename.replace('.md', '')}.template.md"
-        rendered = _render_onboarding_bundle_content(
-            template_path,
+    created_now = set(plan_result.wrote_files)
+    refreshed_files, skipped_files = _refresh_managed_bundle_files(
+        ctx,
+        target_root=target_root,
+        plan_root=plan_result.plan_root,
+        filenames=MANAGED_BUNDLE_FILENAMES,
+        created_now=created_now,
+        dry_run=dry_run,
+        render_content=lambda filename: _render_onboarding_bundle_content(
+            templates_dir / f"{filename.replace('.md', '')}.template.md",
             filename=filename,
             task_name=task_name,
             task_slug=resolved_slug,
             state=state,
             relative_state_path=relative_state_path,
             target_root=target_root,
-        )
-        heading = _onboarding_appendix_heading(filename)
-        if destination.exists():
-            merged = _merge_onboarding_refresh(destination.read_text(encoding="utf-8"), rendered, heading)
-            if merged == destination.read_text(encoding="utf-8"):
-                skipped_files.append(relative)
-                continue
-            refreshed_files.append(relative)
-            if dry_run:
-                continue
-            destination.write_text(merged, encoding="utf-8")
-            log_file_update(ctx.logger, action="onboarding_bundle_refresh", path=destination, detail=f"task_slug={resolved_slug}")
-            continue
-        if dry_run:
-            wrote_files.append(relative)
-            continue
-        wrote_files.append(relative)
-        destination.write_text(rendered, encoding="utf-8")
-        log_file_update(ctx.logger, action="onboarding_bundle_file", path=destination, detail=f"task_slug={resolved_slug}")
+        ),
+        resolve_heading=_onboarding_appendix_heading,
+        create_action="onboarding_bundle_file",
+        refresh_action="onboarding_bundle_refresh",
+        log_detail=f"task_slug={resolved_slug}",
+    )
 
     return OnboardingBundleResult(
         task_name=task_name,
@@ -328,6 +393,167 @@ def init_onboarding_bundle(
         state_path=target_root / ".agents-memory" / "onboarding-state.json",
         recommended_next_command=str(state.get("recommended_next_command") or ""),
         verify_command=str(state.get("recommended_verify_command") or ""),
+        wrote_files=wrote_files,
+        refreshed_files=refreshed_files,
+        skipped_files=skipped_files,
+        dry_run=dry_run,
+    )
+
+
+def _default_refactor_slug(hotspot: RefactorHotspot, task_slug: str | None) -> str:
+    base_slug = task_slug or slugify_task_name(f"{hotspot.relative_path}-{hotspot.function_name}")
+    return base_slug if base_slug.startswith("refactor-") else f"refactor-{base_slug}"
+
+
+def _render_refactor_bundle_content(
+    source: Path,
+    *,
+    filename: str,
+    task_name: str,
+    task_slug: str,
+    hotspot: RefactorHotspot,
+    hotspot_index: int,
+) -> str:
+    if not source.exists():
+        raise FileNotFoundError(f"planning template not found: {source}")
+    base = _render_template(source, task_name=task_name, task_slug=task_slug).rstrip()
+
+    def _json_block(value: object) -> str:
+        return json.dumps(value, ensure_ascii=False, indent=2)
+
+    hotspot_payload = {
+        "identifier": hotspot.identifier,
+        "relative_path": hotspot.relative_path,
+        "function_name": hotspot.function_name,
+        "line": hotspot.line,
+        "status": hotspot.status,
+        "effective_lines": hotspot.effective_lines,
+        "branches": hotspot.branches,
+        "nesting": hotspot.nesting,
+        "local_vars": hotspot.local_vars,
+        "has_guiding_comment": hotspot.has_guiding_comment,
+        "issues": hotspot.issues,
+        "score": hotspot.score,
+    }
+    init_command = f"amem refactor-bundle . --index {hotspot_index}"
+    appendix_map = {
+        README_PLAN_FILE: [
+            "## Refactor Hotspot",
+            f"- hotspot: `{hotspot.identifier}`",
+            f"- line: `{hotspot.line}`",
+            f"- status: `{hotspot.status}`",
+            f"- issues: `{', '.join(hotspot.issues)}`",
+            f"- bundle entry command: `{init_command}`",
+            "- verify with: `amem doctor .`",
+        ],
+        SPEC_PLAN_FILE: [
+            "## Refactor Inputs",
+            "",
+            JSON_CODE_FENCE,
+            _json_block(hotspot_payload),
+            "```",
+        ],
+        PLAN_PLAN_FILE: [
+            "## Refactor Execution",
+            f"- Target hotspot: `{hotspot.identifier}`",
+            "- Split branches/state transitions before adding new behavior.",
+            "- Preserve behavior with focused tests or validation commands before and after extraction.",
+            "- Re-run `amem doctor .` after the refactor and confirm the hotspot disappears or shrinks.",
+        ],
+        TASK_GRAPH_PLAN_FILE: [
+            "## Refactor Work Items",
+            JSON_CODE_FENCE,
+            _json_block(
+                [
+                    {"step": 1, "title": "Map decision branches and data mutations", "done_when": "Current control flow is documented in spec.md."},
+                    {"step": 2, "title": "Extract or simplify the hotspot", "done_when": "Complexity drivers are reduced without behavior regression."},
+                    {"step": 3, "title": "Re-run validation", "done_when": "`amem doctor .` shows a smaller refactor_watch surface."},
+                ]
+            ),
+            "```",
+        ],
+        VALIDATION_PLAN_FILE: [
+            "## Refactor Verification",
+            "- primary verification command: `amem doctor .`",
+            f"- expected outcome: `{hotspot.identifier}` is no longer the first hotspot, or its issue list is smaller.",
+            "",
+            "## Hotspot Snapshot",
+            JSON_CODE_FENCE,
+            _json_block(hotspot_payload),
+            "```",
+        ],
+    }
+    appendix = appendix_map.get(filename, [])
+    appendix_text = "\n".join(appendix).rstrip()
+    return base + ("\n\n" + appendix_text if appendix_text else "") + "\n"
+
+
+def _refactor_appendix_heading(filename: str) -> str:
+    heading_map = {
+        README_PLAN_FILE: "## Refactor Hotspot",
+        SPEC_PLAN_FILE: "## Refactor Inputs",
+        PLAN_PLAN_FILE: "## Refactor Execution",
+        TASK_GRAPH_PLAN_FILE: "## Refactor Work Items",
+        VALIDATION_PLAN_FILE: "## Refactor Verification",
+    }
+    return heading_map[filename]
+
+
+def init_refactor_bundle(
+    ctx: AppContext,
+    target_root: Path,
+    *,
+    hotspot_index: int = 1,
+    task_slug: str | None = None,
+    dry_run: bool = False,
+) -> RefactorBundleResult:
+    if hotspot_index < 1:
+        raise ValueError("hotspot index must be >= 1")
+
+    hotspots = collect_refactor_watch_hotspots(target_root)
+    if not hotspots:
+        raise FileNotFoundError(f"no refactor hotspots found under: {target_root}")
+    if hotspot_index > len(hotspots):
+        raise IndexError(f"hotspot index {hotspot_index} is out of range; found {len(hotspots)} hotspot(s)")
+
+    hotspot = hotspots[hotspot_index - 1]
+    task_name = f"Refactor hotspot: {hotspot.identifier}"
+    resolved_slug = _default_refactor_slug(hotspot, task_slug)
+    templates_dir = _planning_templates_dir(ctx)
+    if not templates_dir.exists():
+        raise FileNotFoundError(f"planning templates directory not found: {templates_dir}")
+
+    plan_result = init_plan_bundle(ctx, task_name, target_root, task_slug=resolved_slug, dry_run=dry_run)
+    wrote_files = list(plan_result.wrote_files)
+    created_now = set(plan_result.wrote_files)
+    refreshed_files, skipped_files = _refresh_managed_bundle_files(
+        ctx,
+        target_root=target_root,
+        plan_root=plan_result.plan_root,
+        filenames=MANAGED_BUNDLE_FILENAMES,
+        created_now=created_now,
+        dry_run=dry_run,
+        render_content=lambda filename: _render_refactor_bundle_content(
+            templates_dir / f"{filename.replace('.md', '')}.template.md",
+            filename=filename,
+            task_name=task_name,
+            task_slug=resolved_slug,
+            hotspot=hotspot,
+            hotspot_index=hotspot_index,
+        ),
+        resolve_heading=_refactor_appendix_heading,
+        create_action="refactor_bundle_file",
+        refresh_action="refactor_bundle_refresh",
+        log_detail=f"task_slug={resolved_slug};hotspot={hotspot.identifier}",
+    )
+
+    return RefactorBundleResult(
+        task_name=task_name,
+        task_slug=resolved_slug,
+        target_root=target_root,
+        plan_root=plan_result.plan_root,
+        hotspot_index=hotspot_index,
+        hotspot=hotspot,
         wrote_files=wrote_files,
         refreshed_files=refreshed_files,
         skipped_files=skipped_files,
@@ -361,10 +587,24 @@ def _print_plan_init_summary(result: PlanInitResult) -> None:
     if result.dry_run:
         return
 
-    print("\nNext:")
+    print(NEXT_SECTION_HEADING)
     print(f"- Review {result.plan_root / 'spec.md'} and fill in acceptance criteria")
     print(f"- Review {result.plan_root / 'task-graph.md'} before changing code")
     print("- Run docs-check after the implementation is complete")
+
+
+def _print_bundle_file_groups(*, wrote_files: list[str], refreshed_files: list[str] | None = None, skipped_files: list[str]) -> None:
+    sections = [
+        ("Wrote Files", wrote_files),
+        ("Refreshed Files", refreshed_files or []),
+        ("Skipped Files", skipped_files),
+    ]
+    for title, items in sections:
+        if not items:
+            continue
+        print(f"\n{title}:")
+        for item in items:
+            print(f"- {item}")
 
 
 def cmd_plan_init(
@@ -416,25 +656,40 @@ def _print_onboarding_bundle_summary(result: OnboardingBundleResult) -> None:
     print(f"DryRun:    {'yes' if result.dry_run else 'no'}")
     print(f"NextCmd:   {result.recommended_next_command or 'n/a'}")
     print(f"VerifyCmd: {result.verify_command or 'n/a'}")
-
-    if result.wrote_files:
-        print("\nWrote Files:")
-        for item in result.wrote_files:
-            print(f"- {item}")
-    if result.refreshed_files:
-        print("\nRefreshed Files:")
-        for item in result.refreshed_files:
-            print(f"- {item}")
-    if result.skipped_files:
-        print("\nSkipped Files:")
-        for item in result.skipped_files:
-            print(f"- {item}")
+    _print_bundle_file_groups(
+        wrote_files=result.wrote_files,
+        refreshed_files=result.refreshed_files,
+        skipped_files=result.skipped_files,
+    )
     if result.dry_run:
         return
-    print("\nNext:")
+    print(NEXT_SECTION_HEADING)
     print(f"- Run {result.recommended_next_command or 'amem doctor .'}")
     print(f"- Verify with {result.verify_command or 'amem doctor .'}")
     print(f"- Review {result.plan_root / 'plan.md'} before executing onboarding work")
+
+
+def _print_refactor_bundle_summary(result: RefactorBundleResult) -> None:
+    heading = "Refactor Bundle Preview" if result.dry_run else "Refactor Bundle"
+    print(f"\n=== {heading} ===")
+    print(f"Task:      {result.task_name}")
+    print(f"Slug:      {result.task_slug}")
+    print(f"Target:    {result.target_root}")
+    print(f"PlanDir:   {result.plan_root}")
+    print(f"Hotspot:   {result.hotspot.identifier}")
+    print(f"IssueSet:  {', '.join(result.hotspot.issues)}")
+    print(f"DryRun:    {'yes' if result.dry_run else 'no'}")
+    _print_bundle_file_groups(
+        wrote_files=result.wrote_files,
+        refreshed_files=result.refreshed_files,
+        skipped_files=result.skipped_files,
+    )
+    if result.dry_run:
+        return
+    print(NEXT_SECTION_HEADING)
+    print(f"- Review {result.plan_root / 'spec.md'} and lock acceptance criteria for {result.hotspot.identifier}")
+    print(f"- Refactor {result.hotspot.identifier} before adding more behavior")
+    print("- Re-run amem doctor . and confirm refactor_watch shrinks")
 
 
 def cmd_onboarding_bundle(
@@ -463,6 +718,47 @@ def cmd_onboarding_bundle(
     ctx.logger.info(
         "onboarding_bundle_complete | task_slug=%s | target_root=%s | dry_run=%s | files=%s | skipped=%s",
         result.task_slug,
+        result.target_root,
+        result.dry_run,
+        len(result.wrote_files) + len(result.refreshed_files),
+        len(result.skipped_files),
+    )
+    return 0
+
+
+def cmd_refactor_bundle(
+    ctx: AppContext,
+    project_id_or_path: str = ".",
+    *,
+    hotspot_index: int = 1,
+    task_slug: str | None = None,
+    dry_run: bool = False,
+) -> int:
+    target_root = Path(project_id_or_path).expanduser().resolve()
+    if not target_root.exists():
+        print(f"路径不存在: {target_root}")
+        return 1
+    if not target_root.is_dir():
+        print(f"目标不是目录: {target_root}")
+        return 1
+
+    ctx.logger.info(
+        "refactor_bundle_start | task_slug=%s | hotspot_index=%s | target_root=%s | dry_run=%s",
+        task_slug,
+        hotspot_index,
+        target_root,
+        dry_run,
+    )
+    try:
+        result = init_refactor_bundle(ctx, target_root, hotspot_index=hotspot_index, task_slug=task_slug, dry_run=dry_run)
+    except (FileNotFoundError, IndexError, ValueError) as exc:
+        print(str(exc))
+        return 1
+    _print_refactor_bundle_summary(result)
+    ctx.logger.info(
+        "refactor_bundle_complete | task_slug=%s | hotspot_index=%s | target_root=%s | dry_run=%s | files=%s | skipped=%s",
+        result.task_slug,
+        hotspot_index,
         result.target_root,
         result.dry_run,
         len(result.wrote_files) + len(result.refreshed_files),

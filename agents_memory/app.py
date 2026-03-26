@@ -34,6 +34,7 @@ USAGE = """Agents-Memory CLI — 错误记录管理工具
                                                # 执行当前第一条 onboarding action；仅自动执行安全步骤，危险步骤需显式批准
   python3 memory.py plan-init <task> [path]    # 初始化 spec / plan / task-graph / validation bundle
   python3 memory.py onboarding-bundle [path]   # 从 onboarding-state.json 生成 onboarding task bundle
+    python3 memory.py refactor-bundle [path]     # 根据当前第一个 hotspot 生成 refactor task bundle
   python3 memory.py plan-check [path]          # 校验 docs/plans 下 planning bundle 的完整性
     python3 memory.py profile-list               # 查看可用 profile 列表
     python3 memory.py profile-show <profile-id>  # 查看指定 profile 的装配内容

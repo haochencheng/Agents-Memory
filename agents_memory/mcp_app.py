@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 
@@ -14,9 +15,11 @@ except ImportError:
 from agents_memory.constants import CATEGORIES, DOMAINS, PROJECTS, VECTOR_THRESHOLD
 from agents_memory.logging_utils import log_file_update
 from agents_memory.runtime import build_context
-from agents_memory.services.integration import execute_onboarding_next_action, load_onboarding_state, onboarding_next_action
+from agents_memory.services.integration import _merge_refactor_followup_state, execute_onboarding_next_action, load_onboarding_state, onboarding_next_action, onboarding_state_path
+from agents_memory.services.planning import init_refactor_bundle
 from agents_memory.services.projects import parse_projects
 from agents_memory.services.records import cmd_update_index, parse_frontmatter
+from agents_memory.services.validation import collect_refactor_watch_hotspots
 
 ctx = build_context(logger_name="agents_memory.mcp", reference_file=__file__)
 
@@ -39,6 +42,8 @@ mcp = FastMCP(
         "Shared memory system for AI Agents. Always call memory_get_index() at the start of a session involving code changes. "
         "Call memory_get_onboarding_next_action() before deep implementation if onboarding-state.json is available. "
         "Call memory_execute_onboarding_next_action() when onboarding state already tells you the first required action and you want the system to execute, verify, and write back the result. "
+        "Call memory_get_refactor_hotspots() when you need a structured hotspot list without relying on doctor artifacts. "
+        "Call memory_init_refactor_bundle() when doctor/refactor_watch identifies a hotspot and you want the system to materialize a refactor plan bundle automatically. "
         "Call memory_record_error() whenever you find and fix a bug or make an error during coding. "
         "Call memory_get_rules(domain) before working on finance, frontend, or python code."
     ),
@@ -85,6 +90,98 @@ def memory_execute_onboarding_next_action(project_root: str = ".", verify: bool 
     target_root = Path(project_root).expanduser().resolve()
     payload = execute_onboarding_next_action(ctx, target_root, verify=verify, approve_unsafe=approve_unsafe, refresh_artifacts=True)
     _log_tool_end("memory_execute_onboarding_next_action", status=payload.get("status"), project_root=target_root, verify=verify, approve_unsafe=approve_unsafe)
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+def memory_get_refactor_hotspots(project_root: str = ".") -> str:
+    _log_tool_start("memory_get_refactor_hotspots", project_root=project_root)
+    target_root = Path(project_root).expanduser().resolve()
+    hotspots = collect_refactor_watch_hotspots(target_root)
+    payload = {
+        "status": "ok",
+        "project_root": str(target_root),
+        "hotspot_count": len(hotspots),
+        "hotspots": [asdict(hotspot) for hotspot in hotspots],
+    }
+    _log_tool_end(
+        "memory_get_refactor_hotspots",
+        status="ok",
+        project_root=target_root,
+        hotspot_count=len(hotspots),
+    )
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+def memory_init_refactor_bundle(project_root: str = ".", hotspot_index: int = 1, task_slug: str = "", dry_run: bool = False) -> str:
+    _log_tool_start(
+        "memory_init_refactor_bundle",
+        project_root=project_root,
+        hotspot_index=hotspot_index,
+        task_slug=task_slug,
+        dry_run=dry_run,
+    )
+    target_root = Path(project_root).expanduser().resolve()
+    try:
+        result = init_refactor_bundle(
+            ctx,
+            target_root,
+            hotspot_index=hotspot_index,
+            task_slug=task_slug or None,
+            dry_run=dry_run,
+        )
+    except FileNotFoundError as exc:
+        payload = {
+            "status": "missing",
+            "project_root": str(target_root),
+            "message": str(exc),
+            "recommended_command": "python3 scripts/memory.py doctor . --write-checklist --write-state",
+        }
+        _log_tool_end("memory_init_refactor_bundle", status="missing", project_root=target_root, hotspot_index=hotspot_index)
+        return json.dumps(payload, ensure_ascii=False, indent=2)
+    except (IndexError, ValueError) as exc:
+        payload = {
+            "status": "invalid",
+            "project_root": str(target_root),
+            "message": str(exc),
+            "hotspot_index": hotspot_index,
+        }
+        _log_tool_end("memory_init_refactor_bundle", status="invalid", project_root=target_root, hotspot_index=hotspot_index)
+        return json.dumps(payload, ensure_ascii=False, indent=2)
+
+    payload = {
+        "status": "ok",
+        "project_root": str(result.target_root),
+        "plan_root": str(result.plan_root),
+        "task_name": result.task_name,
+        "task_slug": result.task_slug,
+        "hotspot_index": result.hotspot_index,
+        "hotspot": asdict(result.hotspot),
+        "wrote_files": result.wrote_files,
+        "refreshed_files": result.refreshed_files,
+        "skipped_files": result.skipped_files,
+        "dry_run": result.dry_run,
+        "recommended_next_command": "amem doctor .",
+    }
+    if not dry_run:
+        existing_state = load_onboarding_state(target_root)
+        updated_state = _merge_refactor_followup_state(
+            existing_state,
+            project_root=target_root,
+            plan_root=result.plan_root,
+            hotspot_index=result.hotspot_index,
+            hotspot=payload["hotspot"],
+            task_name=result.task_name,
+            task_slug=result.task_slug,
+        )
+        state_path = onboarding_state_path(target_root)
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps(updated_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        log_file_update(ctx.logger, action="write_refactor_followup_state", path=state_path, detail=f"project_root={target_root};task_slug={result.task_slug}")
+        payload["state_path"] = str(state_path)
+        payload["recommended_followup"] = updated_state.get("recommended_refactor_bundle")
+    _log_tool_end("memory_init_refactor_bundle", status="ok", project_root=target_root, hotspot_index=hotspot_index, task_slug=result.task_slug, dry_run=dry_run)
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 

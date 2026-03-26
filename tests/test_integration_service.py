@@ -324,6 +324,45 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertTrue(action["safe_to_auto_execute"])
             self.assertFalse(action["approval_required"])
 
+    def test_onboarding_next_action_returns_recommended_refactor_followup_when_bootstrap_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_text(
+                root / ".agents-memory" / "onboarding-state.json",
+                json.dumps(
+                    {
+                        "project_bootstrap_ready": True,
+                        "project_bootstrap_complete": True,
+                        "runbook_steps": [],
+                        "recommended_steps": [
+                            {
+                                "group": "Refactor",
+                                "key": "refactor_bundle",
+                                "priority": "recommended",
+                                "command": "python3 scripts/memory.py refactor-bundle . --index 1",
+                                "verify_with": "amem doctor .",
+                                "done_when": "doctor no longer reports the hotspot",
+                                "next_command": "amem doctor .",
+                                "safe_to_auto_execute": True,
+                                "approval_required": False,
+                                "approval_reason": "refreshes generated planning docs only",
+                                "bundle_path": "docs/plans/refactor-service-py-heavy",
+                                "hotspot": {"identifier": "service.py::heavy"},
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+
+            action = onboarding_next_action(root)
+
+            self.assertEqual(action["status"], "pending")
+            self.assertEqual(action["step_source"], "recommended")
+            self.assertFalse(action["blocking"])
+            self.assertEqual(action["bundle_path"], "docs/plans/refactor-service-py-heavy")
+            self.assertEqual(action["hotspot"]["identifier"], "service.py::heavy")
+
     def test_parse_doctor_args_supports_export_flags(self) -> None:
         project_id_or_path, write_state, write_checklist = _parse_doctor_args(
             ["demo-project", "--write-state", "--write-checklist"]
@@ -448,6 +487,7 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertTrue(state_path.exists())
             self.assertIn("# Bootstrap Checklist", checklist_path.read_text(encoding="utf-8"))
             self.assertIn("# Refactor Watch", refactor_watch_path.read_text(encoding="utf-8"))
+            self.assertIn("amem refactor-bundle .", refactor_watch_path.read_text(encoding="utf-8"))
             self.assertIn('"project_id": "demo-project"', state_path.read_text(encoding="utf-8"))
             self.assertIn('"recommended_next_command": "amem mcp-setup ."', state_path.read_text(encoding="utf-8"))
             self.assertIn('"recommended_next_safe_to_auto_execute": true', state_path.read_text(encoding="utf-8"))
@@ -494,6 +534,53 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertEqual(state["execution_history"][0]["key"], "mcp_config")
             self.assertEqual(state["last_execution_status"], "verified")
             self.assertEqual(state["last_verified_action"]["key"], "mcp_config")
+
+    def test_cmd_doctor_preserves_refactor_followup_metadata_when_rewriting_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(
+                root / "memory" / "projects.md",
+                "\n".join(
+                    [
+                        "# Project Registry",
+                        "",
+                        "## demo-project",
+                        "- **id**: demo-project",
+                        f"- **root**: {project_root}",
+                        '- **bridge_instruction**: ""',
+                        "- **active**: true",
+                    ]
+                ),
+            )
+            _write_text(
+                project_root / ".agents-memory" / "onboarding-state.json",
+                json.dumps(
+                    {
+                        "recommended_steps": [
+                            {
+                                "group": "Refactor",
+                                "key": "refactor_bundle",
+                                "bundle_path": "docs/plans/refactor-demo",
+                            }
+                        ],
+                        "recommended_refactor_bundle": {
+                            "bundle_path": "docs/plans/refactor-demo",
+                            "task_slug": "refactor-demo",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+
+            with redirect_stdout(StringIO()):
+                cmd_doctor(ctx, str(project_root), write_state=True)
+
+            state = json.loads((project_root / ".agents-memory" / "onboarding-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["recommended_steps"][0]["key"], "refactor_bundle")
+            self.assertEqual(state["recommended_refactor_bundle"]["task_slug"], "refactor-demo")
 
     def test_execute_onboarding_next_action_requires_approval_for_unsafe_step(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

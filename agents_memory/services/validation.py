@@ -28,6 +28,8 @@ CORE_DOC_COMMANDS = [
     "doctor",
     "onboarding-execute",
     "plan-init",
+    "onboarding-bundle",
+    "refactor-bundle",
     "plan-check",
     "profile-list",
     "profile-show",
@@ -169,6 +171,30 @@ class ValidationFinding:
     detail: str
 
 
+@dataclass(frozen=True)
+class RefactorHotspot:
+    status: str
+    relative_path: str
+    function_name: str
+    line: int
+    effective_lines: int
+    branches: int
+    nesting: int
+    local_vars: int
+    has_guiding_comment: bool
+    issues: list[str]
+    score: int
+
+    @property
+    def identifier(self) -> str:
+        return f"{self.relative_path}::{self.function_name}"
+
+    @property
+    def summary(self) -> str:
+        label = "high complexity" if self.status == "WARN" else "approaching refactor threshold"
+        return f"{self.identifier} {label} ({', '.join(self.issues)})"
+
+
 def _should_skip_refactor_watch(path: Path) -> bool:
     return any(part in REFACTOR_SKIP_PARTS for part in path.parts)
 
@@ -243,68 +269,107 @@ def _has_guiding_comment(source_lines: list[str], node: ast.AST) -> bool:
     return False
 
 
-def collect_refactor_watch_findings(project_root: Path) -> list[ValidationFinding]:
-    # This scan intentionally stays heuristic and cheap: it is meant to surface
-    # likely refactor hotspots during onboarding/governance, not replace a full
-    # static-analysis pipeline or block normal development on exact metrics.
-    findings: list[ValidationFinding] = []
-    candidates: list[tuple[int, ValidationFinding]] = []
+def _evaluate_refactor_hits(*, effective_lines: int, branches: int, nesting: int, local_vars: int, has_comment: bool) -> tuple[list[str], list[str]]:
+    hard_hits: list[str] = []
+    soft_hits: list[str] = []
+    metrics = {
+        "lines": effective_lines,
+        "branches": branches,
+        "nesting": nesting,
+        "locals": local_vars,
+    }
+    for key, value in metrics.items():
+        fail_limit = REFACTOR_FAIL_LIMITS[key]
+        warn_limit = REFACTOR_WARN_LIMITS[key]
+        if key == "nesting":
+            fail_fragment = f"{key}={value}>={fail_limit}"
+        else:
+            fail_fragment = f"{key}={value}>{fail_limit}"
+        if value > fail_limit or (key == "nesting" and value >= fail_limit):
+            hard_hits.append(fail_fragment)
+        elif value >= warn_limit:
+            soft_hits.append(f"{key}={value}")
+    if not has_comment and (hard_hits or len(soft_hits) >= 2):
+        soft_hits.append("missing_guiding_comment")
+    return hard_hits, soft_hits
+
+
+def _build_refactor_hotspot(relative: str, source_lines: list[str], node: ast.AST) -> RefactorHotspot | None:
+    function_name = getattr(node, "name", "<lambda>")
+    effective_lines = _count_effective_function_lines(source_lines, node)
+    branches = _count_control_nodes(node)
+    nesting = _max_control_nesting(node)
+    local_vars = len(_collect_local_names(node))
+    has_comment = _has_guiding_comment(source_lines, node)
+    hard_hits, soft_hits = _evaluate_refactor_hits(
+        effective_lines=effective_lines,
+        branches=branches,
+        nesting=nesting,
+        local_vars=local_vars,
+        has_comment=has_comment,
+    )
+    if not hard_hits and len(soft_hits) < 2:
+        return None
+
+    score = len(hard_hits) * 10 + len(soft_hits)
+    status = "WARN" if hard_hits or len(soft_hits) >= 3 else "INFO"
+    return RefactorHotspot(
+        status=status,
+        relative_path=relative,
+        function_name=function_name,
+        line=max(getattr(node, "lineno", 1), 1),
+        effective_lines=effective_lines,
+        branches=branches,
+        nesting=nesting,
+        local_vars=local_vars,
+        has_guiding_comment=has_comment,
+        issues=hard_hits + soft_hits,
+        score=score,
+    )
+
+
+def collect_refactor_watch_hotspots(project_root: Path) -> list[RefactorHotspot]:
+    candidates: list[RefactorHotspot] = []
 
     for path in _iter_refactor_watch_files(project_root):
         relative = path.relative_to(project_root).as_posix()
         try:
             source = path.read_text(encoding="utf-8")
             tree = ast.parse(source)
-        except Exception as exc:
-            findings.append(ValidationFinding("WARN", "refactor_watch", f"unable to inspect {relative}: {exc}"))
+        except Exception:
             continue
 
         source_lines = source.splitlines()
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            function_name = getattr(node, "name", "<lambda>")
-            effective_lines = _count_effective_function_lines(source_lines, node)
-            branches = _count_control_nodes(node)
-            nesting = _max_control_nesting(node)
-            local_vars = len(_collect_local_names(node))
-            has_comment = _has_guiding_comment(source_lines, node)
+            hotspot = _build_refactor_hotspot(relative, source_lines, node)
+            if hotspot is not None:
+                candidates.append(hotspot)
 
-            hard_hits: list[str] = []
-            soft_hits: list[str] = []
-            if effective_lines > REFACTOR_FAIL_LIMITS["lines"]:
-                hard_hits.append(f"lines={effective_lines}>{REFACTOR_FAIL_LIMITS['lines']}")
-            elif effective_lines >= REFACTOR_WARN_LIMITS["lines"]:
-                soft_hits.append(f"lines={effective_lines}")
-            if branches > REFACTOR_FAIL_LIMITS["branches"]:
-                hard_hits.append(f"branches={branches}>{REFACTOR_FAIL_LIMITS['branches']}")
-            elif branches >= REFACTOR_WARN_LIMITS["branches"]:
-                soft_hits.append(f"branches={branches}")
-            if nesting >= REFACTOR_FAIL_LIMITS["nesting"]:
-                hard_hits.append(f"nesting={nesting}>={REFACTOR_FAIL_LIMITS['nesting']}")
-            elif nesting >= REFACTOR_WARN_LIMITS["nesting"]:
-                soft_hits.append(f"nesting={nesting}")
-            if local_vars > REFACTOR_FAIL_LIMITS["locals"]:
-                hard_hits.append(f"locals={local_vars}>{REFACTOR_FAIL_LIMITS['locals']}")
-            elif local_vars >= REFACTOR_WARN_LIMITS["locals"]:
-                soft_hits.append(f"locals={local_vars}")
-            if not has_comment and (hard_hits or len(soft_hits) >= 2):
-                soft_hits.append("missing_guiding_comment")
+    return sorted(candidates, key=lambda item: (-item.score, item.identifier))[:REFACTOR_OUTPUT_LIMIT]
 
-            if not hard_hits and len(soft_hits) < 2:
-                continue
 
-            score = len(hard_hits) * 10 + len(soft_hits)
-            status = "WARN" if hard_hits or len(soft_hits) >= 3 else "INFO"
-            issues = hard_hits + soft_hits
-            detail = f"{relative}::{function_name} {'high complexity' if status == 'WARN' else 'approaching refactor threshold'} ({', '.join(issues)})"
-            candidates.append((score, ValidationFinding(status, "refactor_watch", detail)))
+def collect_refactor_watch_findings(project_root: Path) -> list[ValidationFinding]:
+    # This scan intentionally stays heuristic and cheap: it is meant to surface
+    # likely refactor hotspots during onboarding/governance, not replace a full
+    # static-analysis pipeline or block normal development on exact metrics.
+    findings: list[ValidationFinding] = []
+    hotspots = collect_refactor_watch_hotspots(project_root)
 
-    if not candidates:
+    for path in _iter_refactor_watch_files(project_root):
+        relative = path.relative_to(project_root).as_posix()
+        try:
+            source = path.read_text(encoding="utf-8")
+            ast.parse(source)
+        except Exception as exc:
+            findings.append(ValidationFinding("WARN", "refactor_watch", f"unable to inspect {relative}: {exc}"))
+            continue
+
+    if not hotspots:
         return [ValidationFinding("OK", "refactor_watch", "no Python functions are close to configured refactor thresholds")]
 
-    for _score, finding in sorted(candidates, key=lambda item: (-item[0], item[1].detail))[:REFACTOR_OUTPUT_LIMIT]:
-        findings.append(finding)
+    findings.extend(ValidationFinding(hotspot.status, "refactor_watch", hotspot.summary) for hotspot in hotspots)
     return findings
 
 

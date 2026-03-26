@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from agents_memory.runtime import build_context
-from agents_memory.services.planning import init_onboarding_bundle, init_plan_bundle, slugify_task_name
+from agents_memory.services.planning import cmd_refactor_bundle, init_onboarding_bundle, init_plan_bundle, init_refactor_bundle, slugify_task_name
 from agents_memory.services.validation import cmd_plan_check, collect_plan_check_findings
 
 
@@ -73,7 +73,7 @@ class PlanningServiceTests(unittest.TestCase):
             target = root / "target"
             bundle = target / "docs" / "plans" / "demo-task"
             bundle.mkdir(parents=True)
-            ctx = self._build_context(root)
+            self._build_context(root)
             _write_text(bundle / "README.md", "# Demo\nplanning bundle\n")
             _write_text(bundle / "spec.md", "## Acceptance Criteria\n")
             _write_text(bundle / "plan.md", "## Change Set\n")
@@ -179,6 +179,75 @@ class PlanningServiceTests(unittest.TestCase):
             self.assertIn('amem plan-init "task" .', refreshed)
             self.assertNotIn("amem mcp-setup .", refreshed)
             self.assertIn("docs/plans/onboarding-mcp-config/plan.md", second.refreshed_files)
+
+    def test_init_refactor_bundle_uses_first_hotspot_and_writes_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "target"
+            target.mkdir()
+            ctx = self._build_context(root)
+            for name in ["README.template.md", "spec.template.md", "plan.template.md", "task-graph.template.md", "validation.template.md"]:
+                _write_text(root / "templates" / "planning" / name, f"# {name}\nplanning bundle\n## Acceptance Criteria\n## Change Set\n## Work Items\n## Exit Criteria\n## Required Checks\n{{{{TASK_NAME}}}}\n")
+            _write_text(
+                target / "service.py",
+                "\n".join(
+                    [
+                        "def heavy(value):",
+                        "    total = 0",
+                        "    items = []",
+                        "    results = {}",
+                        "    status = None",
+                        "    errors = []",
+                        "    flags = set()",
+                        "    cache = {}",
+                        "    index = 0",
+                        "    if value > 0:",
+                        "        for outer in range(value):",
+                        "            if outer % 2 == 0:",
+                        "                for inner in range(3):",
+                        "                    if inner == 1:",
+                        "                        total += outer + inner",
+                        "                        items.append(total)",
+                        "                        results[outer] = inner",
+                        "                        status = 'hot'",
+                        "                    else:",
+                        "                        errors.append(inner)",
+                        "            else:",
+                        "                while index < 2:",
+                        "                    flags.add(index)",
+                        "                    index += 1",
+                        "    if total > 3:",
+                        "        cache['total'] = total",
+                        "    if items:",
+                        "        return total + len(items) + len(results) + len(errors) + len(flags) + len(cache)",
+                        "    return total",
+                    ]
+                )
+                + "\n",
+            )
+
+            result = init_refactor_bundle(ctx, target)
+
+            plan_dir = target / "docs" / "plans" / "refactor-service-py-heavy"
+            self.assertEqual(result.task_slug, "refactor-service-py-heavy")
+            self.assertTrue(plan_dir.exists())
+            self.assertIn("service.py::heavy", (plan_dir / "README.md").read_text(encoding="utf-8"))
+            self.assertIn("\"function_name\": \"heavy\"", (plan_dir / "spec.md").read_text(encoding="utf-8"))
+            self.assertIn("amem doctor .", (plan_dir / "validation.md").read_text(encoding="utf-8"))
+
+    def test_cmd_refactor_bundle_returns_error_without_hotspot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "target"
+            target.mkdir()
+            ctx = self._build_context(root)
+            for name in ["README.template.md", "spec.template.md", "plan.template.md", "task-graph.template.md", "validation.template.md"]:
+                _write_text(root / "templates" / "planning" / name, f"# {name}\nplanning bundle\n{{{{TASK_NAME}}}}\n")
+            _write_text(target / "service.py", "def clean(value):\n    return value + 1\n")
+
+            exit_code = cmd_refactor_bundle(ctx, str(target))
+
+            self.assertEqual(exit_code, 1)
 
     def test_cmd_plan_check_returns_zero_for_healthy_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

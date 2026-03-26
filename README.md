@@ -148,6 +148,7 @@ python3 scripts/memory.py doctor . --write-checklist --write-state
 python3 scripts/memory.py onboarding-execute .
 python3 scripts/memory.py onboarding-execute . --approve-unsafe
 python3 scripts/memory.py onboarding-bundle .
+python3 scripts/memory.py refactor-bundle .
 python3 scripts/memory.py copilot-setup .
 python3 scripts/memory.py bridge-install your-project
 python3 scripts/memory.py mcp-setup .
@@ -187,6 +188,8 @@ python3 scripts/memory.py docs-check .
 3. `templates/agents-memory-bridge.instructions.md`
 4. `templates/agents-memory-copilot-instructions.md`
 
+MCP 侧现在除了 onboarding tools，还新增了 `memory_get_refactor_hotspots()` 和 `memory_init_refactor_bundle()`：前者让 agent 直接拿结构化 hotspot 列表，不必依赖 doctor 导出文件；后者则可直接生成对应的 refactor planning bundle。生成成功后，bundle 路径和 follow-up step 还会回写到 `.agents-memory/onboarding-state.json`，让 refactor 进入统一推荐动作队列。
+
 ### Standards / Planning / Validation
 
 1. `standards/python/*`
@@ -198,10 +201,11 @@ python3 scripts/memory.py docs-check .
 
 `profile-apply` 现在会默认写出 `docs/plans/README.md` 入口模板，`doctor` 也会开始感知 planning root 和 planning bundle 健康状态。
 `doctor` 的输出现在按 `Core / Planning / Integration / Optional` 分组，并为每个分组生成健康小结、修复建议、按优先级排序的行动序列，以及带 `Command / Verify with / Next command / Done when` 的 onboarding runbook，同时给出 `Project Bootstrap Checklist`。
-它现在还会追加 `refactor_watch`，用 AST 规则扫描 Python 函数是否逼近复杂度阈值，并提示哪些函数应该先重构再继续叠加能力。
+它现在还会追加 `refactor_watch`，用 AST 规则扫描 Python 函数是否逼近复杂度阈值，并提示哪些函数应该先重构再继续叠加能力。`docs/plans/refactor-watch.md` 现在不只是“发现问题”，还会直接给出 `amem refactor-bundle .` / `--index <n>` 入口，把第一个 hotspot 落成 `docs/plans/refactor-<slug>/` bundle。
 如果加上 `--write-checklist --write-state`，它还会导出 `docs/plans/bootstrap-checklist.md`、`docs/plans/refactor-watch.md` 和 `.agents-memory/onboarding-state.json`，把控制台状态沉淀成可复查工件。
-`onboarding-state.json` 现在包含 `project_bootstrap_ready`、`recommended_next_command`、`recommended_verify_command`，以及 `recommended_next_safe_to_auto_execute`、`recommended_next_approval_required`、`execution_history`、`last_executed_action`、`last_verified_action` 等闭环字段，方便 agent 在进入项目时先读 state，再决定是否先跑 `mcp-setup`、`plan-init` 或 `profile-check`，并保留最近一次执行/验证记录。
+`onboarding-state.json` 现在包含 `project_bootstrap_ready`、`recommended_next_command`、`recommended_verify_command`，以及 `recommended_next_safe_to_auto_execute`、`recommended_next_approval_required`、`execution_history`、`last_executed_action`、`last_verified_action` 等闭环字段，方便 agent 在进入项目时先读 state，再决定是否先跑 `mcp-setup`、`plan-init` 或 `profile-check`，并保留最近一次执行/验证记录。通过 MCP/CLI 生成的 refactor bundle 还会写回 `recommended_steps` 和 `recommended_refactor_bundle`，让后续 agent 能从同一份 state 里继续拾取复杂度治理动作。
 `onboarding-bundle` 则会基于当前 state 生成一个 onboarding task bundle，把推荐动作落到 `docs/plans/onboarding-*/` 的 spec / plan / task graph / validation 套件里。
+`refactor-bundle` 则会基于当前第一个 hotspot 自动生成一个 refactor bundle，把目标函数、复杂度指标、问题列表和重构验证动作直接写进 spec / plan / task graph / validation，作为复杂度治理的执行入口。
 现在 MCP 还提供了更直接的 `memory_get_onboarding_next_action()`，agent 可以不解析整份 state，直接拿到当前第一步应执行的 onboarding action；如果希望系统直接执行并回写 state，则可调用 `memory_execute_onboarding_next_action()` 或 CLI `onboarding-execute`。执行器现在默认只自动执行 `safe_to_auto_execute=true` 的低风险步骤；高风险步骤会返回 `approval_required`，需要显式批准后再运行。
 代码标准这边也新增了复杂度重构约束，落在 [standards/python/base.instructions.md](standards/python/base.instructions.md)：命中硬性条件或累计命中多个软性条件时，必须先重构再继续加功能，并附带了可直接复用的复杂度判定模板。对于暂时不能继续拆分的复杂逻辑，也必须补解释性注释，说明状态约束、决策意图或风险边界。
 

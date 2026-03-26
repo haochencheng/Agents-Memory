@@ -45,7 +45,7 @@ amem stats
 
 ### 最小安装（CLI 基础功能，零依赖）
 
-CLI 的 `new / list / stats / search / register / copilot-setup / agent-list / agent-setup / bridge-install / mcp-setup / doctor / plan-init / plan-check / profile-list / profile-show / profile-apply / profile-diff / standards-sync / profile-check / docs-check / sync / archive / update-index` 命令使用纯标准库，**无需任何额外 pip 安装**。直接运行：
+CLI 的 `new / list / stats / search / register / copilot-setup / agent-list / agent-setup / bridge-install / mcp-setup / doctor / plan-init / onboarding-bundle / refactor-bundle / plan-check / profile-list / profile-show / profile-apply / profile-diff / standards-sync / profile-check / docs-check / sync / archive / update-index` 命令使用纯标准库，**无需任何额外 pip 安装**。直接运行：
 
 ```bash
 python3 scripts/memory.py list
@@ -138,6 +138,10 @@ python3 scripts/memory.py onboarding-execute .
 python3 scripts/memory.py onboarding-bundle .
 # 输出: 根据 onboarding-state.json 生成 docs/plans/onboarding-*/ onboarding task bundle
 # 提示: 重复运行会增量刷新 bundle 里的受管 onboarding sections
+
+python3 scripts/memory.py refactor-bundle .
+# 输出: 根据当前第一个 refactor hotspot 生成 docs/plans/refactor-<slug>/ bundle
+# 提示: 用 --index <n> 选择其他 hotspot，并把 doctor 的复杂度发现直接转成可执行重构计划
 
 代码规范补充：
 1. `standards/python/base.instructions.md` 现在内置“高复杂度必须重构”的评判标准
