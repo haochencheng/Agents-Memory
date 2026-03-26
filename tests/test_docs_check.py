@@ -231,7 +231,7 @@ class DocsCheckTests(unittest.TestCase):
             )
             _write_text(
                 root / "standards" / "python" / "base.instructions.md",
-                "复杂度\n重构\n40 行\n嵌套深度\n",
+                "复杂度\n重构\n40 行\n嵌套深度\n注释\n",
             )
             for test_file in [
                 "test_runtime_bootstrap.py",

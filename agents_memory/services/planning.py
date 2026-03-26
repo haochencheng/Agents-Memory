@@ -266,6 +266,8 @@ def init_onboarding_bundle(
     task_slug: str | None = None,
     dry_run: bool = False,
 ) -> OnboardingBundleResult:
+    # Reuse the planning bundle scaffolder, then refresh only the managed
+    # onboarding sections so human-authored context around the bundle survives.
     state = load_onboarding_state(target_root)
     if state is None:
         raise FileNotFoundError(

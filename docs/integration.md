@@ -257,6 +257,9 @@ amem onboarding-execute .
 amem onboarding-execute . --approve-unsafe
 ```
 
+此外，`amem doctor .` 现在会输出 `refactor_watch`，扫描当前项目 Python 函数是否逼近复杂度门槛。
+它不会阻塞 bootstrap readiness，但会提示哪些函数应先重构，哪些复杂逻辑还缺少解释性注释。
+
 如果你想把这个状态直接落成可执行 planning 工件：
 
 ```bash

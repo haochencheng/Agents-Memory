@@ -10,7 +10,7 @@ from pathlib import Path
 
 from agents_memory.runtime import build_context
 from agents_memory.commands.integration import _parse_doctor_args, _parse_onboarding_execute_args
-from agents_memory.services.integration import _doctor_action_sequence, _doctor_bootstrap_checklist, _doctor_bridge_check, _doctor_group_checks, _doctor_group_remediations, _doctor_group_status, _doctor_group_summary, _doctor_planning_checks, _doctor_overall, _doctor_runbook_steps, cmd_bridge_install, cmd_doctor, execute_onboarding_next_action, onboarding_next_action, write_vscode_mcp_json
+from agents_memory.services.integration import _doctor_action_sequence, _doctor_bootstrap_checklist, _doctor_bridge_check, _doctor_group_checks, _doctor_group_remediations, _doctor_group_status, _doctor_group_summary, _doctor_planning_checks, _doctor_refactor_watch_checks, _doctor_overall, _doctor_runbook_steps, cmd_bridge_install, cmd_doctor, execute_onboarding_next_action, onboarding_next_action, write_vscode_mcp_json
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -156,6 +156,54 @@ class IntegrationServiceTests(unittest.TestCase):
         self.assertEqual((status, key), ("INFO", "bridge_instruction"))
         self.assertIn("bridge not configured", detail)
 
+    def test_doctor_refactor_watch_checks_flag_complex_function(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(
+                project_root / "service.py",
+                "\n".join(
+                    [
+                        "def heavy(value):",
+                        "    total = 0",
+                        "    items = []",
+                        "    results = {}",
+                        "    status = None",
+                        "    errors = []",
+                        "    flags = set()",
+                        "    cache = {}",
+                        "    index = 0",
+                        "    if value > 0:",
+                        "        for outer in range(value):",
+                        "            if outer % 2 == 0:",
+                        "                for inner in range(3):",
+                        "                    if inner == 1:",
+                        "                        total += outer + inner",
+                        "                        items.append(total)",
+                        "                        results[outer] = inner",
+                        "                        status = 'hot'",
+                        "                    else:",
+                        "                        errors.append(inner)",
+                        "            else:",
+                        "                while index < 2:",
+                        "                    flags.add(index)",
+                        "                    index += 1",
+                        "    if total > 3:",
+                        "        cache['total'] = total",
+                        "    if items:",
+                        "        return total + len(items) + len(results) + len(errors) + len(flags) + len(cache)",
+                        "    return total",
+                    ]
+                )
+                + "\n",
+            )
+
+            checks = _doctor_refactor_watch_checks(project_root)
+
+            self.assertTrue(any(status == "WARN" and key == "refactor_watch" for status, key, _detail in checks))
+            self.assertTrue(any("service.py::heavy" in detail for _status, _key, detail in checks))
+
     def test_doctor_overall_ignores_info_only_noise(self) -> None:
         overall = _doctor_overall(
             [
@@ -163,6 +211,7 @@ class IntegrationServiceTests(unittest.TestCase):
                 ("OK", "root", "/tmp/demo-project"),
                 ("INFO", "bridge_instruction", "bridge not configured for this project"),
                 ("INFO", "profile_manifest", "no applied profile manifest found"),
+                ("WARN", "refactor_watch", "service.py::heavy high complexity"),
             ]
         )
 

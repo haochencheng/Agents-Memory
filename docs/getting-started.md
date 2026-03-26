@@ -125,6 +125,7 @@ python3 scripts/memory.py vsearch "type guard"
 
 python3 scripts/memory.py doctor .
 # 输出: 当前项目的接入健康检查（按 Core / Planning / Integration / Optional 分组，并附带 Summary / Remediation / Action Sequence / Onboarding Runbook / Project Bootstrap Checklist）
+# 提示: 现在还会输出 refactor_watch，提醒哪些 Python 函数已经逼近复杂度重构阈值
 
 python3 scripts/memory.py doctor . --write-checklist --write-state
 # 输出: 在 docs/plans/bootstrap-checklist.md 和 .agents-memory/onboarding-state.json 导出 onboarding 工件
@@ -141,6 +142,7 @@ python3 scripts/memory.py onboarding-bundle .
 代码规范补充：
 1. `standards/python/base.instructions.md` 现在内置“高复杂度必须重构”的评判标准
 2. 命中任一硬性条件，或命中三条及以上软性条件，应优先重构后再扩展功能
+3. 复杂逻辑如果暂时不能继续拆分，必须补解释性注释，说明关键决策和风险边界
 
 python3 scripts/memory.py plan-init "shared engineering brain task" .
 # 输出: 在 docs/plans/<slug>/ 生成 spec / plan / task-graph / validation bundle

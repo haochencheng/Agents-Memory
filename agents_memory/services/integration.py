@@ -33,7 +33,7 @@ from agents_memory.services.projects import (
 )
 from agents_memory.services.profiles import detect_applied_profile
 from agents_memory.services.records import collect_errors
-from agents_memory.services.validation import collect_plan_check_findings, collect_profile_check_findings
+from agents_memory.services.validation import collect_plan_check_findings, collect_profile_check_findings, collect_refactor_watch_findings
 
 
 DOCTOR_GROUP_ORDER = ["Core", "Planning", "Integration", "Optional"]
@@ -170,6 +170,7 @@ DOCTOR_GROUP_REMEDIATION = {
     "Optional": {
         "copilot_activation": "Run `amem copilot-setup .` to add repo-wide Copilot auto-activation.",
         "agents_read_order": "Reference the bridge in AGENTS.md or docs/AGENTS.md if you want explicit read-order guidance.",
+        "refactor_watch": "Refactor flagged functions before adding more behavior, and add a short guiding comment when complex logic must remain in place.",
     },
 }
 
@@ -199,6 +200,8 @@ def extract_rule_text(filepath: Path) -> str:
 
 
 def cmd_sync(ctx: AppContext) -> None:
+    # Sync walks promoted records against every registered project because the
+    # final write target depends on both the record metadata and the registry.
     promoted = collect_errors(ctx, status_filter=["promoted"])
     ctx.logger.info("sync_start | promoted=%s", len(promoted))
     if not promoted:
@@ -497,8 +500,13 @@ def _doctor_planning_checks(project_root: Path) -> list[tuple[str, str, str]]:
     return checks
 
 
+def _doctor_refactor_watch_checks(project_root: Path) -> list[tuple[str, str, str]]:
+    findings = collect_refactor_watch_findings(project_root)
+    return [(finding.status, finding.key, finding.detail) for finding in findings]
+
+
 def _doctor_overall(checks: list[tuple[str, str, str]]) -> str:
-    required_statuses = [status for status, key, _ in checks if key not in {"agents_read_order", "copilot_activation", "profile_manifest"} and status != "INFO"]
+    required_statuses = [status for status, key, _ in checks if key not in {"agents_read_order", "copilot_activation", "profile_manifest", "refactor_watch"} and status != "INFO"]
     if not required_statuses:
         return "READY"
     if all(status == "OK" for status in required_statuses):
@@ -887,6 +895,7 @@ def _doctor_report(ctx: AppContext, project_id_or_path: str) -> dict[str, object
         checks.append(("INFO", "agents_read_order", "bridge not configured; AGENTS read order check skipped"))
     checks.extend(_doctor_profile_checks(ctx, project_root))
     checks.extend(_doctor_planning_checks(project_root))
+    checks.extend(_doctor_refactor_watch_checks(project_root))
 
     grouped_checks = _doctor_group_checks(checks)
     runbook_steps = _doctor_runbook_steps(grouped_checks)
@@ -972,6 +981,9 @@ def execute_onboarding_next_action(
     approve_unsafe: bool = False,
     refresh_artifacts: bool = True,
 ) -> dict[str, object]:
+    # This is the execution core for onboarding: it enforces the approval gate,
+    # runs the action, optionally verifies it, then merges the outcome back into
+    # the exported onboarding state so later agents can continue from that state.
     state = load_onboarding_state(project_root)
     action = onboarding_next_action(project_root)
     if action["status"] != "pending":
@@ -1133,6 +1145,8 @@ def cmd_doctor(
     write_state: bool = False,
     write_checklist: bool = False,
 ) -> None:
+    # Doctor is the human-readable control panel for the computed report: keep
+    # rendering here, but derive the actual project state from `_doctor_report`.
     report = _doctor_report(ctx, project_id_or_path)
     if report is None:
         ctx.logger.warning("doctor_failed | target=%s | reason=unknown_project_or_path", project_id_or_path)
@@ -1225,6 +1239,8 @@ def cmd_onboarding_execute(
     verify: bool = True,
     approve_unsafe: bool = False,
 ) -> None:
+    # This command is the human-facing wrapper around the execution engine, so
+    # it explains approval gates and surfaces stdout/stderr from both steps.
     _project_id, project_root, _project = resolve_project_target(ctx, project_id_or_path)
     if project_root is None:
         ctx.logger.warning("onboarding_execute_skip | target=%s | reason=unknown_project_or_path", project_id_or_path)
@@ -1352,6 +1368,9 @@ def offer_mcp_setup(ctx: AppContext, project_id: str, project_root: Path) -> Non
 
 
 def cmd_register(ctx: AppContext, path: str = ".") -> None:
+    # Registration is intentionally interactive because it binds together
+    # project identity, detected domains, managed instruction roots, and the
+    # follow-up integration steps that should run immediately afterward.
     root = Path(path).expanduser().resolve()
     if not root.is_dir():
         ctx.logger.warning("register_skip | path=%s | reason=path_not_found", root)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import re
 from dataclasses import asdict, dataclass
@@ -111,7 +112,7 @@ POLICY_REQUIREMENTS = {
     },
     "python_base": {
         "path": Path("standards") / "python" / "base.instructions.md",
-        "phrases": ["复杂度", "重构", "40 行", "嵌套深度"],
+        "phrases": ["复杂度", "重构", "40 行", "嵌套深度", "注释"],
     },
 }
 
@@ -120,6 +121,32 @@ OPEN_SOURCE_URL_PHRASES = [
     'Documentation = "',
     'Issues = "',
 ]
+
+REFACTOR_SKIP_PARTS = {
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "node_modules",
+    "dist",
+    "build",
+    "logs",
+    "vectors",
+    "tests",
+}
+REFACTOR_WARN_LIMITS = {
+    "lines": 30,
+    "branches": 4,
+    "nesting": 3,
+    "locals": 6,
+}
+REFACTOR_FAIL_LIMITS = {
+    "lines": 40,
+    "branches": 5,
+    "nesting": 4,
+    "locals": 8,
+}
+REFACTOR_OUTPUT_LIMIT = 5
 
 
 def _required_doc_files(project_root: Path) -> list[tuple[str, Path]]:
@@ -140,6 +167,145 @@ class ValidationFinding:
     status: str
     key: str
     detail: str
+
+
+def _should_skip_refactor_watch(path: Path) -> bool:
+    return any(part in REFACTOR_SKIP_PARTS for part in path.parts)
+
+
+def _iter_refactor_watch_files(project_root: Path) -> list[Path]:
+    return sorted(
+        path
+        for path in project_root.rglob("*.py")
+        if path.is_file() and not _should_skip_refactor_watch(path.relative_to(project_root))
+    )
+
+
+def _iter_non_nested_nodes(node: ast.AST):
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            continue
+        yield child
+
+
+def _count_control_nodes(node: ast.AST) -> int:
+    control_types = (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.Match)
+    count = 0
+    for child in _iter_non_nested_nodes(node):
+        if isinstance(child, control_types):
+            count += 1
+        count += _count_control_nodes(child)
+    return count
+
+
+def _max_control_nesting(node: ast.AST) -> int:
+    control_types = (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.Match)
+
+    def walk(current: ast.AST, depth: int) -> int:
+        next_depth = depth + 1 if isinstance(current, control_types) else depth
+        max_depth = next_depth
+        for child in _iter_non_nested_nodes(current):
+            max_depth = max(max_depth, walk(child, next_depth))
+        return max_depth
+
+    return max((walk(child, 0) for child in _iter_non_nested_nodes(node)), default=0)
+
+
+def _collect_local_names(node: ast.AST) -> set[str]:
+    names: set[str] = set()
+    for child in _iter_non_nested_nodes(node):
+        if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Store):
+            names.add(child.id)
+        names.update(_collect_local_names(child))
+    return names
+
+
+def _count_effective_function_lines(source_lines: list[str], node: ast.AST) -> int:
+    start = max(getattr(node, "lineno", 1) - 1, 0)
+    end = max(getattr(node, "end_lineno", getattr(node, "lineno", 1)), getattr(node, "lineno", 1))
+    count = 0
+    for line in source_lines[start:end]:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        count += 1
+    return count
+
+
+def _has_guiding_comment(source_lines: list[str], node: ast.AST) -> bool:
+    start = max(getattr(node, "lineno", 1) - 1, 0)
+    end = max(getattr(node, "end_lineno", getattr(node, "lineno", 1)), getattr(node, "lineno", 1))
+    comment_lines = source_lines[max(start - 1, 0):end]
+    for line in comment_lines:
+        stripped = line.strip()
+        if stripped.startswith("#") and len(stripped.lstrip("# ").strip()) >= 8:
+            return True
+    return False
+
+
+def collect_refactor_watch_findings(project_root: Path) -> list[ValidationFinding]:
+    # This scan intentionally stays heuristic and cheap: it is meant to surface
+    # likely refactor hotspots during onboarding/governance, not replace a full
+    # static-analysis pipeline or block normal development on exact metrics.
+    findings: list[ValidationFinding] = []
+    candidates: list[tuple[int, ValidationFinding]] = []
+
+    for path in _iter_refactor_watch_files(project_root):
+        relative = path.relative_to(project_root).as_posix()
+        try:
+            source = path.read_text(encoding="utf-8")
+            tree = ast.parse(source)
+        except Exception as exc:
+            findings.append(ValidationFinding("WARN", "refactor_watch", f"unable to inspect {relative}: {exc}"))
+            continue
+
+        source_lines = source.splitlines()
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            function_name = getattr(node, "name", "<lambda>")
+            effective_lines = _count_effective_function_lines(source_lines, node)
+            branches = _count_control_nodes(node)
+            nesting = _max_control_nesting(node)
+            local_vars = len(_collect_local_names(node))
+            has_comment = _has_guiding_comment(source_lines, node)
+
+            hard_hits: list[str] = []
+            soft_hits: list[str] = []
+            if effective_lines > REFACTOR_FAIL_LIMITS["lines"]:
+                hard_hits.append(f"lines={effective_lines}>{REFACTOR_FAIL_LIMITS['lines']}")
+            elif effective_lines >= REFACTOR_WARN_LIMITS["lines"]:
+                soft_hits.append(f"lines={effective_lines}")
+            if branches > REFACTOR_FAIL_LIMITS["branches"]:
+                hard_hits.append(f"branches={branches}>{REFACTOR_FAIL_LIMITS['branches']}")
+            elif branches >= REFACTOR_WARN_LIMITS["branches"]:
+                soft_hits.append(f"branches={branches}")
+            if nesting >= REFACTOR_FAIL_LIMITS["nesting"]:
+                hard_hits.append(f"nesting={nesting}>={REFACTOR_FAIL_LIMITS['nesting']}")
+            elif nesting >= REFACTOR_WARN_LIMITS["nesting"]:
+                soft_hits.append(f"nesting={nesting}")
+            if local_vars > REFACTOR_FAIL_LIMITS["locals"]:
+                hard_hits.append(f"locals={local_vars}>{REFACTOR_FAIL_LIMITS['locals']}")
+            elif local_vars >= REFACTOR_WARN_LIMITS["locals"]:
+                soft_hits.append(f"locals={local_vars}")
+            if not has_comment and (hard_hits or len(soft_hits) >= 2):
+                soft_hits.append("missing_guiding_comment")
+
+            if not hard_hits and len(soft_hits) < 2:
+                continue
+
+            score = len(hard_hits) * 10 + len(soft_hits)
+            status = "WARN" if hard_hits or len(soft_hits) >= 3 else "INFO"
+            issues = hard_hits + soft_hits
+            detail = f"{relative}::{function_name} {'high complexity' if status == 'WARN' else 'approaching refactor threshold'} ({', '.join(issues)})"
+            candidates.append((score, ValidationFinding(status, "refactor_watch", detail)))
+
+    if not candidates:
+        return [ValidationFinding("OK", "refactor_watch", "no Python functions are close to configured refactor thresholds")]
+
+    for _score, finding in sorted(candidates, key=lambda item: (-item[0], item[1].detail))[:REFACTOR_OUTPUT_LIMIT]:
+        findings.append(finding)
+    return findings
 
 
 def _collect_required_path_findings(key: str, project_root: Path, required_paths: list[Path]) -> list[ValidationFinding]:
