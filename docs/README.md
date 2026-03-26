@@ -11,6 +11,7 @@
 - [自我进化闭环](#自我进化闭环)
 - [向量搜索扩展](#向量搜索扩展)
 - [本地启动与运维](getting-started.md)
+- [CLI 命令总表](commands.md)
 - [接入其他项目](integration.md)
 - [Copilot 自动激活设计](copilot-auto-activation.md)
 - [模块化与插件化结构](modular-architecture.md)

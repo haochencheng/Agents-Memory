@@ -45,7 +45,7 @@ amem stats
 
 ### 最小安装（CLI 基础功能，零依赖）
 
-CLI 的 `new / list / stats / search / register / copilot-setup / agent-list / agent-setup / bridge-install / mcp-setup / doctor / plan-init / onboarding-bundle / refactor-bundle / plan-check / profile-list / profile-show / profile-apply / profile-diff / standards-sync / profile-check / docs-check / sync / archive / update-index` 命令使用纯标准库，**无需任何额外 pip 安装**。直接运行：
+CLI 的 `new / list / stats / search / register / enable / copilot-setup / agent-list / agent-setup / bridge-install / mcp-setup / doctor / plan-init / onboarding-bundle / refactor-bundle / plan-check / profile-list / profile-show / profile-apply / profile-diff / standards-sync / profile-check / docs-check / sync / archive / update-index` 命令使用纯标准库，**无需任何额外 pip 安装**。直接运行：
 
 ```bash
 python3 scripts/memory.py list
@@ -127,6 +127,12 @@ python3 scripts/memory.py doctor .
 # 输出: 当前项目的接入健康检查（按 Core / Planning / Integration / Optional 分组，并附带 Summary / Remediation / Action Sequence / Onboarding Runbook / Project Bootstrap Checklist）
 # 提示: 现在还会输出 refactor_watch，提醒哪些 Python 函数已经逼近复杂度重构阈值
 
+python3 scripts/memory.py enable .
+# 输出: 一键启用当前项目的基础 Shared Engineering Brain 接入（自动注册、bridge、mcp、doctor 工件、onboarding bundle）
+
+python3 scripts/memory.py enable . --full
+# 输出: 在默认模式基础上继续启用推荐 profile、Copilot 激活，以及第一条 refactor hotspot 对应的 bundle / follow-up state
+
 python3 scripts/memory.py doctor . --write-checklist --write-state
 # 输出: 在 docs/plans/bootstrap-checklist.md、docs/plans/refactor-watch.md 和 .agents-memory/onboarding-state.json 导出 onboarding / hotspot 工件
 # 提示: agent 可优先读取 onboarding-state.json 中的 recommended_next_command / recommended_verify_command
@@ -141,7 +147,7 @@ python3 scripts/memory.py onboarding-bundle .
 
 python3 scripts/memory.py refactor-bundle .
 # 输出: 根据当前第一个 refactor hotspot 生成 docs/plans/refactor-<slug>/ bundle
-# 提示: 用 --index <n> 选择其他 hotspot，并把 doctor 的复杂度发现直接转成可执行重构计划
+# 提示: 优先使用 --token <hotspot-token> 锁定稳定目标；--index <n> 仍可用于临时按排序选择
 
 代码规范补充：
 1. `standards/python/base.instructions.md` 现在内置“高复杂度必须重构”的评判标准

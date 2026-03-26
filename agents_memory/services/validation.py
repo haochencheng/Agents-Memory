@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass
@@ -24,6 +25,7 @@ CORE_DOC_COMMANDS = [
     "agent-list",
     "agent-setup",
     "register",
+    "enable",
     "mcp-setup",
     "doctor",
     "onboarding-execute",
@@ -176,6 +178,7 @@ class RefactorHotspot:
     status: str
     relative_path: str
     function_name: str
+    qualified_name: str
     line: int
     effective_lines: int
     branches: int
@@ -187,7 +190,12 @@ class RefactorHotspot:
 
     @property
     def identifier(self) -> str:
-        return f"{self.relative_path}::{self.function_name}"
+        return f"{self.relative_path}::{self.qualified_name}"
+
+    @property
+    def rank_token(self) -> str:
+        digest = hashlib.sha1(self.identifier.encode("utf-8")).hexdigest()[:12]
+        return f"hotspot-{digest}"
 
     @property
     def summary(self) -> str:
@@ -294,7 +302,7 @@ def _evaluate_refactor_hits(*, effective_lines: int, branches: int, nesting: int
     return hard_hits, soft_hits
 
 
-def _build_refactor_hotspot(relative: str, source_lines: list[str], node: ast.AST) -> RefactorHotspot | None:
+def _build_refactor_hotspot(relative: str, source_lines: list[str], node: ast.AST, qualified_name: str) -> RefactorHotspot | None:
     function_name = getattr(node, "name", "<lambda>")
     effective_lines = _count_effective_function_lines(source_lines, node)
     branches = _count_control_nodes(node)
@@ -317,6 +325,7 @@ def _build_refactor_hotspot(relative: str, source_lines: list[str], node: ast.AS
         status=status,
         relative_path=relative,
         function_name=function_name,
+        qualified_name=qualified_name,
         line=max(getattr(node, "lineno", 1), 1),
         effective_lines=effective_lines,
         branches=branches,
@@ -326,6 +335,38 @@ def _build_refactor_hotspot(relative: str, source_lines: list[str], node: ast.AS
         issues=hard_hits + soft_hits,
         score=score,
     )
+
+
+def _iter_refactor_watch_candidates(node: ast.AST, scope: tuple[str, ...] = ()): 
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.ClassDef):
+            yield from _iter_refactor_watch_candidates(child, (*scope, child.name))
+            continue
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            qualified_name = ".".join((*scope, child.name))
+            yield child, qualified_name
+            yield from _iter_refactor_watch_candidates(child, (*scope, child.name))
+            continue
+        yield from _iter_refactor_watch_candidates(child, scope)
+
+
+def serialize_refactor_hotspot(hotspot: RefactorHotspot) -> dict[str, object]:
+    return {
+        "identifier": hotspot.identifier,
+        "rank_token": hotspot.rank_token,
+        "relative_path": hotspot.relative_path,
+        "function_name": hotspot.function_name,
+        "qualified_name": hotspot.qualified_name,
+        "line": hotspot.line,
+        "status": hotspot.status,
+        "effective_lines": hotspot.effective_lines,
+        "branches": hotspot.branches,
+        "nesting": hotspot.nesting,
+        "local_vars": hotspot.local_vars,
+        "has_guiding_comment": hotspot.has_guiding_comment,
+        "issues": hotspot.issues,
+        "score": hotspot.score,
+    }
 
 
 def collect_refactor_watch_hotspots(project_root: Path) -> list[RefactorHotspot]:
@@ -340,14 +381,12 @@ def collect_refactor_watch_hotspots(project_root: Path) -> list[RefactorHotspot]
             continue
 
         source_lines = source.splitlines()
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            hotspot = _build_refactor_hotspot(relative, source_lines, node)
+        for node, qualified_name in _iter_refactor_watch_candidates(tree):
+            hotspot = _build_refactor_hotspot(relative, source_lines, node, qualified_name)
             if hotspot is not None:
                 candidates.append(hotspot)
 
-    return sorted(candidates, key=lambda item: (-item.score, item.identifier))[:REFACTOR_OUTPUT_LIMIT]
+    return sorted(candidates, key=lambda item: (-item.score, item.rank_token))[:REFACTOR_OUTPUT_LIMIT]
 
 
 def collect_refactor_watch_findings(project_root: Path) -> list[ValidationFinding]:

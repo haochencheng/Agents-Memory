@@ -83,6 +83,8 @@ class MCPAppTests(unittest.TestCase):
 
             self.assertEqual(payload["status"], "ok")
             self.assertEqual(payload["task_slug"], "refactor-service-py-heavy")
+            self.assertTrue(payload["hotspot_token"].startswith("hotspot-"))
+            self.assertEqual(payload["hotspot"]["rank_token"], payload["hotspot_token"])
             self.assertEqual(payload["hotspot"]["function_name"], "heavy")
             self.assertTrue((target / "docs" / "plans" / "refactor-service-py-heavy").exists())
             self.assertIn("docs/plans/refactor-service-py-heavy/spec.md", payload["wrote_files"])
@@ -144,9 +146,98 @@ class MCPAppTests(unittest.TestCase):
 
             self.assertEqual(payload["status"], "ok")
             self.assertEqual(payload["hotspot_count"], 1)
+            self.assertTrue(payload["hotspots"][0]["rank_token"].startswith("hotspot-"))
             self.assertEqual(payload["hotspots"][0]["function_name"], "heavy")
             self.assertEqual(payload["hotspots"][0]["relative_path"], "service.py")
             self.assertTrue(payload["hotspots"][0]["issues"])
+
+    def test_memory_init_refactor_bundle_uses_stable_hotspot_token_across_rank_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "target"
+            target.mkdir()
+            _write_text(root / "templates" / "index.example.md", "index\n")
+            _write_text(root / "templates" / "projects.example.md", "projects\n")
+            _write_text(root / "templates" / "rules.example.md", "rules\n")
+            for name in ["README.template.md", "spec.template.md", "plan.template.md", "task-graph.template.md", "validation.template.md"]:
+                _write_text(
+                    root / "templates" / "planning" / name,
+                    f"# {name}\nplanning bundle\n## Acceptance Criteria\n## Change Set\n## Work Items\n## Exit Criteria\n## Required Checks\n{{{{TASK_NAME}}}}\n",
+                )
+            _write_text(
+                target / "service.py",
+                "\n".join(
+                    [
+                        "def medium(value):",
+                        "    total = 0",
+                        "    items = []",
+                        "    errors = []",
+                        "    status = None",
+                        "    if value > 0:",
+                        "        for outer in range(value):",
+                        "            if outer % 2 == 0:",
+                        "                for inner in range(3):",
+                        "                    if inner == 1:",
+                        "                        total += outer + inner",
+                        "                        items.append(total)",
+                        "                        status = 'hot'",
+                        "                    else:",
+                        "                        errors.append(inner)",
+                        "    if items:",
+                        "        return total + len(items) + len(errors)",
+                        "    return total",
+                    ]
+                )
+                + "\n",
+            )
+
+            mcp_app = self._load_mcp_app(root)
+            hotspots = json.loads(mcp_app.memory_get_refactor_hotspots(str(target)))
+            token = hotspots["hotspots"][0]["rank_token"]
+
+            _write_text(
+                target / "aaa_hotter.py",
+                "\n".join(
+                    [
+                        "def hottest(value):",
+                        "    total = 0",
+                        "    items = []",
+                        "    results = {}",
+                        "    status = None",
+                        "    errors = []",
+                        "    flags = set()",
+                        "    cache = {}",
+                        "    index = 0",
+                        "    if value > 0:",
+                        "        for outer in range(value):",
+                        "            if outer % 2 == 0:",
+                        "                for inner in range(3):",
+                        "                    if inner == 1:",
+                        "                        total += outer + inner",
+                        "                        items.append(total)",
+                        "                        results[outer] = inner",
+                        "                        status = 'hot'",
+                        "                    else:",
+                        "                        errors.append(inner)",
+                        "            else:",
+                        "                while index < 2:",
+                        "                    flags.add(index)",
+                        "                    index += 1",
+                        "    if total > 3:",
+                        "        cache['total'] = total",
+                        "    if items:",
+                        "        return total + len(items) + len(results) + len(errors) + len(flags) + len(cache)",
+                        "    return total",
+                    ]
+                )
+                + "\n",
+            )
+
+            payload = json.loads(mcp_app.memory_init_refactor_bundle(str(target), hotspot_token=token))
+
+            self.assertEqual(payload["status"], "ok")
+            self.assertEqual(payload["hotspot"]["identifier"], "service.py::medium")
+            self.assertEqual(payload["hotspot_token"], token)
 
     def test_memory_get_refactor_hotspots_returns_empty_list_when_clean(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

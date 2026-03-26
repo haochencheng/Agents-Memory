@@ -28,13 +28,15 @@ USAGE = """Agents-Memory CLI — 错误记录管理工具
   python3 memory.py agent-setup <agent> [path] # 为指定 agent 安装集成
   python3 memory.py register [path]            # 一键注册新项目（agent + bridge + mcp）
   python3 memory.py mcp-setup [project-id]     # 在已注册项目中写入 .vscode/mcp.json
+    python3 memory.py enable [path] [--full]     # 一键启用 Shared Engineering Brain；--full 会附加 profile、Copilot 和 refactor bundle
   python3 memory.py doctor [project-id] [--write-checklist] [--write-state]
                                                # 检查项目是否已完整接入 Agents-Memory，并可导出 onboarding 工件
   python3 memory.py onboarding-execute [path] [--approve-unsafe]
                                                # 执行当前第一条 onboarding action；仅自动执行安全步骤，危险步骤需显式批准
   python3 memory.py plan-init <task> [path]    # 初始化 spec / plan / task-graph / validation bundle
   python3 memory.py onboarding-bundle [path]   # 从 onboarding-state.json 生成 onboarding task bundle
-    python3 memory.py refactor-bundle [path]     # 根据当前第一个 hotspot 生成 refactor task bundle
+    python3 memory.py refactor-bundle [path] [--token <hotspot-token>] [--index <n>]
+                                                                                             # 根据稳定 hotspot token 或当前排序位置生成 refactor task bundle
   python3 memory.py plan-check [path]          # 校验 docs/plans 下 planning bundle 的完整性
     python3 memory.py profile-list               # 查看可用 profile 列表
     python3 memory.py profile-show <profile-id>  # 查看指定 profile 的装配内容

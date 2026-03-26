@@ -31,7 +31,7 @@ from agents_memory.services.projects import (
     resolve_bridge_rel,
     resolve_project_target,
 )
-from agents_memory.services.profiles import detect_applied_profile
+from agents_memory.services.profiles import apply_profile, detect_applied_profile, load_profile
 from agents_memory.services.records import collect_errors
 from agents_memory.services.validation import collect_plan_check_findings, collect_profile_check_findings, collect_refactor_watch_findings, collect_refactor_watch_hotspots
 
@@ -782,7 +782,8 @@ def _doctor_refactor_watch_markdown(
         "## Workflow Entry",
         "",
         "- Primary command: `amem refactor-bundle .`",
-        "- Select another hotspot with: `amem refactor-bundle . --index <n>`",
+        "- Prefer stable targeting with: `amem refactor-bundle . --token <hotspot-token>`",
+        "- Fallback positional targeting: `amem refactor-bundle . --index <n>`",
         "- The command creates or refreshes `docs/plans/refactor-<slug>/` using the first current hotspot as execution context.",
         "",
         "## Hotspots",
@@ -792,11 +793,12 @@ def _doctor_refactor_watch_markdown(
     else:
         lines.append("")
         for index, hotspot in enumerate(hotspots, start=1):
-            command = f"amem refactor-bundle . --index {index}"
+            command = f"amem refactor-bundle . --token {hotspot.rank_token}"
             lines.append(
                 f"{index}. [{hotspot.status}] `{hotspot.identifier}` line={hotspot.line} "
                 f"metrics=(lines={hotspot.effective_lines}, branches={hotspot.branches}, nesting={hotspot.nesting}, locals={hotspot.local_vars})"
             )
+            lines.append(f"   - token: `{hotspot.rank_token}`")
             lines.append(f"   - issues: `{', '.join(hotspot.issues)}`")
             lines.append(f"   - bundle command: `{command}`")
         extra_findings = refactor_findings[len(hotspots):]
@@ -861,7 +863,9 @@ def _reconcile_recommended_refactor_state(existing_state: dict[str, object] | No
     if existing_state is None:
         return [], None
 
-    active_identifiers = {hotspot.identifier for hotspot in collect_refactor_watch_hotspots(project_root)}
+    hotspots = collect_refactor_watch_hotspots(project_root)
+    active_identifiers = {hotspot.identifier for hotspot in hotspots}
+    active_tokens = {hotspot.rank_token for hotspot in hotspots}
     if not active_identifiers:
         preserved_steps = [step for step in _state_recommended_steps(existing_state) if step.get("key") != "refactor_bundle"]
         return preserved_steps, None
@@ -873,7 +877,8 @@ def _reconcile_recommended_refactor_state(existing_state: dict[str, object] | No
             continue
         hotspot = step.get("hotspot")
         identifier = hotspot.get("identifier") if isinstance(hotspot, dict) else None
-        if identifier in active_identifiers:
+        token = hotspot.get("rank_token") if isinstance(hotspot, dict) else None
+        if token in active_tokens or identifier in active_identifiers:
             preserved_steps.append(step)
 
     bundle = existing_state.get("recommended_refactor_bundle")
@@ -881,7 +886,8 @@ def _reconcile_recommended_refactor_state(existing_state: dict[str, object] | No
     if isinstance(bundle, dict):
         hotspot = bundle.get("hotspot")
         identifier = hotspot.get("identifier") if isinstance(hotspot, dict) else None
-        if identifier in active_identifiers:
+        token = hotspot.get("rank_token") if isinstance(hotspot, dict) else None
+        if token in active_tokens or identifier in active_identifiers:
             preserved_bundle = bundle
     return preserved_steps, preserved_bundle
 
@@ -892,6 +898,7 @@ def _merge_refactor_followup_state(
     project_root: Path,
     plan_root: Path,
     hotspot_index: int,
+    hotspot_token: str,
     hotspot: dict[str, object],
     task_name: str,
     task_slug: str,
@@ -903,7 +910,7 @@ def _merge_refactor_followup_state(
     existing_recommended = _state_recommended_steps(payload)
     bundle_rel = plan_root.relative_to(project_root).as_posix()
     hotspot_identifier = str(hotspot.get("identifier") or f"index-{hotspot_index}")
-    command = f"python3 scripts/memory.py refactor-bundle . --index {hotspot_index}"
+    command = f"python3 scripts/memory.py refactor-bundle . --token {hotspot_token}"
     step = {
         "group": "Refactor",
         "priority": "recommended",
@@ -922,6 +929,7 @@ def _merge_refactor_followup_state(
         "task_name": task_name,
         "task_slug": task_slug,
         "hotspot_index": hotspot_index,
+        "hotspot_token": hotspot_token,
         "hotspot": hotspot,
     }
     filtered = [item for item in existing_recommended if item.get("key") != "refactor_bundle"]
@@ -931,6 +939,7 @@ def _merge_refactor_followup_state(
         "task_name": task_name,
         "task_slug": task_slug,
         "hotspot_index": hotspot_index,
+        "hotspot_token": hotspot_token,
         "hotspot": hotspot,
     }
     if not _state_pending_steps(payload):
@@ -1634,3 +1643,148 @@ def cmd_register(ctx: AppContext, path: str = ".") -> None:
     offer_agent_setup(ctx, root, project_id)
     offer_bridge_install(ctx, project_id)
     offer_mcp_setup(ctx, project_id, root)
+
+
+def _render_project_registry_entry(project_id: str, root: Path, instruction_dir_input: str) -> str:
+    instruction_dir = root / instruction_dir_input
+    domains = detect_domains(instruction_dir)
+    instruction_files = detect_instruction_files(instruction_dir, root)
+    bridge_rel = f"{instruction_dir_input}/{Path(DEFAULT_BRIDGE_INSTRUCTION_REL).name}"
+    instruction_lines = ""
+    if instruction_files:
+        instruction_lines = "- **instruction_files**:\n"
+        for domain, instruction_path in instruction_files.items():
+            instruction_lines += f"  - {domain:<12}: {instruction_path}\n"
+    return (
+        f"## {project_id}\n\n"
+        f"- **id**: {project_id}\n"
+        f"- **root**: {root}\n"
+        f"- **instruction_dir**: {instruction_dir_input}\n"
+        f"- **bridge_instruction**: {bridge_rel}\n"
+        f"- **active**: true\n"
+        f"- **domains**: {', '.join(domains)}\n"
+        f"{instruction_lines}"
+        f"\n---\n"
+    )
+
+
+def _ensure_registered_project(ctx: AppContext, project_root: Path) -> tuple[str, bool]:
+    project_id, resolved_root, _project = resolve_project_target(ctx, str(project_root))
+    root = resolved_root or project_root
+    if project_already_registered(ctx, project_id):
+        return project_id, False
+    append_project_entry(ctx, _render_project_registry_entry(project_id, root, ".github/instructions"))
+    ctx.logger.info("enable_register_complete | project_id=%s | root=%s", project_id, root)
+    return project_id, True
+
+
+def _recommended_enable_profile_id(project_root: Path) -> str | None:
+    if detect_applied_profile(project_root):
+        return None
+    if (project_root / "package.json").exists() and (project_root / "apps").exists():
+        return "fullstack-product"
+    if (project_root / "package.json").exists() and ((project_root / "src").exists() or (project_root / "app").exists()):
+        return "frontend-app"
+    if (project_root / "scripts" / "mcp_server.py").exists() or (project_root / "runtime").exists():
+        return "agent-runtime"
+    if any((project_root / name).exists() for name in ("pyproject.toml", "requirements.txt", "setup.py")):
+        return "python-service"
+    if list(project_root.glob("**/*.py")):
+        return "python-service"
+    return None
+
+
+def cmd_enable(ctx: AppContext, project_id_or_path: str = ".", *, full: bool = False) -> int:
+    project_root = Path(project_id_or_path).expanduser().resolve()
+    if not project_root.exists():
+        print(f"路径不存在: {project_root}")
+        return 1
+    if not project_root.is_dir():
+        print(f"目标不是目录: {project_root}")
+        return 1
+
+    ctx.logger.info("enable_start | target=%s | full=%s", project_root, full)
+    print("\n=== Agents-Memory Enable ===")
+    print(f"Target: {project_root}")
+    print(f"Mode:   {'full' if full else 'default'}")
+
+    project_id, registered_now = _ensure_registered_project(ctx, project_root)
+    print(f"- registry: {'created' if registered_now else 'ready'} ({project_id})")
+
+    project_id, _, _project = resolve_project_target(ctx, project_id)
+    cmd_bridge_install(ctx, project_id)
+    mcp_changed = write_vscode_mcp_json(ctx, project_root)
+    print(f"- mcp config: {'updated' if mcp_changed else 'ready'}")
+
+    applied_profile_id = detect_applied_profile(project_root)
+    if full and not applied_profile_id:
+        recommended_profile_id = _recommended_enable_profile_id(project_root)
+        if recommended_profile_id:
+            profile = load_profile(ctx, recommended_profile_id)
+            profile_result = apply_profile(ctx, profile, project_root)
+            applied_profile_id = profile_result.profile_id
+            print(f"- profile: enabled ({applied_profile_id})")
+        else:
+            print("- profile: skipped (no default profile detected)")
+    elif applied_profile_id:
+        print(f"- profile: ready ({applied_profile_id})")
+    else:
+        print("- profile: skipped in default mode")
+
+    if full:
+        print("- copilot activation: applying")
+        cmd_copilot_setup(ctx, str(project_root))
+
+    cmd_doctor(ctx, str(project_root), write_state=True, write_checklist=True)
+
+    from agents_memory.services.planning import init_onboarding_bundle, init_refactor_bundle
+
+    onboarding_result = init_onboarding_bundle(ctx, project_root)
+    print(f"- onboarding bundle: {onboarding_result.plan_root.relative_to(project_root).as_posix()}")
+
+    if full:
+        hotspots = collect_refactor_watch_hotspots(project_root)
+        if hotspots:
+            refactor_result = init_refactor_bundle(ctx, project_root, hotspot_token=hotspots[0].rank_token)
+            existing_state = load_onboarding_state(project_root)
+            hotspot_payload = {
+                "identifier": refactor_result.hotspot.identifier,
+                "rank_token": refactor_result.hotspot_token,
+                "relative_path": refactor_result.hotspot.relative_path,
+                "function_name": refactor_result.hotspot.function_name,
+                "qualified_name": refactor_result.hotspot.qualified_name,
+                "line": refactor_result.hotspot.line,
+                "status": refactor_result.hotspot.status,
+                "effective_lines": refactor_result.hotspot.effective_lines,
+                "branches": refactor_result.hotspot.branches,
+                "nesting": refactor_result.hotspot.nesting,
+                "local_vars": refactor_result.hotspot.local_vars,
+                "has_guiding_comment": refactor_result.hotspot.has_guiding_comment,
+                "issues": refactor_result.hotspot.issues,
+                "score": refactor_result.hotspot.score,
+            }
+            updated_state = _merge_refactor_followup_state(
+                existing_state,
+                project_root=project_root,
+                plan_root=refactor_result.plan_root,
+                hotspot_index=refactor_result.hotspot_index,
+                hotspot_token=refactor_result.hotspot_token,
+                hotspot=hotspot_payload,
+                task_name=refactor_result.task_name,
+                task_slug=refactor_result.task_slug,
+            )
+            state_path = onboarding_state_path(project_root)
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(json.dumps(updated_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            log_file_update(ctx.logger, action="enable_write_refactor_followup_state", path=state_path, detail=f"project_root={project_root};task_slug={refactor_result.task_slug}")
+            print(f"- refactor bundle: {refactor_result.plan_root.relative_to(project_root).as_posix()} ({refactor_result.hotspot_token})")
+        else:
+            print("- refactor bundle: skipped (no hotspots)")
+
+    print("\nNext:")
+    print("- Review onboarding-state.json and docs/plans/bootstrap-checklist.md")
+    print("- Run amem doctor . after your next structural change")
+    if full:
+        print("- If a refactor bundle was generated, review its spec.md before editing code")
+    ctx.logger.info("enable_complete | target=%s | full=%s | project_id=%s", project_root, full, project_id)
+    return 0

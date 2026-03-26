@@ -10,7 +10,7 @@ from typing import Any
 from agents_memory.logging_utils import log_file_update
 from agents_memory.runtime import AppContext
 from agents_memory.services.integration import load_onboarding_state
-from agents_memory.services.validation import RefactorHotspot, collect_refactor_watch_hotspots
+from agents_memory.services.validation import RefactorHotspot, collect_refactor_watch_hotspots, serialize_refactor_hotspot
 
 
 PLANNING_TEMPLATE_DIR = Path("templates") / "planning"
@@ -65,6 +65,7 @@ class RefactorBundleResult:
     target_root: Path
     plan_root: Path
     hotspot_index: int
+    hotspot_token: str
     hotspot: RefactorHotspot
     wrote_files: list[str]
     refreshed_files: list[str]
@@ -413,6 +414,7 @@ def _render_refactor_bundle_content(
     task_slug: str,
     hotspot: RefactorHotspot,
     hotspot_index: int,
+    hotspot_token: str,
 ) -> str:
     if not source.exists():
         raise FileNotFoundError(f"planning template not found: {source}")
@@ -421,25 +423,14 @@ def _render_refactor_bundle_content(
     def _json_block(value: object) -> str:
         return json.dumps(value, ensure_ascii=False, indent=2)
 
-    hotspot_payload = {
-        "identifier": hotspot.identifier,
-        "relative_path": hotspot.relative_path,
-        "function_name": hotspot.function_name,
-        "line": hotspot.line,
-        "status": hotspot.status,
-        "effective_lines": hotspot.effective_lines,
-        "branches": hotspot.branches,
-        "nesting": hotspot.nesting,
-        "local_vars": hotspot.local_vars,
-        "has_guiding_comment": hotspot.has_guiding_comment,
-        "issues": hotspot.issues,
-        "score": hotspot.score,
-    }
-    init_command = f"amem refactor-bundle . --index {hotspot_index}"
+    hotspot_payload = serialize_refactor_hotspot(hotspot)
+    init_command = f"amem refactor-bundle . --token {hotspot_token}"
     appendix_map = {
         README_PLAN_FILE: [
             "## Refactor Hotspot",
             f"- hotspot: `{hotspot.identifier}`",
+            f"- hotspot token: `{hotspot_token}`",
+            f"- current rank index: `{hotspot_index}`",
             f"- line: `{hotspot.line}`",
             f"- status: `{hotspot.status}`",
             f"- issues: `{', '.join(hotspot.issues)}`",
@@ -504,19 +495,29 @@ def init_refactor_bundle(
     target_root: Path,
     *,
     hotspot_index: int = 1,
+    hotspot_token: str | None = None,
     task_slug: str | None = None,
     dry_run: bool = False,
 ) -> RefactorBundleResult:
-    if hotspot_index < 1:
-        raise ValueError("hotspot index must be >= 1")
-
     hotspots = collect_refactor_watch_hotspots(target_root)
     if not hotspots:
         raise FileNotFoundError(f"no refactor hotspots found under: {target_root}")
-    if hotspot_index > len(hotspots):
-        raise IndexError(f"hotspot index {hotspot_index} is out of range; found {len(hotspots)} hotspot(s)")
 
-    hotspot = hotspots[hotspot_index - 1]
+    if hotspot_token:
+        for resolved_index, candidate in enumerate(hotspots, start=1):
+            if candidate.rank_token == hotspot_token:
+                hotspot_index = resolved_index
+                hotspot = candidate
+                break
+        else:
+            raise ValueError(f"hotspot token '{hotspot_token}' was not found; run `amem doctor .` or `memory_get_refactor_hotspots()` again")
+    else:
+        if hotspot_index < 1:
+            raise ValueError("hotspot index must be >= 1")
+        if hotspot_index > len(hotspots):
+            raise IndexError(f"hotspot index {hotspot_index} is out of range; found {len(hotspots)} hotspot(s)")
+        hotspot = hotspots[hotspot_index - 1]
+
     task_name = f"Refactor hotspot: {hotspot.identifier}"
     resolved_slug = _default_refactor_slug(hotspot, task_slug)
     templates_dir = _planning_templates_dir(ctx)
@@ -540,6 +541,7 @@ def init_refactor_bundle(
             task_slug=resolved_slug,
             hotspot=hotspot,
             hotspot_index=hotspot_index,
+            hotspot_token=hotspot.rank_token,
         ),
         resolve_heading=_refactor_appendix_heading,
         create_action="refactor_bundle_file",
@@ -553,6 +555,7 @@ def init_refactor_bundle(
         target_root=target_root,
         plan_root=plan_result.plan_root,
         hotspot_index=hotspot_index,
+        hotspot_token=hotspot.rank_token,
         hotspot=hotspot,
         wrote_files=wrote_files,
         refreshed_files=refreshed_files,
@@ -731,6 +734,7 @@ def cmd_refactor_bundle(
     project_id_or_path: str = ".",
     *,
     hotspot_index: int = 1,
+    hotspot_token: str | None = None,
     task_slug: str | None = None,
     dry_run: bool = False,
 ) -> int:
@@ -743,22 +747,31 @@ def cmd_refactor_bundle(
         return 1
 
     ctx.logger.info(
-        "refactor_bundle_start | task_slug=%s | hotspot_index=%s | target_root=%s | dry_run=%s",
+        "refactor_bundle_start | task_slug=%s | hotspot_index=%s | hotspot_token=%s | target_root=%s | dry_run=%s",
         task_slug,
         hotspot_index,
+        hotspot_token,
         target_root,
         dry_run,
     )
     try:
-        result = init_refactor_bundle(ctx, target_root, hotspot_index=hotspot_index, task_slug=task_slug, dry_run=dry_run)
+        result = init_refactor_bundle(
+            ctx,
+            target_root,
+            hotspot_index=hotspot_index,
+            hotspot_token=hotspot_token,
+            task_slug=task_slug,
+            dry_run=dry_run,
+        )
     except (FileNotFoundError, IndexError, ValueError) as exc:
         print(str(exc))
         return 1
     _print_refactor_bundle_summary(result)
     ctx.logger.info(
-        "refactor_bundle_complete | task_slug=%s | hotspot_index=%s | target_root=%s | dry_run=%s | files=%s | skipped=%s",
+        "refactor_bundle_complete | task_slug=%s | hotspot_index=%s | hotspot_token=%s | target_root=%s | dry_run=%s | files=%s | skipped=%s",
         result.task_slug,
         hotspot_index,
+        result.hotspot_token,
         result.target_root,
         result.dry_run,
         len(result.wrote_files) + len(result.refreshed_files),

@@ -4,7 +4,7 @@
 
 ### MCP 直接读取 refactor hotspots
 
-当 agent 已通过 MCP 接入时，可以直接调用 `memory_get_refactor_hotspots(project_root)` 获取结构化 hotspot 列表，再按序调用 `memory_init_refactor_bundle(project_root, hotspot_index, task_slug, dry_run)` 生成执行 bundle，无需依赖 `docs/plans/refactor-watch.md`。
+当 agent 已通过 MCP 接入时，可以直接调用 `memory_get_refactor_hotspots(project_root)` 获取结构化 hotspot 列表；每个 hotspot 都会返回稳定的 `rank_token`。随后优先调用 `memory_init_refactor_bundle(project_root, hotspot_index, hotspot_token, task_slug, dry_run)` 并传入 `hotspot_token` 生成执行 bundle，无需依赖 `docs/plans/refactor-watch.md`，也不会因为 hotspot 排序变化而指向漂移。
 
 ### 记录新错误
 

@@ -60,6 +60,7 @@ def _handle_refactor_bundle(ctx, args: list[str]) -> None:
     dry_run = False
     task_slug: str | None = None
     hotspot_index = 1
+    hotspot_token: str | None = None
     positionals: list[str] = []
     index = 0
     while index < len(args):
@@ -68,6 +69,9 @@ def _handle_refactor_bundle(ctx, args: list[str]) -> None:
             dry_run = True
         elif arg == "--slug" and index + 1 < len(args):
             task_slug = args[index + 1]
+            index += 1
+        elif arg == "--token" and index + 1 < len(args):
+            hotspot_token = args[index + 1]
             index += 1
         elif arg == "--index" and index + 1 < len(args):
             hotspot_index = int(args[index + 1])
@@ -78,5 +82,12 @@ def _handle_refactor_bundle(ctx, args: list[str]) -> None:
 
     target = positionals[0] if positionals else "."
     raise SystemExit(
-        cmd_refactor_bundle(ctx, target, hotspot_index=hotspot_index, task_slug=task_slug, dry_run=dry_run)
+        cmd_refactor_bundle(
+            ctx,
+            target,
+            hotspot_index=hotspot_index,
+            hotspot_token=hotspot_token,
+            task_slug=task_slug,
+            dry_run=dry_run,
+        )
     )

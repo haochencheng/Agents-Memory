@@ -230,9 +230,12 @@ class PlanningServiceTests(unittest.TestCase):
 
             plan_dir = target / "docs" / "plans" / "refactor-service-py-heavy"
             self.assertEqual(result.task_slug, "refactor-service-py-heavy")
+            self.assertTrue(result.hotspot_token.startswith("hotspot-"))
             self.assertTrue(plan_dir.exists())
             self.assertIn("service.py::heavy", (plan_dir / "README.md").read_text(encoding="utf-8"))
+            self.assertIn(result.hotspot_token, (plan_dir / "README.md").read_text(encoding="utf-8"))
             self.assertIn("\"function_name\": \"heavy\"", (plan_dir / "spec.md").read_text(encoding="utf-8"))
+            self.assertIn("\"rank_token\":", (plan_dir / "spec.md").read_text(encoding="utf-8"))
             self.assertIn("amem doctor .", (plan_dir / "validation.md").read_text(encoding="utf-8"))
 
     def test_cmd_refactor_bundle_returns_error_without_hotspot(self) -> None:

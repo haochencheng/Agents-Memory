@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import sys
-from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 
@@ -19,7 +18,7 @@ from agents_memory.services.integration import _merge_refactor_followup_state, e
 from agents_memory.services.planning import init_refactor_bundle
 from agents_memory.services.projects import parse_projects
 from agents_memory.services.records import cmd_update_index, parse_frontmatter
-from agents_memory.services.validation import collect_refactor_watch_hotspots
+from agents_memory.services.validation import collect_refactor_watch_hotspots, serialize_refactor_hotspot
 
 ctx = build_context(logger_name="agents_memory.mcp", reference_file=__file__)
 
@@ -102,7 +101,7 @@ def memory_get_refactor_hotspots(project_root: str = ".") -> str:
         "status": "ok",
         "project_root": str(target_root),
         "hotspot_count": len(hotspots),
-        "hotspots": [asdict(hotspot) for hotspot in hotspots],
+        "hotspots": [serialize_refactor_hotspot(hotspot) for hotspot in hotspots],
     }
     _log_tool_end(
         "memory_get_refactor_hotspots",
@@ -114,11 +113,12 @@ def memory_get_refactor_hotspots(project_root: str = ".") -> str:
 
 
 @mcp.tool()
-def memory_init_refactor_bundle(project_root: str = ".", hotspot_index: int = 1, task_slug: str = "", dry_run: bool = False) -> str:
+def memory_init_refactor_bundle(project_root: str = ".", hotspot_index: int = 1, hotspot_token: str = "", task_slug: str = "", dry_run: bool = False) -> str:
     _log_tool_start(
         "memory_init_refactor_bundle",
         project_root=project_root,
         hotspot_index=hotspot_index,
+        hotspot_token=hotspot_token,
         task_slug=task_slug,
         dry_run=dry_run,
     )
@@ -128,6 +128,7 @@ def memory_init_refactor_bundle(project_root: str = ".", hotspot_index: int = 1,
             ctx,
             target_root,
             hotspot_index=hotspot_index,
+            hotspot_token=hotspot_token or None,
             task_slug=task_slug or None,
             dry_run=dry_run,
         )
@@ -146,8 +147,9 @@ def memory_init_refactor_bundle(project_root: str = ".", hotspot_index: int = 1,
             "project_root": str(target_root),
             "message": str(exc),
             "hotspot_index": hotspot_index,
+            "hotspot_token": hotspot_token or None,
         }
-        _log_tool_end("memory_init_refactor_bundle", status="invalid", project_root=target_root, hotspot_index=hotspot_index)
+        _log_tool_end("memory_init_refactor_bundle", status="invalid", project_root=target_root, hotspot_index=hotspot_index, hotspot_token=hotspot_token or None)
         return json.dumps(payload, ensure_ascii=False, indent=2)
 
     payload = {
@@ -157,7 +159,8 @@ def memory_init_refactor_bundle(project_root: str = ".", hotspot_index: int = 1,
         "task_name": result.task_name,
         "task_slug": result.task_slug,
         "hotspot_index": result.hotspot_index,
-        "hotspot": asdict(result.hotspot),
+        "hotspot_token": result.hotspot_token,
+        "hotspot": serialize_refactor_hotspot(result.hotspot),
         "wrote_files": result.wrote_files,
         "refreshed_files": result.refreshed_files,
         "skipped_files": result.skipped_files,
@@ -171,6 +174,7 @@ def memory_init_refactor_bundle(project_root: str = ".", hotspot_index: int = 1,
             project_root=target_root,
             plan_root=result.plan_root,
             hotspot_index=result.hotspot_index,
+            hotspot_token=result.hotspot_token,
             hotspot=payload["hotspot"],
             task_name=result.task_name,
             task_slug=result.task_slug,
@@ -181,7 +185,15 @@ def memory_init_refactor_bundle(project_root: str = ".", hotspot_index: int = 1,
         log_file_update(ctx.logger, action="write_refactor_followup_state", path=state_path, detail=f"project_root={target_root};task_slug={result.task_slug}")
         payload["state_path"] = str(state_path)
         payload["recommended_followup"] = updated_state.get("recommended_refactor_bundle")
-    _log_tool_end("memory_init_refactor_bundle", status="ok", project_root=target_root, hotspot_index=hotspot_index, task_slug=result.task_slug, dry_run=dry_run)
+    _log_tool_end(
+        "memory_init_refactor_bundle",
+        status="ok",
+        project_root=target_root,
+        hotspot_index=result.hotspot_index,
+        hotspot_token=result.hotspot_token,
+        task_slug=result.task_slug,
+        dry_run=dry_run,
+    )
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 

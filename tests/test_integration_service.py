@@ -9,8 +9,8 @@ from io import StringIO
 from pathlib import Path
 
 from agents_memory.runtime import build_context
-from agents_memory.commands.integration import _parse_doctor_args, _parse_onboarding_execute_args
-from agents_memory.services.integration import _doctor_action_sequence, _doctor_bootstrap_checklist, _doctor_bridge_check, _doctor_group_checks, _doctor_group_remediations, _doctor_group_status, _doctor_group_summary, _doctor_planning_checks, _doctor_refactor_watch_checks, _doctor_overall, _doctor_runbook_steps, cmd_bridge_install, cmd_doctor, execute_onboarding_next_action, onboarding_next_action, write_vscode_mcp_json
+from agents_memory.commands.integration import _parse_doctor_args, _parse_enable_args, _parse_onboarding_execute_args
+from agents_memory.services.integration import _doctor_action_sequence, _doctor_bootstrap_checklist, _doctor_bridge_check, _doctor_group_checks, _doctor_group_remediations, _doctor_group_status, _doctor_group_summary, _doctor_planning_checks, _doctor_refactor_watch_checks, _doctor_overall, _doctor_runbook_steps, cmd_bridge_install, cmd_doctor, cmd_enable, execute_onboarding_next_action, onboarding_next_action, write_vscode_mcp_json
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -339,7 +339,7 @@ class IntegrationServiceTests(unittest.TestCase):
                                 "group": "Refactor",
                                 "key": "refactor_bundle",
                                 "priority": "recommended",
-                                "command": "python3 scripts/memory.py refactor-bundle . --index 1",
+                                "command": "python3 scripts/memory.py refactor-bundle . --token hotspot-demo-token",
                                 "verify_with": "amem doctor .",
                                 "done_when": "doctor no longer reports the hotspot",
                                 "next_command": "amem doctor .",
@@ -347,7 +347,7 @@ class IntegrationServiceTests(unittest.TestCase):
                                 "approval_required": False,
                                 "approval_reason": "refreshes generated planning docs only",
                                 "bundle_path": "docs/plans/refactor-service-py-heavy",
-                                "hotspot": {"identifier": "service.py::heavy"},
+                                "hotspot": {"identifier": "service.py::heavy", "rank_token": "hotspot-demo-token"},
                             }
                         ],
                     },
@@ -378,6 +378,12 @@ class IntegrationServiceTests(unittest.TestCase):
         self.assertEqual(project_id_or_path, "demo-project")
         self.assertFalse(verify)
         self.assertTrue(approve_unsafe)
+
+    def test_parse_enable_args_supports_full_mode(self) -> None:
+        project_id_or_path, full = _parse_enable_args(["demo-project", "--full"])
+
+        self.assertEqual(project_id_or_path, "demo-project")
+        self.assertTrue(full)
 
     def test_cmd_doctor_surfaces_planning_root_warning_for_applied_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -753,3 +759,103 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertEqual(state["execution_history"][-1]["status"], "verified")
             self.assertTrue(state["last_executed_action"]["approve_unsafe"])
             self.assertTrue((project_root / "docs" / "plans" / "bootstrap-checklist.md").exists())
+
+    def test_cmd_enable_default_mode_bootstraps_project_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(root / "templates" / "agents-memory-bridge.instructions.md", "root={{AGENTS_MEMORY_ROOT}}\nproject={{PROJECT_ID}}\n")
+            _write_text(root / "templates" / "agents-memory-copilot-instructions.md", "copilot {{PROJECT_ID}} {{AGENTS_MEMORY_ROOT}}\n")
+            for name in ["README.template.md", "spec.template.md", "plan.template.md", "task-graph.template.md", "validation.template.md"]:
+                _write_text(root / "templates" / "planning" / name, f"# {name}\nplanning bundle\n## Acceptance Criteria\n## Change Set\n## Work Items\n## Exit Criteria\n## Required Checks\n{{{{TASK_NAME}}}}\n")
+
+            with redirect_stdout(StringIO()):
+                exit_code = cmd_enable(ctx, str(project_root))
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("## demo-project", (root / "memory" / "projects.md").read_text(encoding="utf-8"))
+            self.assertTrue((project_root / ".github" / "instructions" / "agents-memory-bridge.instructions.md").exists())
+            self.assertTrue((project_root / ".vscode" / "mcp.json").exists())
+            self.assertTrue((project_root / ".agents-memory" / "onboarding-state.json").exists())
+            self.assertTrue((project_root / "docs" / "plans" / "bootstrap-checklist.md").exists())
+            self.assertTrue(any(path.is_dir() for path in (project_root / "docs" / "plans").glob("onboarding-*")))
+
+    def test_cmd_enable_full_mode_applies_profile_and_refactor_followup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(root / "templates" / "agents-memory-bridge.instructions.md", "root={{AGENTS_MEMORY_ROOT}}\nproject={{PROJECT_ID}}\n")
+            _write_text(root / "templates" / "agents-memory-copilot-instructions.md", "<!-- AGENTS-MEMORY:START -->\nproject={{PROJECT_ID}}\nroot={{AGENTS_MEMORY_ROOT}}\n<!-- AGENTS-MEMORY:END -->\n")
+            for name in ["README.template.md", "spec.template.md", "plan.template.md", "task-graph.template.md", "validation.template.md"]:
+                _write_text(root / "templates" / "planning" / name, f"# {name}\nplanning bundle\n## Acceptance Criteria\n## Change Set\n## Work Items\n## Exit Criteria\n## Required Checks\n{{{{TASK_NAME}}}}\n")
+            _write_text(
+                root / "profiles" / "python-service.yaml",
+                json.dumps(
+                    {
+                        "id": "python-service",
+                        "display_name": "Python Service",
+                        "applies_to": ["backend", "python"],
+                        "standards": ["standards/docs/docs-sync.instructions.md"],
+                        "templates": ["templates/profile/python-service/docs/plans/README.example.md"],
+                        "commands": {"doctor": "amem doctor ."},
+                        "bootstrap": {"create": [".github/instructions/", "docs/", "tests/"]},
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            _write_text(root / "standards" / "docs" / "docs-sync.instructions.md", "docs sync\n")
+            _write_text(root / "templates" / "profile" / "python-service" / "docs" / "plans" / "README.example.md", "planning root\n")
+            _write_text(project_root / "pyproject.toml", "[project]\nname='demo'\n")
+            _write_text(
+                project_root / "service.py",
+                "\n".join(
+                    [
+                        "def heavy(value):",
+                        "    total = 0",
+                        "    items = []",
+                        "    results = {}",
+                        "    status = None",
+                        "    errors = []",
+                        "    flags = set()",
+                        "    cache = {}",
+                        "    index = 0",
+                        "    if value > 0:",
+                        "        for outer in range(value):",
+                        "            if outer % 2 == 0:",
+                        "                for inner in range(3):",
+                        "                    if inner == 1:",
+                        "                        total += outer + inner",
+                        "                        items.append(total)",
+                        "                        results[outer] = inner",
+                        "                        status = 'hot'",
+                        "                    else:",
+                        "                        errors.append(inner)",
+                        "            else:",
+                        "                while index < 2:",
+                        "                    flags.add(index)",
+                        "                    index += 1",
+                        "    if total > 3:",
+                        "        cache['total'] = total",
+                        "    if items:",
+                        "        return total + len(items) + len(results) + len(errors) + len(flags) + len(cache)",
+                        "    return total",
+                    ]
+                )
+                + "\n",
+            )
+
+            with redirect_stdout(StringIO()):
+                exit_code = cmd_enable(ctx, str(project_root), full=True)
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((project_root / ".github" / "copilot-instructions.md").exists())
+            self.assertTrue((project_root / ".github" / "instructions" / "agents-memory" / "profile-manifest.json").exists())
+            self.assertTrue(any(path.is_dir() for path in (project_root / "docs" / "plans").glob("refactor-*")))
+            state = json.loads((project_root / ".agents-memory" / "onboarding-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["recommended_steps"][0]["key"], "refactor_bundle")
+            self.assertIn("--token hotspot-", state["recommended_steps"][0]["command"])
+            self.assertTrue(state["recommended_refactor_bundle"]["hotspot_token"].startswith("hotspot-"))
