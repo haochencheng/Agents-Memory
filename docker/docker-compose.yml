@@ -10,8 +10,6 @@
 # 数据清除：
 #   cd docker && docker-compose down -v
 
-version: "3.9"
-
 services:
   # ──────────────────────────────────────────────────────────────────────────
   # Qdrant — 高性能向量数据库，提供 REST + gRPC API 和 Web Dashboard

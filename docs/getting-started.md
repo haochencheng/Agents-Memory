@@ -65,7 +65,27 @@ cd docker && docker-compose up -d
 
 ---
 
-## 3. 验证基础 CLI
+---
+
+## 3. 一键启动（推荐）
+
+```bash
+bash scripts/start.sh          # 检查依赖 + 启动 Qdrant + 打印验证提示
+bash scripts/start.sh status   # 检查所有服务运行状态
+bash scripts/start.sh stop     # 停止 Qdrant（MCP Server 由 VS Code 管理）
+bash scripts/start.sh --qdrant # 只启动 Qdrant
+bash scripts/start.sh --mcp    # 前台调试 MCP Server（stdio 交互模式）
+```
+
+`start.sh` 会自动完成：
+- 检查 Python 3.12 和 `mcp` 包是否就绪（缺失自动安装）
+- 创建 `docker/data/qdrant/` 目录并启动 Qdrant 容器
+- 等待 Qdrant 健康检查通过
+- 打印 VS Code 验证指引
+
+---
+
+## 4. 验证基础 CLI
 
 ```bash
 python3 scripts/memory.py stats
