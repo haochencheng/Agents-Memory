@@ -18,4 +18,5 @@ from agents_memory.services.records import (
     cmd_stats,
     cmd_update_index,
 )
+from agents_memory.services.validation import cmd_docs_check
 from agents_memory.services.vector import cmd_embed, cmd_to_qdrant, cmd_vsearch

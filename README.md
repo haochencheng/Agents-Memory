@@ -148,6 +148,9 @@ python scripts/memory.py copilot-setup spec2flow
 # 将错误标记为已升级到 instruction
 python scripts/memory.py promote 2026-03-26-spec2flow-001
 
+# 检查文档入口、命令漂移和明显过期内容
+python scripts/memory.py docs-check .
+
 # 归档 90 天以上无重复的记录
 python scripts/memory.py archive
 
@@ -247,7 +250,7 @@ python3.12 -m py_compile $(find agents_memory scripts -name '*.py' -print)
 
 ---
 
-## 未来扩展路径（不需要现在做）
+## Search Backend Roadmap
 
 当错误记录超过 200 条后，可以引入本地向量搜索：
 

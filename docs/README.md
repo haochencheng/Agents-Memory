@@ -16,5 +16,6 @@
 - [模块化与插件化结构](modular-architecture.md)
 - [AI Engineering Operating System](ai-engineering-operating-system.md)
 - [Foundation Hardening Plan](foundation-hardening.md)
+- [Stale Cleanup Inventory](stale-cleanup.md)
 - [日常运维操作](ops.md)
 - [架构决策](architecture.md)

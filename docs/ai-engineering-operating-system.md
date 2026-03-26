@@ -535,7 +535,7 @@ profile apply   = 项目装配执行
 1. `amem profile-list`
 2. `amem profile-show`
 3. `amem profile-apply`
-4. `amem docs-check`
+4. `amem docs-check`（已完成第一版）
 
 ### MVP-5
 
@@ -584,9 +584,9 @@ Shared Engineering Brain =
 
 优先顺序：
 
-1. `standards/` 目录设计与首批标准文件
+1. `standards/` 目录设计与首批标准文件：已完成
 2. `profiles/` 目录设计与 `python-service` profile
 3. `amem profile-apply` 命令实现
-4. `amem docs-check` 命令实现
+4. `amem docs-check` 命令实现：已完成第一版
 
 这四步做完，Agents-Memory 才会从“共享错误记忆系统”升级成真正可执行的工程治理底座。

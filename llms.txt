@@ -63,8 +63,8 @@ Agents-Memory/
 │
 │
 └── scripts/
-    ├── memory.py                   # CLI 主入口（所有命令）
-    └── mcp_server.py               # MCP Server（Agent 工具调用接口）
+  ├── memory.py                   # thin CLI wrapper → agents_memory.app
+  └── mcp_server.py               # thin MCP wrapper → agents_memory.mcp_app
 ```
 
 ## Key Files
@@ -108,6 +108,7 @@ python3 scripts/memory.py register [path]              # one-command project reg
 python3 scripts/memory.py bridge-install <project-id>  # install bridge instruction in a project
 python3 scripts/memory.py mcp-setup [project-id]       # write .vscode/mcp.json for a registered project
 python3 scripts/memory.py doctor [project-id]          # verify a project's full integration health
+python3 scripts/memory.py docs-check [path]            # validate docs entrypoints and command drift
 python3 scripts/memory.py archive                      # archive old records
 python3 scripts/memory.py to-qdrant                    # migrate to shared Qdrant
 python3 scripts/memory.py update-index                 # regenerate index.md stats

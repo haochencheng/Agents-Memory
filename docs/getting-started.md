@@ -45,7 +45,7 @@ amem stats
 
 ### 最小安装（CLI 基础功能，零依赖）
 
-CLI 的 `new / list / stats / search / register / copilot-setup / agent-list / agent-setup / bridge-install / mcp-setup / doctor / sync / archive / update-index` 命令使用纯标准库，**无需任何额外 pip 安装**。直接运行：
+CLI 的 `new / list / stats / search / register / copilot-setup / agent-list / agent-setup / bridge-install / mcp-setup / doctor / docs-check / sync / archive / update-index` 命令使用纯标准库，**无需任何额外 pip 安装**。直接运行：
 
 ```bash
 python3 scripts/memory.py list
@@ -117,8 +117,20 @@ python3 scripts/memory.py list
 python3 scripts/memory.py search pydantic
 # 输出: 包含 "pydantic" 的所有错误记录
 
+python3 scripts/memory.py embed
+# 输出: 构建 / 更新本地 LanceDB 向量索引
+
+python3 scripts/memory.py vsearch "type guard"
+# 输出: 语义搜索结果（需先 embed）
+
 python3 scripts/memory.py doctor .
 # 输出: 当前项目的接入健康检查（注册 / bridge / MCP / 环境）
+
+python3 scripts/memory.py docs-check .
+# 输出: 文档入口、命令漂移、明显过期表述检查
+
+python3 scripts/memory.py to-qdrant
+# 输出: 把本地向量索引迁移到共享 Qdrant（可选）
 ```
 
 ### 调试日志

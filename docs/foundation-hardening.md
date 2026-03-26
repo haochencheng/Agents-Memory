@@ -239,12 +239,13 @@ Behavior change
 
 ### 4.2 代码验证
 
-建议新增：
+已落地：
 
 1. `tests/test_runtime_bootstrap.py`
 2. `tests/test_projects_service.py`
 3. `tests/test_records_service.py`
 4. `tests/test_integration_service.py`
+5. `tests/test_docs_check.py`
 
 最小验证矩阵：
 
@@ -279,11 +280,11 @@ python3 -m py_compile $(find agents_memory scripts -name '*.py' -print)
 
 ### 优先级 P0
 
-1. `standards/` 目录
-2. `tests/` 目录
-3. `docs-check` 命令
-4. Python / TDD / DRY / docs-sync 标准文件
-5. 过期文档清理清单
+1. `standards/` 目录：已完成
+2. `tests/` 目录：已完成
+3. `docs-check` 命令：已完成第一版
+4. Python / TDD / DRY / docs-sync 标准文件：已完成第一版
+5. 过期文档清理清单：已完成第一版
 
 ### 优先级 P1
 
@@ -329,10 +330,10 @@ python3 -m py_compile $(find agents_memory scripts -name '*.py' -print)
 
 建议按下面顺序落地，而不是并行扩散：
 
-1. 新增 `standards/` 首批文件
-2. 新增 `tests/` 和最小单元测试
-3. 实现 `docs-check`
-4. 清理过期文档表述
+1. 新增 `standards/` 首批文件：已完成
+2. 新增 `tests/` 和最小单元测试：已完成
+3. 实现 `docs-check`：已完成第一版
+4. 清理过期文档表述：已完成第一批
 5. 再进入 `profiles/` 与 `profile-apply`
 
 这是当前最稳的“先打地基，再扩系统”路线。
