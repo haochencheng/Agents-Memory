@@ -13,6 +13,12 @@ applyTo: "**"
 ### On Session Start (every coding session)
 
 **Step 0 — Read onboarding state first (if present):**
+Preferred via MCP:
+```
+memory_get_onboarding_state(project_root=".")
+```
+
+Fallback via file:
 ```
 Read .agents-memory/onboarding-state.json
 ```

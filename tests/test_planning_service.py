@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from agents_memory.runtime import build_context
-from agents_memory.services.planning import init_plan_bundle, slugify_task_name
+from agents_memory.services.planning import init_onboarding_bundle, init_plan_bundle, slugify_task_name
 from agents_memory.services.validation import cmd_plan_check, collect_plan_check_findings
 
 
@@ -81,6 +81,43 @@ class PlanningServiceTests(unittest.TestCase):
             findings = collect_plan_check_findings(target, str(target))
 
             self.assertTrue(any(f.status == "FAIL" and f.key == "plan_files" for f in findings))
+
+    def test_init_onboarding_bundle_uses_exported_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "target"
+            target.mkdir()
+            ctx = self._build_context(root)
+            for name in ["README.template.md", "spec.template.md", "plan.template.md", "task-graph.template.md", "validation.template.md"]:
+                _write_text(root / "templates" / "planning" / name, f"# {name}\n{{{{TASK_NAME}}}}\n{{{{TASK_SLUG}}}}\n")
+            _write_text(
+                target / ".agents-memory" / "onboarding-state.json",
+                "\n".join(
+                    [
+                        "{",
+                        '  "project_bootstrap_ready": false,',
+                        '  "project_bootstrap_complete": false,',
+                        '  "recommended_next_group": "Integration",',
+                        '  "recommended_next_key": "mcp_config",',
+                        '  "recommended_next_command": "amem mcp-setup .",',
+                        '  "recommended_verify_command": "amem doctor .",',
+                        '  "recommended_done_when": "`amem doctor .` shows `[OK] mcp_config`.",',
+                        '  "action_sequence": ["Integration (required): Run `amem mcp-setup .`"],',
+                        '  "runbook_steps": [{"group": "Integration", "key": "mcp_config"}],',
+                        '  "groups": [{"name": "Integration", "status": "ATTENTION"}]',
+                        "}",
+                    ]
+                ),
+            )
+
+            result = init_onboarding_bundle(ctx, target)
+
+            plan_dir = target / "docs" / "plans" / "onboarding-mcp-config"
+            self.assertTrue(plan_dir.exists())
+            self.assertEqual(result.recommended_next_command, "amem mcp-setup .")
+            self.assertIn("amem mcp-setup .", (plan_dir / "plan.md").read_text(encoding="utf-8"))
+            self.assertIn("project_bootstrap_ready", (plan_dir / "validation.md").read_text(encoding="utf-8"))
+            self.assertNotIn(str(target), (plan_dir / "spec.md").read_text(encoding="utf-8"))
 
     def test_cmd_plan_check_returns_zero_for_healthy_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

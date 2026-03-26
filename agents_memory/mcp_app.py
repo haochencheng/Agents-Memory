@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import sys
 from datetime import date
+from pathlib import Path
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -12,6 +14,7 @@ except ImportError:
 from agents_memory.constants import CATEGORIES, DOMAINS, PROJECTS, VECTOR_THRESHOLD
 from agents_memory.logging_utils import log_file_update
 from agents_memory.runtime import build_context
+from agents_memory.services.integration import load_onboarding_state
 from agents_memory.services.projects import parse_projects
 from agents_memory.services.records import cmd_update_index, parse_frontmatter
 
@@ -34,6 +37,7 @@ mcp = FastMCP(
     "agents-memory",
     instructions=(
         "Shared memory system for AI Agents. Always call memory_get_index() at the start of a session involving code changes. "
+        "Call memory_get_onboarding_state() before deep implementation if onboarding-state.json is available. "
         "Call memory_record_error() whenever you find and fix a bug or make an error during coding. "
         "Call memory_get_rules(domain) before working on finance, frontend, or python code."
     ),
@@ -48,6 +52,21 @@ def memory_get_index() -> str:
         return "Memory index not found. Run: python3 scripts/memory.py update-index"
     _log_tool_end("memory_get_index", status="ok")
     return ctx.index_file.read_text(encoding="utf-8")
+
+
+@mcp.tool()
+def memory_get_onboarding_state(project_root: str = ".") -> str:
+    _log_tool_start("memory_get_onboarding_state", project_root=project_root)
+    target_root = Path(project_root).expanduser().resolve()
+    state = load_onboarding_state(target_root)
+    if state is None:
+        _log_tool_end("memory_get_onboarding_state", status="missing", project_root=target_root)
+        return (
+            f"No onboarding state found at {target_root / '.agents-memory' / 'onboarding-state.json'}.\n"
+            "Run: python3 scripts/memory.py doctor . --write-state --write-checklist"
+        )
+    _log_tool_end("memory_get_onboarding_state", status="ok", project_root=target_root)
+    return json.dumps(state, ensure_ascii=False, indent=2)
 
 
 @mcp.tool()

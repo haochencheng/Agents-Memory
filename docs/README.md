@@ -16,6 +16,7 @@
 - [模块化与插件化结构](modular-architecture.md)
 - [AI Engineering Operating System](ai-engineering-operating-system.md)
 - [Planning Bundle Example](plans/planning-governance-gate/README.md)
+- [Onboarding Bundle Example](plans/onboarding-copilot-activation/README.md)
 - [Foundation Hardening Plan](foundation-hardening.md)
 - [Stale Cleanup Inventory](stale-cleanup.md)
 - [Profiles](ai-engineering-operating-system.md#7-profiles-目录设计)

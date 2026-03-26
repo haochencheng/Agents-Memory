@@ -687,6 +687,23 @@ def _doctor_checklist_markdown(
     return "\n".join(lines).rstrip() + "\n"
 
 
+def onboarding_state_path(project_root: Path) -> Path:
+    return project_root / ".agents-memory" / "onboarding-state.json"
+
+
+def load_onboarding_state(project_root: Path) -> dict[str, object] | None:
+    state_path = onboarding_state_path(project_root)
+    if not state_path.exists():
+        return None
+    try:
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
 def _write_doctor_artifacts(
     ctx: AppContext,
     project_id: str,

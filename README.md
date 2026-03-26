@@ -145,6 +145,7 @@ python3 scripts/memory.py sync
 python3 scripts/memory.py register .
 python3 scripts/memory.py doctor .
 python3 scripts/memory.py doctor . --write-checklist --write-state
+python3 scripts/memory.py onboarding-bundle .
 python3 scripts/memory.py copilot-setup .
 python3 scripts/memory.py bridge-install your-project
 python3 scripts/memory.py mcp-setup .
@@ -197,6 +198,7 @@ python3 scripts/memory.py docs-check .
 `doctor` 的输出现在按 `Core / Planning / Integration / Optional` 分组，并为每个分组生成健康小结、修复建议、按优先级排序的行动序列，以及带 `Command / Verify with / Next command / Done when` 的 onboarding runbook，同时给出 `Project Bootstrap Checklist`。
 如果加上 `--write-checklist --write-state`，它还会导出 `docs/plans/bootstrap-checklist.md` 和 `.agents-memory/onboarding-state.json`，把控制台状态沉淀成可复查工件。
 `onboarding-state.json` 现在包含 `project_bootstrap_ready`、`recommended_next_command`、`recommended_verify_command` 等顶层字段，方便 agent 在进入项目时先读 state，再决定是否先跑 `mcp-setup`、`plan-init` 或 `profile-check`。
+`onboarding-bundle` 则会基于当前 state 生成一个 onboarding task bundle，把推荐动作落到 `docs/plans/onboarding-*/` 的 spec / plan / task graph / validation 套件里。
 
 ## 开源与本地运行数据边界
 
