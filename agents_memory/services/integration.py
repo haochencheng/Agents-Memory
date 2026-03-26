@@ -34,6 +34,12 @@ from agents_memory.services.validation import collect_plan_check_findings, colle
 
 
 DOCTOR_GROUP_ORDER = ["Core", "Planning", "Integration", "Optional"]
+DOCTOR_GROUP_PRIORITY = {
+    "Core": "required",
+    "Planning": "required",
+    "Integration": "required",
+    "Optional": "recommended",
+}
 DOCTOR_GROUP_REMEDIATION = {
     "Core": {
         "registry": "Register the project in memory/projects.md or re-run `amem register`.",
@@ -443,6 +449,17 @@ def _doctor_group_remediations(group_name: str, group_checks: list[tuple[str, st
     return suggestions
 
 
+def _doctor_action_sequence(grouped_checks: list[tuple[str, list[tuple[str, str, str]]]]) -> list[str]:
+    actions: list[str] = []
+    for group_name, group_checks in grouped_checks:
+        remediations = _doctor_group_remediations(group_name, group_checks)
+        if not remediations:
+            continue
+        priority = DOCTOR_GROUP_PRIORITY.get(group_name, "recommended")
+        actions.append(f"{group_name} ({priority}): {'; '.join(remediations)}")
+    return actions
+
+
 def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
     project_id, project_root, project = resolve_project_target(ctx, project_id_or_path)
     ctx.logger.info("doctor_start | target=%s | resolved_project_id=%s | project_root=%s", project_id_or_path, project_id, project_root)
@@ -475,11 +492,13 @@ def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
 
     overall = _doctor_overall(checks)
 
+    grouped_checks = _doctor_group_checks(checks)
+
     print("\n=== Agents-Memory Doctor ===")
     print(f"Project: {project_id}")
     print(f"Root:    {project_root}")
     print(f"Overall: {overall}\n")
-    for group_name, group_checks in _doctor_group_checks(checks):
+    for group_name, group_checks in grouped_checks:
         print(f"{group_name}:")
         print(f"Summary: {_doctor_group_summary(group_name, group_checks)}")
         for status, key, detail in group_checks:
@@ -489,6 +508,13 @@ def cmd_doctor(ctx: AppContext, project_id_or_path: str = ".") -> None:
             print("Remediation:")
             for item in remediations:
                 print(f"- {item}")
+        print()
+
+    action_sequence = _doctor_action_sequence(grouped_checks)
+    if action_sequence:
+        print("Action Sequence:")
+        for index, action in enumerate(action_sequence, start=1):
+            print(f"{index}. {action}")
         print()
 
     print("\nNext:")
