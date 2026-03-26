@@ -8,6 +8,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agents_memory.constants import (
     BRIDGE_TEMPLATE_NAME,
@@ -36,6 +37,9 @@ from agents_memory.services.profiles import apply_profile, detect_applied_profil
 from agents_memory.services.profiles import PROFILE_MANIFEST_REL, expected_profile_paths
 from agents_memory.services.records import collect_errors
 from agents_memory.services.validation import collect_plan_check_findings, collect_profile_check_findings, collect_refactor_watch_findings, collect_refactor_watch_hotspots
+
+if TYPE_CHECKING:
+    from agents_memory.services.planning import RefactorBundleResult
 
 
 DOCTOR_GROUP_ORDER = ["Core", "Planning", "Integration", "Optional"]
@@ -878,6 +882,16 @@ def _state_pending_steps(state: dict[str, object]) -> list[dict[str, object]]:
 def _state_recommended_steps(state: dict[str, object]) -> list[dict[str, object]]:
     return _state_steps(state.get("recommended_steps"))
 
+
+def _result_mapping(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
+def _result_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value]
+
 def _recommended_step_metadata(step: dict[str, object]) -> dict[str, object]:
     return {
         "recommended_next_group": step.get("group"),
@@ -986,6 +1000,73 @@ def _runbook_step_from_state(state: dict[str, object]) -> dict[str, object] | No
     if recommended_steps:
         return recommended_steps[0]
     return None
+
+
+def _print_onboarding_execute_header(project_root: Path, *, status: str) -> None:
+    print("\n=== Onboarding Execute ===")
+    print(f"Project Root: {project_root}")
+    print(f"Status:       {status}")
+
+
+def _print_onboarding_execute_pending(result: dict[str, object], *, project_root: Path, status: str) -> None:
+    _print_onboarding_execute_header(project_root, status=status)
+    print(f"Message:      {result.get('message')}")
+    approval_reason = result.get("approval_reason")
+    if approval_reason:
+        print(f"Approval:     {approval_reason}")
+    recommended_command = result.get("recommended_command")
+    if recommended_command:
+        print(f"Next:         {recommended_command}")
+
+
+def _print_onboarding_execution_block(execution: dict[str, object]) -> None:
+    print(f"Command:      {execution.get('command')}")
+    print(f"Resolved:     {execution.get('resolved_command')}")
+    print(f"Return Code:  {execution.get('returncode')}")
+    if execution.get("stdout"):
+        print("\nExecution stdout:")
+        print(execution["stdout"])
+    if execution.get("stderr"):
+        print("\nExecution stderr:")
+        print(execution["stderr"])
+
+
+def _print_onboarding_verify_block(verify_result: dict[str, object]) -> None:
+    if not verify_result:
+        return
+
+    print("\nVerification:")
+    print(f"- Command: {verify_result.get('command')}")
+    print(f"- Resolved: {verify_result.get('resolved_command')}")
+    print(f"- Return Code: {verify_result.get('returncode')}")
+    if verify_result.get("stdout"):
+        print("\nVerification stdout:")
+        print(verify_result["stdout"])
+    if verify_result.get("stderr"):
+        print("\nVerification stderr:")
+        print(verify_result["stderr"])
+
+
+def _print_onboarding_state_block(result: dict[str, object]) -> None:
+    print("\nState:")
+    print(f"- Updated: {result.get('state_updated')}")
+    print(f"- Artifacts refreshed: {result.get('artifacts_refreshed')}")
+    print(f"- Approval used: {result.get('approval_used')}")
+    for path in _result_string_list(result.get("written_artifacts")):
+        print(f"- {path}")
+
+
+def _print_onboarding_next_action(result: dict[str, object]) -> None:
+    next_action = _result_mapping(result.get("next_action"))
+    if not next_action:
+        return
+
+    print("\nNext Action:")
+    print(f"- Status: {next_action.get('status')}")
+    if next_action.get("command"):
+        print(f"- Command: {next_action.get('command')}")
+    elif next_action.get("recommended_command"):
+        print(f"- Command: {next_action.get('recommended_command')}")
 
 
 def _quoted_command(parts: list[str]) -> str:
@@ -1499,63 +1580,19 @@ def cmd_onboarding_execute(
     )
     status = str(result.get("status"))
     if status in {"missing", "ready", "invalid", "approval_required"}:
-        print("\n=== Onboarding Execute ===")
-        print(f"Project Root: {project_root}")
-        print(f"Status:       {status}")
-        print(f"Message:      {result.get('message')}")
-        approval_reason = result.get("approval_reason")
-        if approval_reason:
-            print(f"Approval:     {approval_reason}")
-        recommended_command = result.get("recommended_command")
-        if recommended_command:
-            print(f"Next:         {recommended_command}")
+        _print_onboarding_execute_pending(result, project_root=project_root, status=status)
         return
 
-    step = result.get("step") or {}
-    execution = result.get("execution") or {}
-    verify_result = result.get("verify") or {}
+    step = _result_mapping(result.get("step"))
+    execution = _result_mapping(result.get("execution"))
+    verify_result = _result_mapping(result.get("verify"))
 
-    print("\n=== Onboarding Execute ===")
-    print(f"Project Root: {project_root}")
+    _print_onboarding_execute_header(project_root, status=status)
     print(f"Step:         {step.get('group')} / {step.get('key')}")
-    print(f"Status:       {status}")
-    print(f"Command:      {execution.get('command')}")
-    print(f"Resolved:     {execution.get('resolved_command')}")
-    print(f"Return Code:  {execution.get('returncode')}")
-    if execution.get("stdout"):
-        print("\nExecution stdout:")
-        print(execution["stdout"])
-    if execution.get("stderr"):
-        print("\nExecution stderr:")
-        print(execution["stderr"])
-
-    if verify_result:
-        print("\nVerification:")
-        print(f"- Command: {verify_result.get('command')}")
-        print(f"- Resolved: {verify_result.get('resolved_command')}")
-        print(f"- Return Code: {verify_result.get('returncode')}")
-        if verify_result.get("stdout"):
-            print("\nVerification stdout:")
-            print(verify_result["stdout"])
-        if verify_result.get("stderr"):
-            print("\nVerification stderr:")
-            print(verify_result["stderr"])
-
-    print("\nState:")
-    print(f"- Updated: {result.get('state_updated')}")
-    print(f"- Artifacts refreshed: {result.get('artifacts_refreshed')}")
-    print(f"- Approval used: {result.get('approval_used')}")
-    for path in result.get("written_artifacts", []):
-        print(f"- {path}")
-
-    next_action = result.get("next_action") or {}
-    if isinstance(next_action, dict):
-        print("\nNext Action:")
-        print(f"- Status: {next_action.get('status')}")
-        if next_action.get("command"):
-            print(f"- Command: {next_action.get('command')}")
-        elif next_action.get("recommended_command"):
-            print(f"- Command: {next_action.get('recommended_command')}")
+    _print_onboarding_execution_block(execution)
+    _print_onboarding_verify_block(verify_result)
+    _print_onboarding_state_block(result)
+    _print_onboarding_next_action(result)
 
 
 def offer_agent_setup(ctx: AppContext, project_root: Path, project_id: str, agent_name: str = DEFAULT_AGENT) -> None:
