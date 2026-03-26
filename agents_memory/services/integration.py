@@ -638,19 +638,8 @@ def _doctor_required_steps_pending(runbook_steps: list[dict[str, object]]) -> bo
     return any(step.get("priority") == "required" for step in runbook_steps)
 
 
-def _doctor_state_payload(
-    project_id: str,
-    project_root: Path,
-    overall: str,
-    grouped_checks: list[tuple[str, list[tuple[str, str, str]]]],
-    action_sequence: list[str],
-    runbook_steps: list[dict[str, object]],
-    checklist: list[str],
-    existing_state: dict[str, object] | None = None,
-) -> dict[str, object]:
-    recommended_step = _doctor_recommended_step(runbook_steps)
-    preserved_steps, preserved_bundle = _reconcile_recommended_refactor_state(existing_state, project_root)
-    groups = []
+def _doctor_group_payloads(grouped_checks: list[tuple[str, list[tuple[str, str, str]]]]) -> list[dict[str, object]]:
+    groups: list[dict[str, object]] = []
     for group_name, group_checks in grouped_checks:
         groups.append(
             {
@@ -663,6 +652,54 @@ def _doctor_state_payload(
                 ],
             }
         )
+    return groups
+
+
+def _doctor_preserved_execution_metadata(existing_state: dict[str, object] | None) -> dict[str, object]:
+    if not existing_state:
+        return {}
+
+    payload: dict[str, object] = {}
+    for key in (
+        "execution_history",
+        "last_executed_action",
+        "last_verified_action",
+        "last_execution_status",
+        "last_execution_at",
+    ):
+        if key in existing_state:
+            payload[key] = existing_state[key]
+    return payload
+
+
+def _doctor_refactor_followup_metadata(
+    preserved_steps: list[dict[str, object]],
+    preserved_bundle: dict[str, object] | None,
+    *,
+    runbook_steps: list[dict[str, object]],
+) -> dict[str, object]:
+    payload: dict[str, object] = {}
+    if preserved_steps:
+        payload["recommended_steps"] = preserved_steps
+    if preserved_bundle is not None:
+        payload["recommended_refactor_bundle"] = preserved_bundle
+    if not runbook_steps and preserved_steps:
+        payload.update(_recommended_step_metadata(preserved_steps[0]))
+    return payload
+
+
+def _doctor_state_payload(
+    project_id: str,
+    project_root: Path,
+    overall: str,
+    grouped_checks: list[tuple[str, list[tuple[str, str, str]]]],
+    action_sequence: list[str],
+    runbook_steps: list[dict[str, object]],
+    checklist: list[str],
+    existing_state: dict[str, object] | None = None,
+) -> dict[str, object]:
+    recommended_step = _doctor_recommended_step(runbook_steps)
+    preserved_steps, preserved_bundle = _reconcile_recommended_refactor_state(existing_state, project_root)
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "project_id": project_id,
@@ -678,27 +715,19 @@ def _doctor_state_payload(
         "recommended_next_safe_to_auto_execute": bool(recommended_step.get("safe_to_auto_execute")) if recommended_step else False,
         "recommended_next_approval_required": bool(recommended_step.get("approval_required")) if recommended_step else False,
         "recommended_next_approval_reason": recommended_step.get("approval_reason") if recommended_step else None,
-        "groups": groups,
+        "groups": _doctor_group_payloads(grouped_checks),
         "action_sequence": action_sequence,
         "runbook_steps": runbook_steps,
         "bootstrap_checklist": checklist,
     }
-    if existing_state:
-        for key in (
-            "execution_history",
-            "last_executed_action",
-            "last_verified_action",
-            "last_execution_status",
-            "last_execution_at",
-        ):
-            if key in existing_state:
-                payload[key] = existing_state[key]
-    if preserved_steps:
-        payload["recommended_steps"] = preserved_steps
-    if preserved_bundle is not None:
-        payload["recommended_refactor_bundle"] = preserved_bundle
-    if not runbook_steps and preserved_steps:
-        payload.update(_recommended_step_metadata(preserved_steps[0]))
+    payload.update(_doctor_preserved_execution_metadata(existing_state))
+    payload.update(
+        _doctor_refactor_followup_metadata(
+            preserved_steps,
+            preserved_bundle,
+            runbook_steps=runbook_steps,
+        )
+    )
     return payload
 
 
