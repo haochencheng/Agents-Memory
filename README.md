@@ -207,6 +207,8 @@ MCP 侧现在除了 onboarding tools，还新增了 `memory_get_refactor_hotspot
 5. `profiles/*.yaml`
 6. `plan-init`, `plan-check`, `profile-apply`, `standards-sync`, `profile-check`, `docs-check`
 
+仓库当前应用的 `agent-runtime` profile 会把 `docs-sync`、`harness-engineering`、`review-checklist` 和 `python/base.instructions.md` 一起同步到 `.github/instructions/agents-memory/standards/`，这样规划约束和 Python 复杂度约束都会真正进入当前仓库的 agent 上下文，而不只是停留在 `standards/` 源目录。
+
 `profile-apply` 现在会默认写出 `docs/plans/README.md` 入口模板，`doctor` 也会开始感知 planning root 和 planning bundle 健康状态。
 `doctor` 的输出现在按 `Core / Planning / Integration / Optional` 分组，并为每个分组生成健康小结、修复建议、按优先级排序的行动序列，以及带 `Command / Verify with / Next command / Done when` 的 onboarding runbook，同时给出 `Project Bootstrap Checklist`。
 它现在还会追加 `refactor_watch`，用 AST 规则扫描 Python 函数是否逼近复杂度阈值，并提示哪些函数应该先重构再继续叠加能力。`docs/plans/refactor-watch.md` 现在不只是“发现问题”，还会直接给出 `amem refactor-bundle .` / `--token <hotspot-token>` 入口，把目标 hotspot 落成 `docs/plans/refactor-<slug>/` bundle。

@@ -10,11 +10,21 @@
 
 ```
 Agents-Memory/
+├── .agents-memory/
+│   └── onboarding-state.json       # doctor / onboarding / refactor follow-up state (local generated, gitignored)
+├── .github/
+│   ├── copilot-instructions.md     # repo-wide Copilot activation block
+│   └── instructions/
+│       └── agents-memory/
+│           ├── profile-manifest.json # applied profile manifest for this repository
+│           └── standards/          # repo-scoped instruction payload mirrored from standards/
 ├── index.md                        # HOT runtime file, locally generated from templates, gitignored
 ├── llms.txt                        # 机器可读的项目结构地图（本文件）
 ├── README.md                       # 人类可读的项目介绍 + 设计方案
 ├── CONTRIBUTING.md                 # 开源贡献约定 + 最小验证命令
 ├── LICENSE                         # 开源许可证
+├── pyproject.toml                  # package / test / tool configuration
+├── requirements.txt                # minimal runtime dependencies
 │
 ├── schema/
 │   └── error-record.md             # 错误记录 frontmatter + 正文格式规范
@@ -38,7 +48,7 @@ Agents-Memory/
 │   ├── cli.py                      # `amem` 包入口
 │   ├── logging_utils.py            # CLI + MCP 共享日志配置
 │   ├── commands/                   # CLI command registry by capability
-│   ├── services/                   # records / projects / integration / planning / profiles / vector logic
+│   ├── services/                   # records / projects / integration / planning / profiles / validation / vector logic
 │   └── integrations/agents/        # pluggable agent adapters
 │
 ├── profiles/                       # installable project profiles (JSON-subset YAML)
@@ -46,6 +56,14 @@ Agents-Memory/
 │   ├── frontend-app.yaml
 │   ├── fullstack-product.yaml
 │   └── agent-runtime.yaml
+│
+├── runtime/                        # reserved runtime workspace dir (currently empty)
+│
+├── standards/                      # canonical reusable rules synced into repository instructions
+│   ├── docs/
+│   ├── planning/
+│   ├── python/
+│   └── validation/
 │
 ├── vectors/                        # LOCAL VECTOR INDEX (gitignored)
 │   └── errors.lance                # LanceDB 索引，由 embed 命令生成
@@ -67,14 +85,32 @@ Agents-Memory/
 ├── docs/
 │   ├── README.md                   # 文档入口
 │   ├── commands.md                 # CLI 全量命令总表与推荐入口
+│   ├── getting-started.md          # first-run and activation workflow
+│   ├── integration.md              # target project integration and enable workflow
 │   ├── copilot-auto-activation.md  # Copilot 自动激活设计
+│   ├── ai-engineering-operating-system.md # product/system framing
+│   ├── foundation-hardening.md     # hardening and guardrail notes
 │   ├── modular-architecture.md     # 模块化与插件化结构
 │   ├── architecture.md             # 架构决策记录（ADR-001 ~ ADR-006）
-│   └── ops.md                      # 运维手册：CLI 用法 / MCP / 向量搜索 / Docker
+│   ├── ops.md                      # 运维手册：CLI 用法 / MCP / 向量搜索 / Docker
+│   ├── stale-cleanup.md            # stale artifact cleanup guidance
+│   └── plans/                      # generated planning / onboarding / refactor bundles
 │
+├── tests/                          # unittest regression suite
+│   ├── test_docs_check.py
+│   ├── test_integration_service.py
+│   ├── test_mcp_app.py
+│   ├── test_planning_service.py
+│   ├── test_profiles_service.py
+│   ├── test_projects_service.py
+│   ├── test_records_service.py
+│   └── test_runtime_bootstrap.py
 │
 └── scripts/
   ├── memory.py                   # thin CLI wrapper → agents_memory.app
+  ├── amem                        # convenience launcher
+  ├── install-cli.sh              # install CLI shim into local environment
+  ├── start.sh                    # local startup helper
   └── mcp_server.py               # thin MCP wrapper → agents_memory.mcp_app
 ```
 
@@ -90,14 +126,21 @@ Agents-Memory/
 | `templates/*.example.*` | Public-safe bootstrap examples | Human / first local run |
 | `CONTRIBUTING.md` | Contribution workflow and validation baseline | Human contributors |
 | `LICENSE` | Open-source license | Humans / package metadata |
+| `pyproject.toml` | Packaging, Python version, and tool config | Human / test runner |
+| `requirements.txt` | Minimal install requirements | Human / bootstrap |
 | `scripts/memory.py` | Thin CLI wrapper → `agents_memory.app` | Human / CI |
 | `scripts/mcp_server.py` | Thin MCP wrapper → `agents_memory.mcp_app` | AI Agent via tool calls |
 | `agents_memory/app.py` | CLI command registry entrypoint | Human / CI |
 | `agents_memory/mcp_app.py` | MCP tool registry entrypoint | AI Agent via tool calls |
 | `agents_memory/runtime.py` | Shared repo context and paths | CLI / MCP / services |
 | `agents_memory/services/*` | Business logic by capability | CLI / MCP / future UIs |
+| `agents_memory/commands/*` | CLI argument parsing and command dispatch adapters | CLI |
 | `profiles/*.yaml` | Installable project contracts | `profile-list/show/apply` |
+| `standards/**/*.md` | Canonical reusable standards source | `profile-apply`, `standards-sync`, docs/check validation |
 | `.github/instructions/agents-memory/profile-manifest.json` | Applied profile manifest in target project | `profile-apply`, `profile-check`, `doctor` |
+| `.github/instructions/agents-memory/standards/*` | Active repository instruction set consumed by Copilot/agents | Repo-local agent sessions |
+| `.github/copilot-instructions.md` | Repo-wide activation entrypoint | GitHub Copilot |
+| `.agents-memory/onboarding-state.json` | Current onboarding / refactor recommendation state | `doctor`, `onboarding-execute`, `refactor-bundle` |
 | `templates/profile/*` | Profile bootstrap templates | `profile-apply` |
 | `templates/planning/*` | Planning bundle templates | `plan-init` |
 | `agents_memory/integrations/agents/*` | Plugin adapters for Copilot / ChatGPT / Claude | Project integration flows |
@@ -106,6 +149,7 @@ Agents-Memory/
 | `templates/agents-memory-bridge.instructions.md` | Bridge template | `bridge-install` command |
 | `templates/agents-memory-copilot-instructions.md` | Repo-wide Copilot activation template | `copilot-setup` / `register` |
 | `docker/docker-compose.yml` | Qdrant service | Human (`docker-compose up -d`) |
+| `tests/test_*.py` | Regression coverage for services, MCP, docs, bootstrap | `python3 -m unittest` |
 
 ## CLI Quick Reference
 

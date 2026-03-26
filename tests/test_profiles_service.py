@@ -62,6 +62,21 @@ class ProfilesServiceTests(unittest.TestCase):
             self.assertEqual(profile.applies_to, ["backend", "fastapi"])
             self.assertEqual(profile.bootstrap_create, ["docs/"])
 
+    def test_agent_runtime_profile_includes_python_baseline(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        previous_root = os.environ.get("AGENTS_MEMORY_ROOT")
+        os.environ["AGENTS_MEMORY_ROOT"] = str(repo_root)
+        try:
+            ctx = build_context(logger_name="tests.profiles.agent_runtime", reference_file=__file__)
+            profile = load_profile(ctx, "agent-runtime")
+        finally:
+            if previous_root is None:
+                os.environ.pop("AGENTS_MEMORY_ROOT", None)
+            else:
+                os.environ["AGENTS_MEMORY_ROOT"] = previous_root
+
+        self.assertIn("standards/python/base.instructions.md", profile.standards)
+
     def test_apply_profile_creates_dirs_and_installs_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

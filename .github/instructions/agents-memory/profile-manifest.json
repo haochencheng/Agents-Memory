@@ -8,6 +8,7 @@
   ],
   "standards": [
     "standards/docs/docs-sync.instructions.md",
+    "standards/python/base.instructions.md",
     "standards/planning/harness-engineering.md",
     "standards/planning/review-checklist.md"
   ],
