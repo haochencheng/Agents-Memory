@@ -21,7 +21,27 @@ cd Agents-Memory
 
 ---
 
-## 2. 安装依赖
+## 2. 安装 `amem` 全局命令
+
+`amem` 是 Agents-Memory 的全局 CLI，安装后在任意目录可用（无需 cd 到仓库、无需 Python 环境配置）：
+
+```bash
+bash scripts/install-cli.sh
+```
+
+脚本会自动创建符号链接到 `/opt/homebrew/bin/amem`（macOS）或 `~/.local/bin/amem`（Linux）。
+
+验证安装：
+```bash
+amem stats
+# 输出: 各类别错误数量统计（无需在仓库目录下）
+```
+
+> **已安装则跳过此步**。如果 `which amem` 有输出说明已安装。
+
+---
+
+## 3. 安装依赖
 
 ### 最小安装（CLI 基础功能，零依赖）
 
@@ -67,7 +87,7 @@ cd docker && docker-compose up -d
 
 ---
 
-## 3. 一键启动（推荐）
+## 4. 一键启动（推荐）
 
 ```bash
 bash scripts/start.sh          # 检查依赖 + 启动 Qdrant + 打印验证提示
@@ -85,7 +105,7 @@ bash scripts/start.sh --mcp    # 前台调试 MCP Server（stdio 交互模式）
 
 ---
 
-## 4. 验证基础 CLI
+## 5. 验证基础 CLI
 
 ```bash
 python3 scripts/memory.py stats
@@ -100,7 +120,7 @@ python3 scripts/memory.py search pydantic
 
 ---
 
-## 4. 启动 MCP Server（VS Code 集成）
+## 6. 启动 MCP Server（VS Code 集成）
 
 MCP Server 是 AI Agent 调用共享记忆的核心接口。在 VS Code 中使用 GitHub Copilot / Claude 时，它会以 `stdio` 子进程方式自动启动。
 

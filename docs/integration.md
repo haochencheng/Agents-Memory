@@ -6,14 +6,13 @@
 
 ## 接入需要做什么？
 
-接入分两层：
+接入共 3 步，`amem register` **全部自动完成**：
 
-| 层 | 做什么 | 效果 |
-|----|--------|------|
-| **注册层** | 把项目写入 `memory/projects.md` | `sync` 命令能向该项目推送规则 |
-| **工具层** | VS Code 的 MCP 配置 | Agent 能调用 `memory_record_error` 等工具 |
-
-**两层都完成后，Agent 才能全自动使用共享记忆。** 只做注册层，Agent 仍需手动跑 CLI。
+| 步骤 | 做什么 | 效果 |
+|------|--------|------|
+| 1. **注册** | 写入 `memory/projects.md` | `amem sync` 能向该项目推送规则 |
+| 2. **bridge instruction** | 复制协议文件到 `.github/instructions/` | Agent 知道该如何使用记忆系统 |
+| 3. **MCP 工具层** | 写入 `.vscode/mcp.json` | Agent 真正能调用 `memory_record_error` 等工具 |
 
 ---
 
@@ -38,61 +37,37 @@ cd /path/to/your-project
 amem register
 ```
 
-命令会依次完成：
-1. 从 git remote 自动识别项目 ID
-2. 扫描 `.github/instructions/` 推断 domains 和 instruction 文件映射
-3. 写入 `memory/projects.md`（幂等，不重复写）
-4. 询问是否安装 bridge instruction → 自动复制模板到 `.github/instructions/agents-memory-bridge.instructions.md`
-
-示例输出：
+所有步骤直接回车确认默认值即可：
 
 ```
 🔍 检测到项目 ID: my-service  (来源: git remote / 目录名)
-Project ID [my-service]:
+Project ID [my-service]: ↵
 
-Instruction 目录 [.github/instructions]:
+Instruction 目录 [.github/instructions]: ↵
 
 📂 扫描到 instruction 文件:
    python       → .github/instructions/python.instructions.md
    frontend     → .github/instructions/frontend.instructions.md
 
 🏷  推断的 domains: frontend, python
-Domains (逗号分隔) [frontend, python]:
+Domains (逗号分隔) [frontend, python]: ↵
 
 ✅ 已写入 memory/projects.md → my-service
 
-自动安装 bridge instruction？[Y/n]: y
+自动安装 bridge instruction？[Y/n]: ↵
 ✅ Bridge instruction installed → .github/instructions/agents-memory-bridge.instructions.md
+
+自动写入 .vscode/mcp.json（VS Code MCP 工具层）？[Y/n]: ↵
+  ✅ 已写入 .vscode/mcp.json
 ```
+
+> **提示**：如果目标项目已有 `.vscode/mcp.json`（含其他 MCP server），命令会**合并写入** `agents-memory` 条目，不覆盖现有配置。
 
 ---
 
-## 还需要哪些配置？
+## 可选：AGENTS.md 读序注册
 
-### 必须：VS Code MCP 配置
-
-`register` 命令安装的 bridge instruction 是**文字协议**，告诉 Agent 该怎么用记忆系统。但 Agent 真正执行工具调用，需要 VS Code 知道 MCP Server 在哪里。
-
-**在你的项目根目录**创建 `.vscode/mcp.json`（或追加到现有文件）：
-
-```json
-{
-  "servers": {
-    "agents-memory": {
-      "type": "stdio",
-      "command": "python3.12",
-      "args": ["/Users/cliff/workspace/Agents-Memory/scripts/mcp_server.py"],
-      "env": {}
-    }
-  }
-}
-```
-
-> **路径说明**：`args` 必须是 `mcp_server.py` 的绝对路径，指向 Agents-Memory 仓库位置。
-
-### 可选：AGENTS.md 读序注册
-
-如果你的项目有 `AGENTS.md` 或 `docs/AGENTS.md`，把 bridge instruction 加入读序，让 Agent 在每次 session 开始时自动加载：
+如果你的项目有 `AGENTS.md`，把 bridge instruction 加到读序最前，让 Agent 每次 session 自动加载：
 
 ```markdown
 ## Read Order
@@ -105,8 +80,6 @@ Domains (逗号分隔) [frontend, python]:
 ---
 
 ## 接入后 Agent 的完整工作流
-
-配置完成后，Agent 在该项目中的行为变为：
 
 ```
 session 开始
@@ -124,8 +97,8 @@ coding 过程中发现 bug
     )                                # 自动写入 errors/*.md
 
 session 结束（人工）
-  → python3 memory.py promote <id>  # 重复出现 ≥ 2 次时升级为规则
-  → python3 memory.py sync          # 推送规则到所有注册项目
+  → amem promote <id>  # 重复出现 ≥ 2 次时升级为规则
+  → amem sync          # 推送规则到所有注册项目
 ```
 
 ---
@@ -135,50 +108,47 @@ session 结束（人工）
 ### 检查 1：注册已写入
 
 ```bash
-grep "my-service" /Users/cliff/workspace/Agents-Memory/memory/projects.md
+grep -A3 "## my-service" /path/to/Agents-Memory/memory/projects.md
 ```
 
-输出应包含：
-```
-## my-service
-- **id**: my-service
-- **active**: true
-```
+输出应包含 `active: true`。
 
 ### 检查 2：bridge instruction 存在
 
 ```bash
-ls /path/to/my-project/.github/instructions/agents-memory-bridge.instructions.md
+ls .github/instructions/agents-memory-bridge.instructions.md
 ```
 
-### 检查 3：MCP Server 可用（关键）
+### 检查 3：MCP 配置正确（关键）
 
-在 **目标项目的 VS Code 窗口**打开 Agent/Chat 面板，输入：
+```bash
+cat .vscode/mcp.json
+# 应包含 "agents-memory" 键
+```
+
+然后在 **该项目的 VS Code 窗口** Agent/Chat 面板中输入：
 
 ```
 请调用 memory_get_index 工具，告诉我当前有多少条错误记录。
 ```
 
-如果工具调用成功并返回 `index.md` 内容，接入完成 ✅
+返回 `index.md` 内容则接入完成 ✅
 
-如果提示"找不到工具"或 MCP 错误，检查：
+如果提示"找不到工具"，检查：
 - `.vscode/mcp.json` 是否存在于该项目根目录
-- `python3.12` 是否在 PATH（`which python3.12`）
-- `mcp` 包是否安装在 python3.12 上（`python3.12 -c "import mcp; print(mcp.__version__)"`）
+- `python3.12` 是否在 PATH：`which python3.12`
+- `mcp` 包是否已装：`python3.12 -c "from mcp.server.fastmcp import FastMCP; print('OK')"`
 
 ### 检查 4：sync 能覆盖该项目
 
 ```bash
-python3 /Users/cliff/workspace/Agents-Memory/scripts/memory.py sync
+amem sync
+# 输出中应出现该项目的 instruction 文件路径
 ```
-
-如果输出中出现该项目的 instruction 文件路径，说明规则推送链路正常。
 
 ---
 
 ## 分步手动接入（不用 register 命令时）
-
-如果不想用交互式 `register`，也可以手动完成：
 
 **步骤 1 — 编辑 `memory/projects.md`，追加：**
 
@@ -199,14 +169,22 @@ python3 /Users/cliff/workspace/Agents-Memory/scripts/memory.py sync
 amem bridge-install my-service
 ```
 
-**步骤 3 — 添加 `.vscode/mcp.json`（同上）**
+**步骤 3 — 写入 .vscode/mcp.json：**
+
+```bash
+amem mcp-setup my-service   # 按项目 ID
+# 或
+amem mcp-setup /path/to/my-service  # 按路径
+# 或
+cd /path/to/my-service && amem mcp-setup  # 当前目录
+```
 
 ---
 
-## Spec2Flow / 其他已注册项目的现状
+## 已注册项目现状
 
 | 项目 | 注册 | bridge 安装 | MCP 配置 |
-|------|------|------------|---------|
-| synapse-network | ✅ | ✅ | 需手动添加 `.vscode/mcp.json` |
-| spec2flow | ✅ | ✅ | 需手动添加 `.vscode/mcp.json` |
+|------|------|------------|------|
+| synapse-network | ✅ | ✅ | ✅ |
+| spec2flow | ✅ | ✅ | 运行 `amem mcp-setup spec2flow` |
 | agents-memory | ✅ | — | ✅（内置）|
