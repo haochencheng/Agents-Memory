@@ -32,6 +32,7 @@ from agents_memory.services.integration_doctor import (
     cmd_doctor,
     load_onboarding_state,
     onboarding_next_action,
+    onboarding_state_path,
 )
 from agents_memory.services.integration_enable import cmd_enable as run_enable_command
 from agents_memory.services.integration_onboarding import cmd_onboarding_execute, execute_onboarding_next_action
