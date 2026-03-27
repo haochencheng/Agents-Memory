@@ -335,40 +335,85 @@ def _doctor_action_sequence(grouped_checks: list[tuple[str, list[tuple[str, str,
     return actions
 
 
+def _doctor_runbook_step_payload(
+    *,
+    group_name: str,
+    priority: str,
+    status: str,
+    key: str,
+    detail: str,
+    runbook: dict[str, object],
+) -> dict[str, object]:
+    safe_to_auto_execute = bool(runbook.get("safe_to_auto_execute", False))
+    return {
+        "group": group_name,
+        "priority": priority,
+        "key": key,
+        "status": status,
+        "detail": detail,
+        "action": runbook["action"],
+        "command": runbook["command"],
+        "verify_with": runbook["verify_with"],
+        "done_when": runbook["done_when"],
+        "safe_to_auto_execute": safe_to_auto_execute,
+        "approval_required": not safe_to_auto_execute,
+        "approval_reason": runbook.get("approval_reason", "manual approval required before this onboarding action can run"),
+    }
+
+
+def _doctor_append_runbook_step(
+    *,
+    steps: list[dict[str, object]],
+    seen: set[tuple[str, str]],
+    group_name: str,
+    priority: str,
+    check: tuple[str, str, str],
+) -> None:
+    status, key, detail = check
+    if status not in {"WARN", "FAIL"}:
+        return
+
+    runbook = DOCTOR_RUNBOOK.get(key)
+    if runbook is None:
+        return
+
+    step_id = (group_name, key)
+    if step_id in seen:
+        return
+
+    steps.append(
+        _doctor_runbook_step_payload(
+            group_name=group_name,
+            priority=priority,
+            status=status,
+            key=key,
+            detail=detail,
+            runbook=runbook,
+        )
+    )
+    seen.add(step_id)
+
+
+def _doctor_attach_next_commands(steps: list[dict[str, object]]) -> list[dict[str, object]]:
+    for index, step in enumerate(steps):
+        step["next_command"] = steps[index + 1]["command"] if index + 1 < len(steps) else DOCTOR_COMMAND
+    return steps
+
+
 def _doctor_runbook_steps(grouped_checks: list[tuple[str, list[tuple[str, str, str]]]]) -> list[dict[str, object]]:
     steps: list[dict[str, object]] = []
     seen: set[tuple[str, str]] = set()
     for group_name, group_checks in grouped_checks:
         priority = DOCTOR_GROUP_PRIORITY.get(group_name, "recommended")
-        for status, key, detail in group_checks:
-            if status not in {"WARN", "FAIL"}:
-                continue
-            runbook = DOCTOR_RUNBOOK.get(key)
-            if runbook is None:
-                continue
-            step_id = (group_name, key)
-            if step_id in seen:
-                continue
-            steps.append(
-                {
-                    "group": group_name,
-                    "priority": priority,
-                    "key": key,
-                    "status": status,
-                    "detail": detail,
-                    "action": runbook["action"],
-                    "command": runbook["command"],
-                    "verify_with": runbook["verify_with"],
-                    "done_when": runbook["done_when"],
-                    "safe_to_auto_execute": bool(runbook.get("safe_to_auto_execute", False)),
-                    "approval_required": not bool(runbook.get("safe_to_auto_execute", False)),
-                    "approval_reason": runbook.get("approval_reason", "manual approval required before this onboarding action can run"),
-                }
+        for check in group_checks:
+            _doctor_append_runbook_step(
+                steps=steps,
+                seen=seen,
+                group_name=group_name,
+                priority=priority,
+                check=check,
             )
-            seen.add(step_id)
-    for index, step in enumerate(steps):
-        step["next_command"] = steps[index + 1]["command"] if index + 1 < len(steps) else DOCTOR_COMMAND
-    return steps
+    return _doctor_attach_next_commands(steps)
 
 
 def _doctor_bootstrap_checklist(grouped_checks: list[tuple[str, list[tuple[str, str, str]]]], runbook_steps: list[dict[str, object]]) -> list[str]:
