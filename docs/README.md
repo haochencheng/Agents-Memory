@@ -13,6 +13,9 @@ doc_status: active
 - [AI Engineering Operating System](ai-engineering-operating-system.md)：产品定位、系统基线、顶层 workflow、状态机、实施状态。
 - [架构决策](architecture.md)：repo 级实现决策与技术取舍，不重复产品定位和系统总设计。
 - [模块化与插件化结构](modular-architecture.md)：代码目录结构、模块分层、插件扩展点，不重复 ADR 技术取舍。
+- [接入其他项目](integration.md)：目标项目如何接入、验证、排错，不重复仓库内部代码分层。
+- [CLI 命令总表](commands.md)：命令签名、参数与按域分组参考，不展开接入步骤。
+- [本地启动与运维](getting-started.md)：本仓库如何安装、启动、调试，不展开目标项目接入流程。
 
 ## 目录
 

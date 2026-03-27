@@ -113,6 +113,18 @@ CONTRACT_REQUIREMENTS = {
         "path": Path(DOCS_DIR) / "modular-architecture.md",
         "phrases": ["代码目录结构与模块分层", "runtime / services / commands / integrations", "为什么这样实现", "代码如何分层与扩展"],
     },
+    "integration_flow": {
+        "path": Path(DOCS_DIR) / "integration.md",
+        "phrases": ["目标项目如何接入", "用户执行哪些命令", "如何验证是否生效", "外部项目如何接入与验证"],
+    },
+    "commands_reference": {
+        "path": Path(DOCS_DIR) / "commands.md",
+        "phrases": ["命令签名与参数形态", "命令参考", "外部项目接入流程", "本仓库本地启动与运维"],
+    },
+    "local_getting_started": {
+        "path": Path(DOCS_DIR) / "getting-started.md",
+        "phrases": ["本仓库如何克隆、安装、启动", "目标项目如何接入 Agents-Memory", "本仓库本地启动与运维", "外部项目接入流程"],
+    },
     "foundation_hardening": {
         "path": Path(DOCS_DIR) / "foundation-hardening.md",
         "phrases": ["Behavior change", "=> code change", "=> docs change", "=> test or validation change"],

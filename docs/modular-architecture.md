@@ -17,12 +17,19 @@ doc_status: active
 1. 代码目录结构与模块分层。
 2. runtime / services / commands / integrations 的职责边界。
 3. 插件扩展点和模块装配方式。
+4. 仓库内部如何支持多 agent 扩展，而不是用户如何接入目标项目。
 
 `docs/architecture.md` 负责：
 
 1. repo 级技术决策与 ADR。
 2. 为什么采用某种实现路线。
 3. 某个设计选择带来的后果与权衡。
+
+`docs/integration.md` 负责：
+
+1. 目标项目接入步骤。
+2. `amem enable` / `register` / `doctor` 的用户侧接入链路。
+3. 接入成功后的验证方式。
 
 换句话说：
 
@@ -135,19 +142,6 @@ scripts/
 
 ---
 
-## 当前默认策略
-
-默认 agent 是 `github-copilot`。
-
-所以：
-
-1. `amem register` 会自动走 GitHub Copilot adapter
-2. `amem copilot-setup` 是兼容 alias
-3. `amem agent-list` 可以查看当前内置 adapters
-4. `amem agent-setup <agent> <target>` 是未来扩展入口
-
----
-
 ## 演进路径
 
 下一步如果要真正试吃 ChatGPT / Claude，不需要再重构核心，只需要补各自 adapter：
@@ -166,4 +160,5 @@ scripts/
 
 1. 如果是在解释模块目录、层级职责、adapter 扩展点，写入 `docs/modular-architecture.md`。
 2. 如果是在解释某个 repo 级技术决策为什么成立，写入 `docs/architecture.md`。
-3. 如果一个段落同时在写“为什么”与“怎么分层”，优先拆开，避免 ADR 和模块设计互相漂移。
+3. 如果是在解释目标项目如何启用或验证接入，写入 `docs/integration.md`。
+4. 如果一个段落同时在写“用户怎么接”和“仓库怎么分层”，优先拆开，避免接入流程与模块设计互相漂移。

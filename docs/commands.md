@@ -8,20 +8,48 @@ doc_status: active
 
 > Agents-Memory CLI 全量命令总表。默认推荐从 `amem enable .` 开始接入项目。
 
+---
+
+## 边界说明
+
+`docs/commands.md` 负责：
+
+1. 命令签名与参数形态。
+2. 每条命令的简短用途说明。
+3. 命令按能力域分组后的总表。
+
+`docs/integration.md` 负责：
+
+1. 目标项目如何接入。
+2. 推荐按什么顺序执行接入命令。
+3. 接入后如何验证与排错。
+
+`docs/getting-started.md` 负责：
+
+1. 本仓库如何本地安装与启动。
+2. 本地依赖、MCP、Qdrant、日志、CLI 自检。
+
+换句话说：
+
+```text
+commands.md         = 命令参考
+integration.md      = 外部项目接入流程
+getting-started.md  = 本仓库本地启动与运维
+```
+
 ## Recommended Entry
 
 ### `amem enable .`
 
-默认模式的一键接入命令。自动完成当前项目的基础 Shared Engineering Brain 接入：
+默认模式的一键接入命令。
 
-
-适合首次接入项目，目标是最小成本启用可运行链路。
+适合首次接入项目，目标是最小成本启用可运行链路。具体接入顺序、受管文件和验证步骤统一见 `docs/integration.md`。
 
 ### `amem enable . --dry-run`
 
 预览模式。只展示当前项目将启用哪些能力、将写哪些文件，以及哪些项目工件会被复用，不落任何文件。
 
-适合在正式接入前先检查影响面。
+适合在正式接入前先检查影响面。它是命令参考的一部分，不展开完整接入流程。
 
 默认分组输出：
 
@@ -48,7 +76,17 @@ doc_status: active
 全量模式的一键接入命令。在默认模式基础上继续：
 - 把 refactor follow-up 写回 onboarding state
 
-适合希望一次性把 Shared Engineering Brain 核心能力全部打开的项目。
+适合希望一次性把 Shared Engineering Brain 核心能力全部打开的项目。完整接入说明见 `docs/integration.md`。
+
+---
+
+## 使用规则
+
+后续新增内容时，遵守下面 3 条：
+
+1. 如果是在列命令、参数、输出形态，写入 `docs/commands.md`。
+2. 如果是在说明目标项目如何按步骤接入，写入 `docs/integration.md`。
+3. 如果是在说明本仓库如何安装、启动、调试，写入 `docs/getting-started.md`。
 
 ## Memory
 

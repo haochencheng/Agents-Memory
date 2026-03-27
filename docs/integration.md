@@ -10,6 +10,42 @@ doc_status: active
 
 ---
 
+## 边界说明
+
+`docs/integration.md` 负责：
+
+1. 目标项目如何接入。
+2. 用户执行哪些命令。
+3. 接入后如何验证是否生效。
+4. 接入链路里有哪些受管文件和运行时入口。
+
+`docs/commands.md` 负责：
+
+1. 命令签名与参数形态。
+2. 所有 CLI 的总表与按域分组说明。
+
+`docs/getting-started.md` 负责：
+
+1. Agents-Memory 仓库本地如何安装与启动。
+2. 本地依赖、日志、Qdrant、MCP 的开发机验证。
+
+`docs/modular-architecture.md` 负责：
+
+1. Agents-Memory 仓库内部如何分层。
+2. runtime / services / commands / integrations 的代码职责。
+3. 插件扩展点如何设计。
+
+换句话说：
+
+```text
+integration.md           = 外部项目如何接入与验证
+commands.md              = 命令参考
+getting-started.md       = 本仓库本地启动与运维
+modular-architecture.md  = 仓库内部代码如何分层
+```
+
+---
+
 ## 接入需要做什么？
 
 接入共 4 步，推荐通过 `amem enable .` 一次编排完成：
@@ -131,6 +167,8 @@ Domains (逗号分隔) [frontend, python]: ↵
 > **提示 5**：当前目标项目里的 agent 读取入口是 `.github/copilot-instructions.md`、`.github/instructions/agents-memory-bridge.instructions.md`、`.github/instructions/agents-memory/standards/*`、根目录 `AGENTS.md` 中的受管 read-order block，以及 `.vscode/mcp.json`。这条接入链路不要求目标项目额外生成 `llms.txt` 才能生效；`llms.txt` 仍主要用于 Agents-Memory 仓库自身的机器可读地图。
 
 > **提示 6**：这里的自动修复目前只覆盖安全、模板化的 planning bundle 缺失文件修复。像 refactor hotspot 这类需要代码判断的项，仍会保留为 runbook / bundle，交给后续人工或 agent 按计划处理。
+
+> **边界提示**：本页只说明接入动作、受管文件和验证方式；`commands/`、`services/`、`integrations/agents/` 的代码分层与插件结构统一放在 `docs/modular-architecture.md`。
 
 ---
 
@@ -258,6 +296,16 @@ tail -f /path/to/Agents-Memory/logs/agents-memory.log
 ```bash
 amem doctor my-service
 ```
+
+---
+
+## 使用规则
+
+后续新增内容时，遵守下面 3 条：
+
+1. 如果是在说明目标项目如何启用、验证、排错，写入 `docs/integration.md`。
+2. 如果是在说明 Agents-Memory 仓库内部模块如何拆分与扩展，写入 `docs/modular-architecture.md`。
+3. 如果一个段落同时在写“用户怎么接”和“仓库内部怎么分层”，优先拆开，避免接入流程与模块设计互相漂移。
 
 它会一次检查：
 

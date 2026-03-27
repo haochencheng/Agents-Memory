@@ -16,6 +16,9 @@ doc_status: active
 6. `docs/ai-engineering-operating-system.md` 必须保持单一 canonical 结构，不允许重复 front matter、重复主标题或历史章节回流
 7. `docs/architecture.md` 只记录 repo 级实现 ADR，不重复产品定位、顶层 workflow、状态机与实施状态矩阵
 8. `docs/modular-architecture.md` 只记录代码目录结构、模块分层与插件扩展点，不重复 ADR 技术取舍
+9. `docs/integration.md` 只记录目标项目接入流程、验证和排错，不重复仓库内部模块分层设计
+10. `docs/commands.md` 只记录命令总表、参数和分组参考，不重复目标项目接入步骤
+11. `docs/getting-started.md` 只记录本仓库本地安装、启动与调试，不重复目标项目接入流程
 
 代码验证：
 

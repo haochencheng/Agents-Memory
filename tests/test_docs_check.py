@@ -82,6 +82,8 @@ class DocsCheckTests(unittest.TestCase):
             _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
             _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
             _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
             _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             (root / "tests").mkdir(parents=True, exist_ok=True)
@@ -99,6 +101,8 @@ class DocsCheckTests(unittest.TestCase):
             _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
             _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
             _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
             _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             (root / "tests").mkdir(parents=True, exist_ok=True)
@@ -119,6 +123,8 @@ class DocsCheckTests(unittest.TestCase):
             _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
             _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
             _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
             _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_text(root / "LICENSE", "MIT\n")
@@ -169,6 +175,8 @@ class DocsCheckTests(unittest.TestCase):
             )
             _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
             _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
             _write_text(
                 root / "docs" / "foundation-hardening.md",
                 "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n",
@@ -207,6 +215,8 @@ class DocsCheckTests(unittest.TestCase):
             _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
             _write_text(root / "docs" / "architecture.md", "三层分级记忆\n关键词搜索\nQdrant\n")
             _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
             _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_text(root / "LICENSE", "MIT\n")
@@ -242,6 +252,119 @@ class DocsCheckTests(unittest.TestCase):
             _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
             _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
             _write_text(root / "docs" / "modular-architecture.md", "新结构\n可插拔\nadapter\n")
+            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
+            _write_text(root / "LICENSE", "MIT\n")
+            _write_text(root / "pyproject.toml", "[project]\nname='demo'\n[project.urls]\nRepository = \"https://example.com/repo\"\nDocumentation = \"https://example.com/docs\"\nIssues = \"https://example.com/issues\"\n")
+            _write_text(root / "standards" / "docs" / "docs-sync.instructions.md", "docs\ncode\ntests\ncreated_at\nupdated_at\ndoc_status\n")
+            _write_text(root / "standards" / "validation" / "docs-check.rules.md", "docs entrypoint 完整\n文档元数据完整\n核心 services 有单元测试\n行为变更必须同时看到 code diff、docs diff、test diff 中至少两层联动\n")
+            _write_text(root / "standards" / "planning" / "harness-engineering.md", "docs、code、validation\nplan / task graph / validation route\n文档元数据\n")
+            _write_text(root / "standards" / "planning" / "review-checklist.md", "docs / code / tests\n最小验证结果\n")
+            _write_text(root / "standards" / "planning" / "spec-kit.md", "spec-first\n验收标准必须可被测试或命令验证\n")
+            _write_text(root / "standards" / "python" / "base.instructions.md", "复杂度\n重构\n40 行\n嵌套深度\n注释\n")
+            for test_file in [
+                "test_runtime_bootstrap.py",
+                "test_projects_service.py",
+                "test_records_service.py",
+                "test_integration_service.py",
+                "test_planning_service.py",
+                "test_docs_check.py",
+            ]:
+                _write_text(root / "tests" / test_file, "import unittest\n")
+
+            findings = collect_docs_check_findings(root)
+
+            self.assertTrue(any(f.status == "FAIL" and f.key == "contract_semantics" for f in findings))
+
+    def test_collect_docs_check_findings_flags_missing_integration_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_text(root / "README.md", "# Demo\n")
+            _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
+            _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n- [Ops](ops.md)\n")
+            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "ops.md", "# Ops\n")
+            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
+            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "integration.md", "enable\nregister\nbridge\nMCP\n")
+            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
+            _write_text(root / "LICENSE", "MIT\n")
+            _write_text(root / "pyproject.toml", "[project]\nname='demo'\n[project.urls]\nRepository = \"https://example.com/repo\"\nDocumentation = \"https://example.com/docs\"\nIssues = \"https://example.com/issues\"\n")
+            _write_text(root / "standards" / "docs" / "docs-sync.instructions.md", "docs\ncode\ntests\ncreated_at\nupdated_at\ndoc_status\n")
+            _write_text(root / "standards" / "validation" / "docs-check.rules.md", "docs entrypoint 完整\n文档元数据完整\n核心 services 有单元测试\n行为变更必须同时看到 code diff、docs diff、test diff 中至少两层联动\n")
+            _write_text(root / "standards" / "planning" / "harness-engineering.md", "docs、code、validation\nplan / task graph / validation route\n文档元数据\n")
+            _write_text(root / "standards" / "planning" / "review-checklist.md", "docs / code / tests\n最小验证结果\n")
+            _write_text(root / "standards" / "planning" / "spec-kit.md", "spec-first\n验收标准必须可被测试或命令验证\n")
+            _write_text(root / "standards" / "python" / "base.instructions.md", "复杂度\n重构\n40 行\n嵌套深度\n注释\n")
+            for test_file in [
+                "test_runtime_bootstrap.py",
+                "test_projects_service.py",
+                "test_records_service.py",
+                "test_integration_service.py",
+                "test_planning_service.py",
+                "test_docs_check.py",
+            ]:
+                _write_text(root / "tests" / test_file, "import unittest\n")
+
+            findings = collect_docs_check_findings(root)
+
+            self.assertTrue(any(f.status == "FAIL" and f.key == "contract_semantics" for f in findings))
+
+    def test_collect_docs_check_findings_flags_missing_commands_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_text(root / "README.md", "# Demo\n")
+            _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
+            _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n- [Ops](ops.md)\n")
+            _write_text(root / "docs" / "getting-started.md", "本仓库如何克隆、安装、启动\n目标项目如何接入 Agents-Memory\n本仓库本地启动与运维\n外部项目接入流程\n")
+            _write_text(root / "docs" / "ops.md", "# Ops\n")
+            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
+            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "commands.md", "enable\nregister\ndoctor\n")
+            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
+            _write_text(root / "LICENSE", "MIT\n")
+            _write_text(root / "pyproject.toml", "[project]\nname='demo'\n[project.urls]\nRepository = \"https://example.com/repo\"\nDocumentation = \"https://example.com/docs\"\nIssues = \"https://example.com/issues\"\n")
+            _write_text(root / "standards" / "docs" / "docs-sync.instructions.md", "docs\ncode\ntests\ncreated_at\nupdated_at\ndoc_status\n")
+            _write_text(root / "standards" / "validation" / "docs-check.rules.md", "docs entrypoint 完整\n文档元数据完整\n核心 services 有单元测试\n行为变更必须同时看到 code diff、docs diff、test diff 中至少两层联动\n")
+            _write_text(root / "standards" / "planning" / "harness-engineering.md", "docs、code、validation\nplan / task graph / validation route\n文档元数据\n")
+            _write_text(root / "standards" / "planning" / "review-checklist.md", "docs / code / tests\n最小验证结果\n")
+            _write_text(root / "standards" / "planning" / "spec-kit.md", "spec-first\n验收标准必须可被测试或命令验证\n")
+            _write_text(root / "standards" / "python" / "base.instructions.md", "复杂度\n重构\n40 行\n嵌套深度\n注释\n")
+            for test_file in [
+                "test_runtime_bootstrap.py",
+                "test_projects_service.py",
+                "test_records_service.py",
+                "test_integration_service.py",
+                "test_planning_service.py",
+                "test_docs_check.py",
+            ]:
+                _write_text(root / "tests" / test_file, "import unittest\n")
+
+            findings = collect_docs_check_findings(root)
+
+            self.assertTrue(any(f.status == "FAIL" and f.key == "contract_semantics" for f in findings))
+
+    def test_collect_docs_check_findings_flags_missing_getting_started_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_text(root / "README.md", "# Demo\n")
+            _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
+            _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n- [Ops](ops.md)\n")
+            _write_text(root / "docs" / "getting-started.md", "安装依赖\n启动服务\nQdrant\n")
+            _write_text(root / "docs" / "ops.md", "# Ops\n")
+            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
+            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
             _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_text(root / "LICENSE", "MIT\n")
@@ -309,6 +432,28 @@ class DocsCheckTests(unittest.TestCase):
                 ),
             )
             _write_text(
+                root / "docs" / "integration.md",
+                "\n".join(
+                    [
+                        "目标项目如何接入",
+                        "用户执行哪些命令",
+                        "如何验证是否生效",
+                        "外部项目如何接入与验证",
+                    ]
+                ),
+            )
+            _write_text(
+                root / "docs" / "commands.md",
+                "\n".join(
+                    [
+                        "命令签名与参数形态",
+                        "命令参考",
+                        "外部项目接入流程",
+                        "本仓库本地启动与运维",
+                    ]
+                ),
+            )
+            _write_text(
                 root / "docs" / "foundation-hardening.md",
                 "\n".join(
                     [
@@ -323,6 +468,10 @@ class DocsCheckTests(unittest.TestCase):
                 root / "docs" / "getting-started.md",
                 "\n".join(
                     [
+                        "本仓库如何克隆、安装、启动",
+                        "目标项目如何接入 Agents-Memory",
+                        "本仓库本地启动与运维",
+                        "外部项目接入流程",
                         "python3 scripts/memory.py new",
                         "python3 scripts/memory.py list",
                         "python3 scripts/memory.py stats",

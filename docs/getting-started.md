@@ -8,6 +8,34 @@ doc_status: active
 
 > 从零搭建 Agents-Memory 本地环境，5 分钟内完成。
 
+---
+
+## 边界说明
+
+`docs/getting-started.md` 负责：
+
+1. 本仓库如何克隆、安装、启动。
+2. 本地依赖如何准备。
+3. 本地 CLI、MCP、日志、Qdrant 如何验证。
+
+`docs/integration.md` 负责：
+
+1. 目标项目如何接入 Agents-Memory。
+2. `amem enable` / `register` / `doctor` 的接入路径。
+3. 接入后如何验证是否真正生效。
+
+`docs/commands.md` 负责：
+
+1. 所有 CLI 命令的总表与参数参考。
+
+换句话说：
+
+```text
+getting-started.md  = 本仓库本地启动与运维
+integration.md      = 外部项目接入流程
+commands.md         = 命令总表
+```
+
 ## 前置条件
 
 | 依赖 | 最低版本 | 说明 |
@@ -130,40 +158,35 @@ python3 scripts/memory.py vsearch "type guard"
 # 输出: 语义搜索结果（需先 embed）
 
 python3 scripts/memory.py doctor .
-# 输出: 当前项目的接入健康检查（按 Core / Planning / Integration / Optional 分组，并附带 Summary / Remediation / Action Sequence / Onboarding Runbook / Project Bootstrap Checklist）
-# 提示: 现在还会输出 refactor_watch，提醒哪些 Python 函数已经逼近复杂度重构阈值
+# 输出: 当前仓库的健康检查（按 Core / Planning / Integration / Optional 分组）
+# 提示: 如果你是在给“其他项目”做接入验证，完整链路请看 docs/integration.md
 
 python3 scripts/memory.py enable .
-# 输出: 一键启用当前项目的基础 Shared Engineering Brain 接入（自动注册、bridge、mcp、doctor 工件、onboarding bundle）
+# 输出: 命令可执行性 smoke test；目标项目接入链路说明请看 docs/integration.md
 
 python3 scripts/memory.py enable . --dry-run
-# 输出: 按 Capabilities / Planned Writes / Skipped Existing 分组预览变更，不落任何文件
+# 输出: 命令可执行性 smoke test；详细接入预览语义请看 docs/integration.md
 
 python3 scripts/memory.py enable . --full --dry-run --json
-# 输出: 结构化 JSON 预览，方便 agent 或 CI 直接消费
+# 输出: 命令可执行性 smoke test；agent/CI 接入路径请看 docs/integration.md
 
 python3 scripts/memory.py enable . --full
-# 输出: 在默认模式基础上继续启用推荐 profile、Copilot 激活、根目录最小 AGENTS.md read-order router，以及第一条 refactor hotspot 对应的 bundle / follow-up state
-# 提示: 现在也会补齐现有 planning bundle 缺失的受管文件
+# 输出: 命令可执行性 smoke test；完整接入行为说明请看 docs/integration.md
 
 python3 scripts/memory.py enable .
-# 输出: 如果项目已经安装 profile，会顺便刷新 profile 管理的 standards，并同步更新根目录 AGENTS.md 中的受管 read-order block
+# 输出: 本地验证命令存在且可运行；具体接入后副作用请看 docs/integration.md
 
 python3 scripts/memory.py doctor . --write-checklist --write-state
-# 输出: 在 docs/plans/bootstrap-checklist.md、docs/plans/refactor-watch.md 和 .agents-memory/onboarding-state.json 导出 onboarding / hotspot 工件
-# 提示: agent 可优先读取 onboarding-state.json 中的 recommended_next_command / recommended_verify_command
+# 输出: 导出本地 health/onboarding 工件；如果你是在接入目标项目，完整解释请看 docs/integration.md
 
 python3 scripts/memory.py onboarding-execute .
-# 输出: 执行当前第一条 onboarding action，随后验证并把 execution_history / last_verified_action 回写到 onboarding-state.json
-# 提示: 默认只自动执行 safe_to_auto_execute=true 的步骤；若返回 approval_required，则在人工确认后使用 --approve-unsafe
+# 输出: 本地命令 smoke test；完整 onboarding 接入语义请看 docs/integration.md
 
 python3 scripts/memory.py onboarding-bundle .
-# 输出: 根据 onboarding-state.json 生成 docs/plans/onboarding-*/ onboarding task bundle
-# 提示: 重复运行会增量刷新 bundle 里的受管 onboarding sections
+# 输出: 本地命令 smoke test；bundle 语义请结合 planning 文档阅读
 
 python3 scripts/memory.py refactor-bundle .
-# 输出: 根据当前第一个 refactor hotspot 生成 docs/plans/refactor-<slug>/ bundle
-# 提示: 优先使用 --token <hotspot-token> 锁定稳定目标；--index <n> 仍可用于临时按排序选择
+# 输出: 本地命令 smoke test；hotspot/refactor 细节见相关 planning 文档
 
 代码规范补充：
 1. `standards/python/base.instructions.md` 现在内置“高复杂度必须重构”的评判标准
@@ -226,6 +249,16 @@ tail -f logs/agents-memory.log
 export AGENTS_MEMORY_LOG_STDERR=1
 export AGENTS_MEMORY_LOG_LEVEL=DEBUG
 ```
+
+---
+
+## 使用规则
+
+后续新增内容时，遵守下面 3 条：
+
+1. 如果是在说明本仓库如何安装、启动、验证，写入 `docs/getting-started.md`。
+2. 如果是在说明目标项目如何接入与排错，写入 `docs/integration.md`。
+3. 如果是在列命令总表、参数或输出形态，写入 `docs/commands.md`。
 
 ---
 
