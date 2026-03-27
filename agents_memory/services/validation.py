@@ -123,7 +123,11 @@ CONTRACT_REQUIREMENTS = {
     },
     "local_getting_started": {
         "path": Path(DOCS_DIR) / "getting-started.md",
-        "phrases": ["本仓库如何克隆、安装、启动", "目标项目如何接入 Agents-Memory", "本仓库本地启动与运维", "外部项目接入流程"],
+        "phrases": ["本仓库如何克隆、安装、启动", "目标项目如何接入 Agents-Memory", "本仓库首次安装与启动", "日常运维与故障处理"],
+    },
+    "ops_runbook": {
+        "path": Path(DOCS_DIR) / "ops.md",
+        "phrases": ["日常运维命令和例行维护", "日志、索引、Qdrant、备份、排障", "本仓库如何首次安装与启动", "外部项目接入流程"],
     },
     "foundation_hardening": {
         "path": Path(DOCS_DIR) / "foundation-hardening.md",

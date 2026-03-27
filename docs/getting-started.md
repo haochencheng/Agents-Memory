@@ -4,7 +4,7 @@ updated_at: 2026-03-27
 doc_status: active
 ---
 
-# 本地启动与运维指南
+# 本地启动指南
 
 > 从零搭建 Agents-Memory 本地环境，5 分钟内完成。
 
@@ -28,12 +28,18 @@ doc_status: active
 
 1. 所有 CLI 命令的总表与参数参考。
 
+`docs/ops.md` 负责：
+
+1. 日常运维命令和故障处理。
+2. 日志、索引、Qdrant、备份与恢复。
+
 换句话说：
 
 ```text
-getting-started.md  = 本仓库本地启动与运维
+getting-started.md  = 本仓库首次安装与启动
 integration.md      = 外部项目接入流程
 commands.md         = 命令总表
+ops.md              = 日常运维与故障处理
 ```
 
 ## 前置条件
@@ -229,36 +235,13 @@ python3 scripts/memory.py to-qdrant
 # 输出: 把本地向量索引迁移到共享 Qdrant（可选）
 ```
 
-### 调试日志
-
-所有关键操作默认都会写到：
-
-```bash
-tail -f logs/agents-memory.log
-```
-
-重点会记录：
-- `amem register` 的项目接入过程
-- `.github/instructions/*` 或 `.vscode/mcp.json` 的文件写入
-- `amem sync` 对其他项目的规则同步结果
-- MCP tools 调用和错误记录写入
-
-如果需要把日志同时打印到终端：
-
-```bash
-export AGENTS_MEMORY_LOG_STDERR=1
-export AGENTS_MEMORY_LOG_LEVEL=DEBUG
-```
-
----
-
 ## 使用规则
 
 后续新增内容时，遵守下面 3 条：
 
-1. 如果是在说明本仓库如何安装、启动、验证，写入 `docs/getting-started.md`。
+1. 如果是在说明本仓库如何首次安装、启动、验证，写入 `docs/getting-started.md`。
 2. 如果是在说明目标项目如何接入与排错，写入 `docs/integration.md`。
-3. 如果是在列命令总表、参数或输出形态，写入 `docs/commands.md`。
+3. 如果是在说明日志、索引、Qdrant、备份、恢复或日常故障处理，写入 `docs/ops.md`。
 
 ---
 
@@ -303,40 +286,14 @@ echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | python3.12 scripts/mcp_s
 
 ---
 
-## 7. 日常运维命令速查
+## 7. 后续运维入口
 
-### 记录新错误（交互式）
+完成首次启动后，下面这些内容统一转到 `docs/ops.md`：
 
-```bash
-python3 scripts/memory.py new
-```
-
-### 升级为规则（重复出现 ≥ 2 次时）
-
-```bash
-python3 scripts/memory.py promote 2026-03-26-synapse-001
-# 交互输入目标 instruction 文件路径
-```
-
-### 将规则同步到所有已注册项目
-
-```bash
-python3 scripts/memory.py sync
-# 幂等——已同步的规则会自动跳过
-```
-
-### 归档旧记录
-
-```bash
-python3 scripts/memory.py archive
-# 归档 90 天以上且 repeat_count=1 的 reviewed/promoted 记录
-```
-
-### 重新生成 index.md（热区摘要）
-
-```bash
-python3 scripts/memory.py update-index
-```
+1. 调试日志查看与日志级别切换。
+2. `new / promote / sync / archive / update-index` 等日常运维命令。
+3. 向量索引维护、Qdrant 生命周期管理、备份与恢复。
+4. 日常故障处理和运行期 FAQ。
 
 ---
 
@@ -389,17 +346,6 @@ which python3.12  # 应输出 /opt/homebrew/bin/python3.12
 }
 ```
 
-**Q: 修改了错误记录后 index.md 没更新？**
+**Q: 运行期日志、索引或搜索问题去哪看？**
 
-```bash
-python3 scripts/memory.py update-index
-```
-
-**Q: 搜索无结果但我确定有相关记录？**
-
-记录数 < 200 时使用关键词搜索，需用文件中实际出现的词汇：
-
-```bash
-python3 scripts/memory.py search alias    # 而不是 "别名"
-python3 scripts/memory.py search Pydantic
-```
+A: 这些都属于日常运维与排障，统一见 `docs/ops.md`。

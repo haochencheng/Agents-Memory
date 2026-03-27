@@ -19,6 +19,7 @@ doc_status: active
 9. `docs/integration.md` 只记录目标项目接入流程、验证和排错，不重复仓库内部模块分层设计
 10. `docs/commands.md` 只记录命令总表、参数和分组参考，不重复目标项目接入步骤
 11. `docs/getting-started.md` 只记录本仓库本地安装、启动与调试，不重复目标项目接入流程
+12. `docs/ops.md` 只记录日常运维、日志、索引、Qdrant、备份与故障处理，不重复首次安装与目标项目接入流程
 
 代码验证：
 
