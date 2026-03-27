@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from agents_memory.runtime import build_context
+from agents_memory.services.profile_detectors import build_project_facts_payload, render_project_facts_json, resolve_detector_adapter, run_profile_detector
 from agents_memory.services.profiles import PROFILE_MANIFEST_REL, PROJECT_FACTS_REL, apply_profile, list_profiles, load_profile, render_profile_overlays, sync_profile_standards
 from agents_memory.services.validation import collect_profile_check_findings
 
@@ -119,6 +120,105 @@ class ProfilesServiceTests(unittest.TestCase):
         self.assertIn("file_contains", {item.kind for item in frontend_profile.detectors})
         self.assertIn("json_key_exists", {item.kind for item in fullstack_profile.detectors})
         self.assertIn("file_contains", {item.kind for item in fullstack_profile.detectors})
+
+    def test_detector_service_runs_extended_detector_kinds(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(__file__).resolve().parents[1]
+            target = Path(tmpdir)
+            _write_text(target / "pyproject.toml", "[tool.pytest.ini_options]\naddopts='-q'\n")
+            previous_root = os.environ.get("AGENTS_MEMORY_ROOT")
+            os.environ["AGENTS_MEMORY_ROOT"] = str(repo_root)
+            try:
+                ctx = build_context(logger_name="tests.profiles.detector_service", reference_file=__file__)
+                profile = load_profile(ctx, "python-service")
+            finally:
+                if previous_root is None:
+                    os.environ.pop("AGENTS_MEMORY_ROOT", None)
+                else:
+                    os.environ["AGENTS_MEMORY_ROOT"] = previous_root
+
+            file_detector = next(item for item in profile.detectors if item.kind == "file_contains")
+            result = run_profile_detector(target, file_detector)
+
+            self.assertTrue(result["matched"])
+            self.assertIn("pyproject.toml:pytest", result["matched_paths"])
+
+    def test_detector_service_resolves_registered_adapters(self) -> None:
+        self.assertEqual(resolve_detector_adapter("path_exists").kind, "path_exists")
+        self.assertEqual(resolve_detector_adapter("file_contains").kind, "file_contains")
+        self.assertEqual(resolve_detector_adapter("json_key_exists").kind, "json_key_exists")
+        self.assertEqual(resolve_detector_adapter("command_available").kind, "command_available")
+        self.assertIsNone(resolve_detector_adapter("missing_kind"))
+
+    def test_detector_service_builds_project_facts_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(__file__).resolve().parents[1]
+            target = Path(tmpdir)
+            _write_text(target / "pyproject.toml", "[tool.pytest.ini_options]\naddopts='-q'\n")
+            previous_root = os.environ.get("AGENTS_MEMORY_ROOT")
+            os.environ["AGENTS_MEMORY_ROOT"] = str(repo_root)
+            try:
+                ctx = build_context(logger_name="tests.profiles.detector_payload", reference_file=__file__)
+                profile = load_profile(ctx, "python-service")
+            finally:
+                if previous_root is None:
+                    os.environ.pop("AGENTS_MEMORY_ROOT", None)
+                else:
+                    os.environ["AGENTS_MEMORY_ROOT"] = previous_root
+
+            payload = build_project_facts_payload(
+                profile.id,
+                {"python_bin": "python3", "tests_dir": "tests"},
+                profile.detectors,
+                target,
+            )
+
+            self.assertEqual(payload["profile_id"], "python-service")
+            self.assertTrue(payload["facts"]["language.python"])
+            self.assertTrue(payload["facts"]["testing.pytest_configured"])
+
+    def test_detector_service_renders_project_facts_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(__file__).resolve().parents[1]
+            target = Path(tmpdir)
+            _write_text(target / "package.json", '{"packageManager":"pnpm@10","scripts":{"test":"vitest"}}\n')
+            previous_root = os.environ.get("AGENTS_MEMORY_ROOT")
+            os.environ["AGENTS_MEMORY_ROOT"] = str(repo_root)
+            try:
+                ctx = build_context(logger_name="tests.profiles.detector_render", reference_file=__file__)
+                profile = load_profile(ctx, "frontend-app")
+            finally:
+                if previous_root is None:
+                    os.environ.pop("AGENTS_MEMORY_ROOT", None)
+                else:
+                    os.environ["AGENTS_MEMORY_ROOT"] = previous_root
+
+            rendered = render_project_facts_json(
+                profile.id,
+                {"package_manager": "npm", "app_root": "src"},
+                profile.detectors,
+                target,
+            )
+            payload = json.loads(rendered)
+
+            self.assertEqual(payload["profile_id"], "frontend-app")
+            self.assertTrue(payload["facts"]["language.node"])
+            self.assertTrue(payload["facts"]["tooling.package_manager_declared"])
+
+    def test_detector_service_unknown_kind_falls_back_to_unmatched(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir)
+            ctx = self._build_context(target)
+            _write_text(
+                target / "profiles" / "custom.yaml",
+                '{"id":"custom","display_name":"Custom","applies_to":[],"standards":[],"templates":[],"detectors":[{"id":"custom_detector","kind":"missing_kind","output":"custom.flag","config":{}}],"commands":{},"bootstrap":{"create":[]}}\n',
+            )
+
+            profile = load_profile(ctx, "custom")
+            result = run_profile_detector(target, profile.detectors[0])
+
+            self.assertFalse(result["matched"])
+            self.assertEqual(result["matched_paths"], [])
 
     def test_apply_profile_creates_dirs_and_installs_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

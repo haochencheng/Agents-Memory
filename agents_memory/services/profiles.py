@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from agents_memory.constants import AGENTS_BLOCK_END, AGENTS_BLOCK_START, AGENTS_ROUTER_REL, DEFAULT_BRIDGE_INSTRUCTION_REL
 from agents_memory.logging_utils import log_file_update
 from agents_memory.runtime import AppContext
+from agents_memory.services.profile_detectors import build_project_facts_payload, render_project_facts_json
 from agents_memory.services.projects import resolve_bridge_rel, resolve_project_target
 
 
@@ -17,6 +18,8 @@ PROFILE_MANIFEST_REL = PROFILE_INSTALL_ROOT / "profile-manifest.json"
 PROJECT_FACTS_REL = PROFILE_INSTALL_ROOT / "project-facts.json"
 AGENTS_FILE_PREFIX = "# AGENTS\n\n"
 TEMPLATE_TOKEN_RE = re.compile(r"{{\s*([a-zA-Z0-9_.-]+)\s*}}")
+REMOVED_OVERLAYS_TITLE = "Removed Overlays"
+NEXT_SECTION_TITLE = "\nNext:"
 
 
 @dataclass(frozen=True)
@@ -97,6 +100,13 @@ class ProfileOverlayRenderResult:
     unchanged_overlays: list[str]
     removed_overlays: list[str]
     dry_run: bool
+
+
+@dataclass(frozen=True)
+class ProfileOverlayRuntimeState:
+    variables: dict[str, str | None]
+    facts: dict[str, bool]
+    detector_results: dict[str, dict[str, object]]
 
 
 def _profiles_dir(ctx: AppContext) -> Path:
@@ -262,154 +272,12 @@ def _profile_variable_values(profile: ProfileSpec) -> dict[str, str | None]:
     return {variable.name: variable.default for variable in profile.variables}
 
 
-def _match_detector_groups(
-    any_of: list[str],
-    all_of: list[str],
-    none_of: list[str],
-    *,
-    predicate: callable,
-) -> tuple[bool, list[str]]:
-    matched_any = [item for item in any_of if predicate(item)]
-    matched_all = [item for item in all_of if predicate(item)]
-    blocked = [item for item in none_of if predicate(item)]
-    matched = (not any_of or bool(matched_any)) and len(matched_all) == len(all_of) and not blocked
-    matched_items = list(dict.fromkeys([*matched_any, *matched_all]))
-    return matched, matched_items
-
-
-def _match_path_exists_detector(project_root: Path, config: dict[str, object]) -> tuple[bool, list[str]]:
-    # Evaluate all path groups once so overlays and facts can reuse a deterministic result.
-    any_of = _to_string_list(config.get("any_of", []))
-    all_of = _to_string_list(config.get("all_of", []))
-    none_of = _to_string_list(config.get("none_of", []))
-    return _match_detector_groups(
-        any_of,
-        all_of,
-        none_of,
-        predicate=lambda item: (project_root / item).exists(),
-    )
-
-
-def _read_detector_file(project_root: Path, config: dict[str, object]) -> tuple[str, Path] | None:
-    relative_path = str(config.get("path", "")).strip()
-    if not relative_path:
-        return None
-    file_path = project_root / relative_path
-    if not file_path.exists() or not file_path.is_file():
-        return None
-    return file_path.read_text(encoding="utf-8"), file_path
-
-
-def _match_file_contains_detector(project_root: Path, config: dict[str, object]) -> tuple[bool, list[str]]:
-    file_state = _read_detector_file(project_root, config)
-    if file_state is None:
-        return False, []
-    file_text, file_path = file_state
-    any_of = _to_string_list(config.get("any_of", []))
-    all_of = _to_string_list(config.get("all_of", []))
-    none_of = _to_string_list(config.get("none_of", []))
-    matched, matched_items = _match_detector_groups(
-        any_of,
-        all_of,
-        none_of,
-        predicate=lambda item: item in file_text,
-    )
-    relative = file_path.relative_to(project_root).as_posix()
-    return matched, [f"{relative}:{item}" for item in matched_items]
-
-
-def _resolve_json_key_path(payload: object, dotted_path: str) -> bool:
-    current = payload
-    for segment in dotted_path.split("."):
-        if isinstance(current, dict):
-            if segment not in current:
-                return False
-            current = current[segment]
-            continue
-        if isinstance(current, list) and segment.isdigit():
-            index = int(segment)
-            if index < 0 or index >= len(current):
-                return False
-            current = current[index]
-            continue
-        return False
-    return True
-
-
-def _match_json_key_exists_detector(project_root: Path, config: dict[str, object]) -> tuple[bool, list[str]]:
-    file_state = _read_detector_file(project_root, config)
-    if file_state is None:
-        return False, []
-    file_text, file_path = file_state
-    try:
-        payload = json.loads(file_text)
-    except json.JSONDecodeError:
-        return False, []
-    any_of = _to_string_list(config.get("any_of", []))
-    all_of = _to_string_list(config.get("all_of", []))
-    none_of = _to_string_list(config.get("none_of", []))
-    matched, matched_items = _match_detector_groups(
-        any_of,
-        all_of,
-        none_of,
-        predicate=lambda item: _resolve_json_key_path(payload, item),
-    )
-    relative = file_path.relative_to(project_root).as_posix()
-    return matched, [f"{relative}:{item}" for item in matched_items]
-
-
-def _match_command_available_detector(config: dict[str, object]) -> tuple[bool, list[str]]:
-    any_of = _to_string_list(config.get("any_of", []))
-    all_of = _to_string_list(config.get("all_of", []))
-    none_of = _to_string_list(config.get("none_of", []))
-    return _match_detector_groups(
-        any_of,
-        all_of,
-        none_of,
-        predicate=lambda item: shutil.which(item) is not None,
-    )
-
-
-def _run_profile_detector(project_root: Path, detector: ProfileDetectorSpec) -> dict[str, object]:
-    # Execute one deterministic detector and capture its boolean match and matched paths.
-    if detector.kind == "path_exists":
-        matched, matched_paths = _match_path_exists_detector(project_root, detector.config)
-    elif detector.kind == "file_contains":
-        matched, matched_paths = _match_file_contains_detector(project_root, detector.config)
-    elif detector.kind == "json_key_exists":
-        matched, matched_paths = _match_json_key_exists_detector(project_root, detector.config)
-    elif detector.kind == "command_available":
-        matched, matched_paths = _match_command_available_detector(detector.config)
-    else:
-        matched, matched_paths = False, []
-    return {
-        "id": detector.id,
-        "kind": detector.kind,
-        "output": detector.output,
-        "matched": matched,
-        "matched_paths": matched_paths,
-        "config": detector.config,
-    }
-
-
-def _profile_detector_results(profile: ProfileSpec, target_root: Path) -> list[dict[str, object]]:
-    return [_run_profile_detector(target_root, detector) for detector in profile.detectors]
-
-
 def _project_facts_payload(profile: ProfileSpec, target_root: Path) -> dict[str, object]:
-    detector_results = _profile_detector_results(profile, target_root)
-    facts = {str(result["output"]): bool(result["matched"]) for result in detector_results}
-    variables = _profile_variable_values(profile)
-    return {
-        "profile_id": profile.id,
-        "variables": variables,
-        "facts": facts,
-        "detectors": detector_results,
-    }
+    return build_project_facts_payload(profile.id, _profile_variable_values(profile), profile.detectors, target_root)
 
 
 def render_project_facts(profile: ProfileSpec, target_root: Path) -> str:
-    return json.dumps(_project_facts_payload(profile, target_root), ensure_ascii=False, indent=2) + "\n"
+    return render_project_facts_json(profile.id, _profile_variable_values(profile), profile.detectors, target_root)
 
 
 def write_project_facts(ctx: AppContext, target_root: Path, profile: ProfileSpec) -> Path:
@@ -429,8 +297,16 @@ def read_project_facts(target_root: Path) -> dict | None:
 
 def _profile_runtime_state(profile: ProfileSpec, target_root: Path) -> tuple[dict[str, str | None], dict[str, bool], dict[str, dict[str, object]]]:
     payload = _project_facts_payload(profile, target_root)
-    detector_results = {str(item["id"]): item for item in payload["detectors"]}
-    return payload["variables"], payload["facts"], detector_results
+    variables = cast(dict[str, str | None], payload["variables"])
+    facts = cast(dict[str, bool], payload["facts"])
+    detectors = cast(list[dict[str, object]], payload["detectors"])
+    detector_results = {str(item["id"]): item for item in detectors}
+    return variables, facts, detector_results
+
+
+def _build_overlay_runtime_state(profile: ProfileSpec, target_root: Path) -> ProfileOverlayRuntimeState:
+    variables, facts, detector_results = _profile_runtime_state(profile, target_root)
+    return ProfileOverlayRuntimeState(variables=variables, facts=facts, detector_results=detector_results)
 
 
 def _overlay_is_active(overlay: ProfileOverlaySpec, detector_results: dict[str, dict[str, object]]) -> bool:
@@ -481,6 +357,73 @@ def render_profile_overlay(ctx: AppContext, profile: ProfileSpec, overlay: Profi
     return render_overlay_template(template_text, profile=profile, variables=variables, facts=facts)
 
 
+def _remove_overlay_file(ctx: AppContext, profile_id: str, destination: Path, *, dry_run: bool) -> None:
+    if dry_run:
+        return
+    destination.unlink()
+    log_file_update(ctx.logger, action="profile_remove_overlay", path=destination, detail=f"profile_id={profile_id}")
+
+
+def _write_overlay_file(ctx: AppContext, profile_id: str, destination: Path, rendered_text: str, *, dry_run: bool) -> None:
+    if dry_run:
+        return
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(rendered_text, encoding="utf-8")
+    log_file_update(ctx.logger, action="profile_render_overlay", path=destination, detail=f"profile_id={profile_id}")
+
+
+def _sync_single_profile_overlay(
+    ctx: AppContext,
+    profile: ProfileSpec,
+    overlay: ProfileOverlaySpec,
+    target_root: Path,
+    runtime_state: ProfileOverlayRuntimeState,
+    *,
+    dry_run: bool,
+) -> tuple[str, str | None]:
+    destination = resolve_overlay_destination(target_root, overlay.target)
+    relative = destination.relative_to(target_root).as_posix()
+    is_active = _overlay_is_active(overlay, runtime_state.detector_results)
+    if not is_active:
+        if destination.exists():
+            _remove_overlay_file(ctx, profile.id, destination, dry_run=dry_run)
+            return "removed", relative
+        return "skipped", None
+
+    rendered_text = render_profile_overlay(
+        ctx,
+        profile,
+        overlay,
+        variables=runtime_state.variables,
+        facts=runtime_state.facts,
+    )
+    if destination.exists() and _read_text(destination) == rendered_text:
+        return "unchanged", relative
+
+    _write_overlay_file(ctx, profile.id, destination, rendered_text, dry_run=dry_run)
+    return "rendered", relative
+
+
+def _record_overlay_sync_result(
+    action: str,
+    relative: str | None,
+    *,
+    rendered: list[str],
+    unchanged: list[str],
+    removed: list[str],
+) -> None:
+    if not relative:
+        return
+    if action == "rendered":
+        rendered.append(relative)
+        return
+    if action == "unchanged":
+        unchanged.append(relative)
+        return
+    if action == "removed":
+        removed.append(relative)
+
+
 def _sync_profile_overlays(
     ctx: AppContext,
     profile: ProfileSpec,
@@ -488,30 +431,14 @@ def _sync_profile_overlays(
     *,
     dry_run: bool = False,
 ) -> tuple[list[str], list[str], list[str]]:
+    # Sync overlays in two phases: collect shared runtime facts once, then reconcile each overlay independently.
     rendered: list[str] = []
     unchanged: list[str] = []
     removed: list[str] = []
-    variables, facts, detector_results = _profile_runtime_state(profile, target_root)
+    runtime_state = _build_overlay_runtime_state(profile, target_root)
     for overlay in profile.overlays:
-        destination = resolve_overlay_destination(target_root, overlay.target)
-        relative = destination.relative_to(target_root).as_posix()
-        if not _overlay_is_active(overlay, detector_results):
-            if destination.exists():
-                removed.append(relative)
-                if not dry_run:
-                    destination.unlink()
-                    log_file_update(ctx.logger, action="profile_remove_overlay", path=destination, detail=f"profile_id={profile.id}")
-            continue
-        rendered_text = render_profile_overlay(ctx, profile, overlay, variables=variables, facts=facts)
-        if destination.exists() and _read_text(destination) == rendered_text:
-            unchanged.append(relative)
-            continue
-        rendered.append(relative)
-        if dry_run:
-            continue
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(rendered_text, encoding="utf-8")
-        log_file_update(ctx.logger, action="profile_render_overlay", path=destination, detail=f"profile_id={profile.id}")
+        action, relative = _sync_single_profile_overlay(ctx, profile, overlay, target_root, runtime_state, dry_run=dry_run)
+        _record_overlay_sync_result(action, relative, rendered=rendered, unchanged=unchanged, removed=removed)
     return rendered, unchanged, removed
 
 
@@ -976,7 +903,7 @@ def _print_apply_summary(result: ProfileApplyResult, commands: dict[str, str]) -
         ("Installed Standards", result.installed_standards),
         ("Wrote Templates", result.wrote_templates),
         ("Rendered Overlays", result.rendered_overlays),
-        ("Removed Overlays", result.removed_overlays),
+        (REMOVED_OVERLAYS_TITLE, result.removed_overlays),
         ("Wrote Managed Files", result.managed_files),
         ("Skipped Existing", result.skipped_paths),
     ):
@@ -989,7 +916,7 @@ def _print_apply_summary(result: ProfileApplyResult, commands: dict[str, str]) -
     if result.dry_run:
         return
 
-    print("\nNext:")
+    print(NEXT_SECTION_TITLE)
     for command in commands.values():
         print(f"- {command}")
 
@@ -1015,7 +942,7 @@ def _print_standards_sync_summary(result: ProfileStandardsSyncResult, commands: 
         ("Unchanged Standards", result.unchanged_standards),
         ("Synced Overlays", result.synced_overlays),
         ("Unchanged Overlays", result.unchanged_overlays),
-        ("Removed Overlays", result.removed_overlays),
+        (REMOVED_OVERLAYS_TITLE, result.removed_overlays),
         ("Synced Managed Files", result.synced_managed_files),
         ("Unchanged Managed Files", result.unchanged_managed_files),
         ("Missing Sources", result.missing_sources),
@@ -1029,7 +956,7 @@ def _print_standards_sync_summary(result: ProfileStandardsSyncResult, commands: 
     if result.dry_run:
         return
 
-    print("\nNext:")
+    print(NEXT_SECTION_TITLE)
     for command in commands.values():
         print(f"- {command}")
 
@@ -1047,7 +974,7 @@ def _print_overlay_render_summary(result: ProfileOverlayRenderResult, commands: 
     for title, items in (
         ("Rendered Overlays", result.rendered_overlays),
         ("Unchanged Overlays", result.unchanged_overlays),
-        ("Removed Overlays", result.removed_overlays),
+        (REMOVED_OVERLAYS_TITLE, result.removed_overlays),
     ):
         if not items:
             continue
@@ -1058,7 +985,7 @@ def _print_overlay_render_summary(result: ProfileOverlayRenderResult, commands: 
     if result.dry_run:
         return
 
-    print("\nNext:")
+    print(NEXT_SECTION_TITLE)
     for command in commands.values():
         print(f"- {command}")
 

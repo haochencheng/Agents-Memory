@@ -1,4 +1,7 @@
 ---
+created_at: 2026-03-28
+updated_at: 2026-03-28
+doc_status: active
 description: >
   Project-local overlay generated for the frontend-app profile.
   Refresh with amem profile-render when app layout changes.

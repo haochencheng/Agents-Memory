@@ -1,4 +1,7 @@
 ---
+created_at: 2026-03-28
+updated_at: 2026-03-28
+doc_status: active
 description: >
   Project-local overlay generated for the python-service profile.
   Keep repo-specific workflow notes here and regenerate with amem profile-render.
