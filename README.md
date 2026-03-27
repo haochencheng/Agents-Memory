@@ -21,242 +21,64 @@ doc_status: active
 [![Last Commit](https://img.shields.io/github/last-commit/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/commits/main)
 [![Repo Size](https://img.shields.io/github/repo-size/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory)
 
-Read in: [简体中文](#zh) | [English](#en)
+Shared Engineering Brain for AI coding agents.
 
-<a id="zh"></a>
+面向 AI coding agents 的共享工程运行层，统一 Memory、Standards、Planning、Validation。
 
-<details open>
-<summary><strong>简体中文</strong></summary>
+README 是开源仓库首页，不展开完整教程正文。
 
-开源的 Shared Engineering Brain for AI coding agents。它把 Memory、Standards、Planning、Validation 组合成一个可安装、可验证、可持续演进的工程运行层，而不是一组松散的脚本。
+Start here: [docs/getting-started.md](docs/getting-started.md) | [docs/integration.md](docs/integration.md) | [docs/commands.md](docs/commands.md) | [docs/ops.md](docs/ops.md)
 
-> README 是开源仓库首页，不展开完整教程正文。
+Read in: [English](#en) | [简体中文](#zh)
 
-关键词：AI coding agent、shared engineering brain、engineering memory、agent runtime、prompt memory、standards sync、planning workflow、validation gate、MCP server、developer tooling
+## Product Snapshot / 产品摘要
 
-[返回顶部](#top) | [切换到 English](#en)
+1. Shared engineering runtime for AI coding agents / 面向 AI coding agents 的共享工程运行层。
+2. Unifies memory, standards, planning, and validation / 统一 Memory、Standards、Planning、Validation。
+3. Designed for real repositories, not isolated prompt snippets / 面向真实仓库交付，而不是零散 prompt 片段。
+4. Turns repeated project lessons into reusable workflow protection / 把项目经验升级成可复用的流程保护。
 
-## 它解决什么问题
+## Why It Exists / 为什么存在
 
-多数 AI coding agent 的问题不是“不会生成代码”，而是缺少稳定工程上下文：
+1. The same engineering mistakes repeat across repos / 相同工程错误会在不同仓库重复出现。
+2. Standards, planning, and delivery checks often drift apart / 标准、规划和交付门禁常常彼此漂移。
+3. Agents need workflow structure, not only tool access / Agent 需要工作流结构，而不只是工具访问权限。
 
-1. 相同错误在不同项目里反复出现。
-2. 工程标准、任务规划和交付验证没有统一入口。
-3. 文档、规则、模板和实际实现容易漂移。
+## What You Get / 你会得到什么
 
-## 适合谁
+1. Memory: capture failures, retrospectives, rules, and reusable patterns / 记录错误、复盘、规则和复用模式。
+2. Standards: installable engineering defaults for docs, planning, validation, and Python / 提供可安装的工程默认约束。
+3. Planning: spec, plan, task graph, and validation bundles / 生成 spec、plan、task graph、validation 工件。
+4. Validation: docs-check, profile-check, plan-check, doctor, and delivery gates / 提供文档、profile、plan 与交付门禁。
 
-1. 在真实软件项目里使用 Copilot 或其他 MCP coding agent 的团队。
-2. 希望把工程标准、任务脚手架和验证门禁复用到多个仓库的工程师。
-3. 想构建内部 engineering runtime，而不是只堆 prompt 片段的建设者。
-4. 需要把 AI 辅助开发和真实交付纪律更稳地接起来的维护者。
+## Why Teams Install Agents-Memory
 
-## 可信信号
+| Operational Memory | Workflow Discipline | Safer Delivery |
+| --- | --- | --- |
+| Capture repeated failures, promote rules, and carry engineering context across repos. | Turn freeform requests into bootstrap, planning bundles, and validation-first execution. | Gate changes with docs-check, profile-check, plan-check, CI, and release discipline. |
 
-1. [CI](https://github.com/haochencheng/Agents-Memory/actions/workflows/ci.yml) 是公开的，而且执行的就是贡献者本地会跑的安装、编译、测试和 `docs-check`。
-2. CI 已拆成独立的 `tests` 和 `docs` jobs，便于在 branch protection 中分别要求通过。
-3. [Releases](https://github.com/haochencheng/Agents-Memory/releases) 对应到仓库内的 [CHANGELOG.md](CHANGELOG.md)，不是只依赖 GitHub 页面上的临时说明。
-4. [docs/release-checklist.md](docs/release-checklist.md) 明确约束了发版前检查、tag、GitHub Release 和发布后核对动作。
-5. [SECURITY.md](SECURITY.md)、[SUPPORT.md](SUPPORT.md)、[CONTRIBUTING.md](CONTRIBUTING.md) 让安全披露、支持路径和贡献入口在首页即可追溯。
+| 团队记忆沉淀 | 工作流约束 | 更稳的交付 |
+| --- | --- | --- |
+| 记录重复错误、升级规则，把工程上下文跨仓库复用。 | 把自由需求收敛成 bootstrap、planning bundle 和 validation-first 执行路径。 | 用 docs-check、profile-check、plan-check、CI 和 release discipline 约束交付。 |
 
-Agents-Memory 的目标是把这些能力放进同一个共享层：
+## Workflow / 工作流
 
 ```text
-Shared Engineering Brain
-├── Memory      记录错误、复盘、规则升级
-├── Standards   下发工程规范与默认约束
-├── Planning    沉淀 spec / plan / task graph workflow
-├── Validation  把 docs / profile / doctor 等检查做成 gate
-└── Learning Bus 把项目经验升级为跨项目默认保护
+connect project
+	-> bootstrap engineering context
+	-> create task bundle
+	-> implement with shared standards
+	-> run delivery gates
+	-> promote lessons back into shared defaults
 ```
-
-## 最新架构摘要
-
-项目当前的产品方向已经从“共享错误记忆系统”收敛为面向 agent 的工程 Harness。
-
-当前的架构判断是：
-
-1. Agent 读取的不只是错误记忆，还包括标准、profile、onboarding state 和任务工件。
-2. 项目接入不只是 MCP 配置，而是 register、profile、bridge、doctor、planning root 的统一 bootstrap。
-3. 交付不只看代码 diff，而要通过 docs、plan、profile、tests、complexity 的统一 gate。
-4. 项目经验不只进入 `errors/`，还应升级到 `standards/`、`validation`、profile 和 workflow。
 
 最新架构设计见 docs/ai-engineering-operating-system.md。
-Repo 级实现取舍见 docs/architecture.md。
-代码分层与模块边界见 docs/modular-architecture.md。
-
-### 当前实现状态
-
-| 能力 | 状态 | 说明 |
-| --- | --- | --- |
-| Memory 记录、搜索、promote、sync | done | 已具备热区/温区/冷区记忆和规则升级基础链路 |
-| Standards 与 profile 受管文件 | partial | 已可同步与安装，但发行和冲突策略仍在继续收敛 |
-| Planning bundle 与 onboarding/refactor bundle | done | 已可生成 spec / plan / task graph / validation 工件 |
-| Validation gate | partial | 单项检查器已到位，统一 validate workflow 仍在演进 |
-| Learning Bus | partial | error promote / sync 已有，跨项目默认保护仍在继续沉淀 |
-
-## 快速开始
-
-如果你只是想本地跑起来并验证仓库：
-
-```bash
-git clone https://github.com/haochencheng/Agents-Memory.git
-cd Agents-Memory
-python3 -m pip install -e .
-amem list
-python3 scripts/memory.py docs-check .
-python3.12 -m unittest discover -s tests -p 'test_*.py'
-```
-
 安装与启动细节见 docs/getting-started.md。
 接入其他项目见 docs/integration.md。
 CLI 命令总表见 docs/commands.md。
 日常运维与排障见 docs/ops.md。
 
-## 核心能力
-
-### Memory
-
-1. 结构化错误记录、关键词搜索、向量搜索。
-2. `promote` 和 `sync`，把经验升级为共享规则。
-3. MCP tools，用于在 agent 会话中拉取记忆、规则和搜索结果。
-
-### Standards And Profiles
-
-1. `standards/` 提供 Python、docs、planning、validation 的组织级标准。
-2. `profiles/` 提供项目级工程契约安装与刷新。
-3. `enable` / `profile-apply` / `standards-sync` 负责把标准真正安装进目标项目。
-
-### Planning And Validation
-
-1. `plan-init`、`onboarding-bundle`、`refactor-bundle` 生成标准工件。
-2. `docs-check`、`profile-check`、`plan-check`、`doctor` 负责门禁和健康检查。
-3. onboarding state 与 refactor hotspot 让 agent 能继续执行下一步动作，而不是只看控制台输出。
-
-## 开源边界
-
-公开仓库只包含代码、模板、标准、profiles 和文档。以下内容属于本地运行数据，默认不应提交：
-
-```text
-index.md
-memory/projects.md
-memory/rules.md
-errors/*.md
-.vscode/mcp.json
-logs/
-vectors/
-```
-
-仓库使用 `templates/` 下的公开样例初始化本地文件，以避免把真实项目上下文、私有路径或运行时数据带进开源仓库。
-
-## 文档导航
-
-1. docs/getting-started.md: 本仓库首次安装、启动、基础验证
-2. docs/integration.md: 目标项目如何接入 Agents-Memory
-3. docs/ops.md: 日常运维、日志、索引、Qdrant、恢复与排障
-4. docs/commands.md: CLI 命令总表与参数参考
-5. docs/ai-engineering-operating-system.md: 最新产品基线与目标命令模型
-6. docs/architecture.md: repo 级 ADR 与实现取舍
-7. docs/modular-architecture.md: 代码目录结构、模块职责与扩展点
-8. docs/README.md: 完整文档地图
-9. docs/release-checklist.md: 发版前后检查项、tag 与 GitHub Release 流程
-
-## 质量门禁与发布纪律
-
-1. 每个 PR 都会经过 `.github/workflows/ci.yml`，执行安装、编译、单元测试和 `docs-check`。
-2. CI 已拆成独立的 `tests` 和 `docs` jobs，便于 branch protection 单独要求通过。
-3. 对外版本历史记录在 [CHANGELOG.md](CHANGELOG.md)，而不是只留在 GitHub Release 页面。
-4. 发布动作由 [docs/release-checklist.md](docs/release-checklist.md) 约束，覆盖 CI 结果、版本确认、Git tag 和 GitHub Release。
-5. 开源协作入口、CI 语义和 release checklist 语义都已经纳入 `docs-check`，减少首页和真实流程之间的漂移。
-
-## 贡献
-
-欢迎把它当作一个正在演进的工程操作系统来贡献。
-
-提交行为变更前，请至少同步更新：
-
-1. 代码
-2. 对应文档
-3. 对应测试或验证脚本
-
-贡献说明见 CONTRIBUTING.md。
-问题反馈与能力建议请使用仓库内置 issue 模板；提交合并请求时请按 PULL_REQUEST_TEMPLATE.md 补齐验证信息；协作行为遵循 CODE_OF_CONDUCT.md；安全问题请按 SECURITY.md 私下报告；使用与协作支持入口见 SUPPORT.md；赞助配置见 `.github/FUNDING.yml`；PR 门禁见 `.github/workflows/ci.yml`；发布时同步维护 CHANGELOG.md 和 docs/release-checklist.md。
-
-## License
-
-本项目采用 MIT License。
-
-[返回顶部](#top)
-
-</details>
-
-<a id="en"></a>
-
-<details>
-<summary><strong>English</strong></summary>
-
-Agents-Memory is an open-source Shared Engineering Brain for AI coding agents. It combines Memory, Standards, Planning, and Validation into an installable and verifiable engineering runtime instead of a loose collection of scripts.
-
-Keywords: AI coding agents, engineering memory, agent runtime, prompt memory, standards sync, planning workflow, validation gate, MCP server, developer tooling, reusable engineering context
-
-[Back to top](#top) | [Switch to 简体中文](#zh)
-
-## What It Solves
-
-Most AI coding agent problems are not about code generation itself. The real gap is stable engineering context:
-
-1. The same mistakes repeat across projects.
-2. Standards, planning workflows, and delivery checks have no unified entry point.
-3. Docs, rules, templates, and implementation drift apart over time.
-
-## Who It's For
-
-1. Teams using Copilot or other MCP-capable coding agents in real software projects.
-2. Engineers who want reusable standards, task scaffolds, and validation gates across repos.
-3. Builders creating an internal engineering runtime instead of isolated prompt snippets.
-4. Maintainers who need a cleaner bridge between AI assistance and real delivery discipline.
-
-### Trust Signals
-
-1. [CI](https://github.com/haochencheng/Agents-Memory/actions/workflows/ci.yml) is public and tied to the same install, compile, test, and docs-check flow contributors run locally.
-2. CI is split into independent `tests` and `docs` jobs so branch protection can require delivery checks with finer granularity.
-3. [Releases](https://github.com/haochencheng/Agents-Memory/releases) are backed by a checked-in [CHANGELOG.md](CHANGELOG.md), not only by ad-hoc GitHub release text.
-4. [docs/release-checklist.md](docs/release-checklist.md) defines how tags and releases are prepared, verified, and checked after publishing.
-5. [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and [CONTRIBUTING.md](CONTRIBUTING.md) make the collaboration path explicit before someone opens an issue or a pull request.
-
-Agents-Memory is built to put those capabilities into one shared layer:
-
-```text
-Shared Engineering Brain
-├── Memory      Capture failures, retrospectives, and rule upgrades
-├── Standards   Distribute engineering defaults and constraints
-├── Planning    Materialize spec / plan / task graph workflows
-├── Validation  Turn docs / profile / doctor checks into gates
-└── Learning Bus Promote project lessons into cross-project defaults
-```
-
-## Architecture Snapshot
-
-1. Agents consume not only memory, but also standards, profiles, onboarding state, and task bundles.
-2. Project bootstrap is a unified workflow around register, profile, bridge, doctor, and planning root.
-3. Delivery is gated by docs, plans, profiles, tests, and complexity checks.
-4. Project experience should be promoted into shared standards, validation rules, and reusable workflow defaults.
-
-The latest product baseline is documented in docs/ai-engineering-operating-system.md.
-Repo-level architectural decisions live in docs/architecture.md.
-Code layering and module boundaries live in docs/modular-architecture.md.
-
-### Current Implementation Status
-
-| Capability | Status | Notes |
-| --- | --- | --- |
-| Memory record, search, promote, sync | done | Core hot/warm/cold memory flow and rule promotion already exist |
-| Standards and profile-managed files | partial | Sync and install exist, but release and conflict handling still need convergence |
-| Planning bundle and onboarding/refactor bundle | done | Spec / plan / task graph / validation artifacts can already be generated |
-| Validation gate | partial | Individual validators exist, but a unified validate workflow is still evolving |
-| Learning Bus | partial | Error promote / sync exist, but cross-project default protections are still being hardened |
-
-## Quick Start
+## Quick Start / 快速开始
 
 ```bash
 git clone https://github.com/haochencheng/Agents-Memory.git
@@ -267,34 +89,25 @@ python3 scripts/memory.py docs-check .
 python3.12 -m unittest discover -s tests -p 'test_*.py'
 ```
 
-See docs/getting-started.md for local installation and first-run details.
-See docs/integration.md for integrating Agents-Memory into another repo.
-See docs/commands.md for the CLI reference.
-See docs/ops.md for operations and troubleshooting.
+## Trust Signals / 可信信号
 
-## Core Capabilities
+1. [CI](https://github.com/haochencheng/Agents-Memory/actions/workflows/ci.yml) is public and mirrors the local install, compile, test, and docs-check path / CI 公开且与本地安装、编译、测试、docs-check 路径一致。
+2. CI is split into `tests` and `docs` jobs for clearer branch protection / CI 已拆分为 `tests` 和 `docs`，便于单独要求通过。
+3. [CHANGELOG.md](CHANGELOG.md) and [docs/release-checklist.md](docs/release-checklist.md) govern public release execution / CHANGELOG 与 release checklist 共同约束对外发布流程。
+4. [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and [CONTRIBUTING.md](CONTRIBUTING.md) define collaboration paths up front / 安全、支持和贡献路径在首页即可追溯。
 
-### Memory
+## Documentation / 文档入口
 
-1. Structured error recording, keyword search, and vector search.
-2. `promote` and `sync` to upgrade project lessons into shared rules.
-3. MCP tools that let agents fetch memory, rules, and search results inside a session.
+1. [docs/getting-started.md](docs/getting-started.md): local install, startup, and baseline verification / 本仓库首次安装、启动、基础验证。
+2. [docs/integration.md](docs/integration.md): how another repo integrates Agents-Memory / 目标项目如何接入 Agents-Memory。
+3. [docs/commands.md](docs/commands.md): CLI command map and parameter reference / CLI 命令总表与参数参考。
+4. [docs/ops.md](docs/ops.md): operations, recovery, and troubleshooting / 日常运维、恢复与排障。
 
-### Standards And Profiles
+Full documentation map / 完整文档地图: [docs/README.md](docs/README.md)
 
-1. `standards/` provides organization-level Python, docs, planning, and validation defaults.
-2. `profiles/` provides installable and refreshable project engineering contracts.
-3. `enable`, `profile-apply`, and `standards-sync` install those standards into target projects.
+## Open-Source Boundary / 开源边界
 
-### Planning And Validation
-
-1. `plan-init`, `onboarding-bundle`, and `refactor-bundle` generate standardized workflow artifacts.
-2. `docs-check`, `profile-check`, `plan-check`, and `doctor` provide delivery gates and health checks.
-3. Onboarding state and refactor hotspots give agents an executable next step instead of just console output.
-
-## Open-Source Boundary
-
-The public repository includes only code, templates, standards, profiles, and documentation. The following are local runtime artifacts and should normally stay uncommitted:
+Public repository content is limited to code, templates, standards, profiles, and docs. The following are local runtime artifacts and should normally stay uncommitted:
 
 ```text
 index.md
@@ -306,45 +119,38 @@ logs/
 vectors/
 ```
 
-The repository uses public examples under `templates/` to initialize local files so real project context, private paths, and runtime data do not leak into the open-source tree.
+The repository uses public examples under `templates/` so real project context, private paths, and runtime data do not leak into the open-source tree.
 
-## Docs Navigation
+## Contributing / 贡献
 
-1. docs/getting-started.md: First install, startup, and baseline verification for this repository
-2. docs/integration.md: How a target project integrates Agents-Memory
-3. docs/ops.md: Operations, logs, indexes, Qdrant, recovery, and troubleshooting
-4. docs/commands.md: CLI command map and parameter reference
-5. docs/ai-engineering-operating-system.md: Current product baseline and target command model
-6. docs/architecture.md: Repo-level ADRs and implementation tradeoffs
-7. docs/modular-architecture.md: Directory structure, module responsibilities, and extension points
-8. docs/README.md: Full documentation map
-9. docs/release-checklist.md: Pre/post release checks, tag flow, and GitHub Release process
+Before shipping behavior changes, update code, matching docs, and matching tests or validation scripts together.
 
-## Quality Gates And Release Discipline
+Contribution guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md). Pull requests should follow [PULL_REQUEST_TEMPLATE.md](PULL_REQUEST_TEMPLATE.md). Community expectations live in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Security issues should follow [SECURITY.md](SECURITY.md). Support paths are listed in [SUPPORT.md](SUPPORT.md). Releases should update [CHANGELOG.md](CHANGELOG.md) and [docs/release-checklist.md](docs/release-checklist.md).
 
-1. Every pull request goes through `.github/workflows/ci.yml` for install, compile, unit tests, and `docs-check`.
-2. CI is split into independent `tests` and `docs` jobs so branch protection can require them separately.
-3. Public version history lives in [CHANGELOG.md](CHANGELOG.md) rather than only in GitHub Release pages.
-4. Release execution is constrained by [docs/release-checklist.md](docs/release-checklist.md), covering CI confirmation, version checks, Git tags, and GitHub Releases.
-5. Open-source collaboration entrypoints, CI semantics, and release checklist semantics are all checked by `docs-check` to reduce drift between the homepage and the real workflow.
+<a id="en"></a>
 
-## Contribution
+## English Snapshot
 
-Treat this as an evolving engineering operating system and contribute accordingly.
-
-Before shipping behavior changes, update at least:
-
-1. Code
-2. Matching documentation
-3. Matching tests or validation scripts
-
-Contribution guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md).
-Use the repository issue templates for bug reports and feature requests; use [PULL_REQUEST_TEMPLATE.md](PULL_REQUEST_TEMPLATE.md) for validation details when opening a pull request; collaboration expectations follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md); security issues should be reported privately via [SECURITY.md](SECURITY.md); support paths are listed in [SUPPORT.md](SUPPORT.md); sponsorship metadata lives in `.github/FUNDING.yml`; pull requests are gated by `.github/workflows/ci.yml`; and releases should update [CHANGELOG.md](CHANGELOG.md) and [docs/release-checklist.md](docs/release-checklist.md).
-
-## License
-
-This project is released under the MIT License.
+1. For teams using Copilot or MCP-capable coding agents in real software projects.
+2. Core architecture: shared memory, standards, planning bundles, and validation gates.
+3. Product baseline: [docs/ai-engineering-operating-system.md](docs/ai-engineering-operating-system.md).
+4. Contribution and release flow: [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md), and [docs/release-checklist.md](docs/release-checklist.md).
 
 [Back to top](#top)
 
-</details>
+<a id="zh"></a>
+
+## 中文摘要
+
+1. 适合在真实软件项目里使用 Copilot 或 MCP coding agent 的团队。
+2. 核心结构是共享记忆、工程标准、planning bundle 和 validation gate。
+3. 最新产品基线见 [docs/ai-engineering-operating-system.md](docs/ai-engineering-operating-system.md)。
+4. 贡献与发布流程见 [CONTRIBUTING.md](CONTRIBUTING.md)、[CHANGELOG.md](CHANGELOG.md)、[docs/release-checklist.md](docs/release-checklist.md)。
+
+[返回顶部](#top)
+
+## License / 许可证
+
+This project is released under the MIT License.
+
+本项目采用 MIT License。
