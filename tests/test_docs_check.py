@@ -46,6 +46,42 @@ def _write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _write_raw_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _write_open_source_files(root: Path, *, include_collaboration: bool = True) -> None:
+    _write_text(root / "LICENSE", "MIT\n")
+    _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
+    _write_text(
+        root / "pyproject.toml",
+        "\n".join(
+            [
+                "[project]",
+                "name = 'demo'",
+                "",
+                "[project.urls]",
+                'Repository = "https://example.com/repo"',
+                'Documentation = "https://example.com/docs"',
+                'Issues = "https://example.com/issues"',
+            ]
+        ),
+    )
+    if not include_collaboration:
+        return
+    _write_raw_text(root / "CODE_OF_CONDUCT.md", "# Code of Conduct\n")
+    _write_raw_text(root / "PULL_REQUEST_TEMPLATE.md", "# Summary\n")
+    _write_raw_text(
+        root / ".github" / "ISSUE_TEMPLATE" / "bug_report.md",
+        "---\nname: Bug report\nabout: Report a reproducible defect\n---\n",
+    )
+    _write_raw_text(
+        root / ".github" / "ISSUE_TEMPLATE" / "feature_request.md",
+        "---\nname: Feature request\nabout: Propose a product or workflow improvement\n---\n",
+    )
+
+
 class DocsCheckTests(unittest.TestCase):
     def _build_context(self, root: Path):
         _write_text(root / "templates" / "index.example.md", "index\n")
@@ -117,6 +153,26 @@ class DocsCheckTests(unittest.TestCase):
             _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
             _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
+            (root / "tests").mkdir(parents=True, exist_ok=True)
+
+            findings = collect_docs_check_findings(root)
+
+            self.assertTrue(any(f.status == "FAIL" and f.key == "open_source_files" for f in findings))
+
+    def test_collect_docs_check_findings_flags_missing_collaboration_entrypoints(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_text(root / "README.md", _healthy_readme())
+            _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
+            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
+            _write_open_source_files(root, include_collaboration=False)
             (root / "tests").mkdir(parents=True, exist_ok=True)
 
             findings = collect_docs_check_findings(root)
@@ -635,22 +691,7 @@ class DocsCheckTests(unittest.TestCase):
                     ]
                 ),
             )
-            _write_text(root / "LICENSE", "MIT\n")
-            _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
-            _write_text(
-                root / "pyproject.toml",
-                "\n".join(
-                    [
-                        "[project]",
-                        "name = 'demo'",
-                        "",
-                        "[project.urls]",
-                        'Repository = "https://example.com/repo"',
-                        'Documentation = "https://example.com/docs"',
-                        'Issues = "https://example.com/issues"',
-                    ]
-                ),
-            )
+            _write_open_source_files(root)
             _write_text(
                 root / "standards" / "docs" / "docs-sync.instructions.md",
                 "docs\ncode\ntests\ncreated_at\nupdated_at\ndoc_status\n",

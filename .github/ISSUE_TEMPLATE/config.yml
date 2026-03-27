@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Contribution Guide
+    url: https://github.com/haochencheng/Agents-Memory/blob/main/CONTRIBUTING.md
+    about: Read the contribution workflow and validation expectations before opening an issue.
+  - name: Code of Conduct
+    url: https://github.com/haochencheng/Agents-Memory/blob/main/CODE_OF_CONDUCT.md
+    about: Review collaboration expectations before opening a discussion or report.

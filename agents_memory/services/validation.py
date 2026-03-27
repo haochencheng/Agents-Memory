@@ -186,6 +186,16 @@ OPEN_SOURCE_URL_PHRASES = [
     'Issues = "',
 ]
 
+OPEN_SOURCE_REQUIRED_FILES = [
+    Path(LICENSE_FILE),
+    Path(CONTRIBUTING_FILE),
+    Path(PYPROJECT_FILE),
+    Path("CODE_OF_CONDUCT.md"),
+    Path("PULL_REQUEST_TEMPLATE.md"),
+    Path(".github") / "ISSUE_TEMPLATE" / "bug_report.md",
+    Path(".github") / "ISSUE_TEMPLATE" / "feature_request.md",
+]
+
 REFACTOR_SKIP_PARTS = {
     ".git",
     ".venv",
@@ -885,11 +895,7 @@ def _collect_open_source_findings(project_root: Path) -> list[ValidationFinding]
     findings = _collect_required_path_findings(
         "open_source_files",
         project_root,
-        [
-            project_root / LICENSE_FILE,
-            project_root / CONTRIBUTING_FILE,
-            project_root / PYPROJECT_FILE,
-        ],
+        [project_root / path for path in OPEN_SOURCE_REQUIRED_FILES],
     )
     pyproject = project_root / PYPROJECT_FILE
     if not pyproject.exists():

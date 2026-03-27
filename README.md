@@ -93,6 +93,8 @@ Contributions are welcome in three directions:
 2. Stronger open-source readiness: CI, issue templates, release discipline, and repo health gates.
 3. More reusable engineering assets: standards, profiles, planning bundles, and validation policies.
 
+Contribution flow is documented in [CONTRIBUTING.md](CONTRIBUTING.md). Community expectations live in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and issue / PR intake now goes through the repository templates.
+
 Near-term roadmap:
 
 1. Converge more top-level workflows into clearer user-facing commands.
@@ -246,6 +248,7 @@ Agents-Memory/
 3. 对应测试或验证脚本
 
 贡献说明见 CONTRIBUTING.md。
+问题反馈与能力建议请使用仓库内置 issue 模板；提交合并请求时请按 PULL_REQUEST_TEMPLATE.md 补齐验证信息；协作行为遵循 CODE_OF_CONDUCT.md。
 
 ## License
 

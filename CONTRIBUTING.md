@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-03-27
+updated_at: 2026-03-28
 doc_status: active
 ---
 
@@ -24,6 +24,15 @@ Agents-Memory 正在从共享错误记忆系统演进为面向 AI coding agents 
 3. 测试或验证脚本
 
 如果变更只停留在其中一层，仓库很快就会发生漂移。
+
+## Collaboration Entry Points
+
+为了让公开协作入口保持一致，请优先使用仓库内置模板：
+
+1. 缺陷反馈使用 `.github/ISSUE_TEMPLATE/bug_report.md`。
+2. 能力建议使用 `.github/ISSUE_TEMPLATE/feature_request.md`。
+3. 提交 PR 前按 `PULL_REQUEST_TEMPLATE.md` 补齐摘要、验证结果、docs/tests 联动说明。
+4. 社区互动与反馈边界遵循 `CODE_OF_CONDUCT.md`。
 
 ## Local Validation
 

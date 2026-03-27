@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-03-27
+updated_at: 2026-03-28
 doc_status: active
 ---
 
@@ -21,6 +21,7 @@ doc_status: active
 11. `docs/commands.md` 只记录命令总表、参数和分组参考，不重复目标项目接入步骤
 12. `docs/getting-started.md` 只记录本仓库本地安装、启动与调试，不重复目标项目接入流程
 13. `docs/ops.md` 只记录日常运维、日志、索引、Qdrant、备份与故障处理，不重复首次安装与目标项目接入流程
+14. 开源协作入口必须完整：`CODE_OF_CONDUCT.md`、`PULL_REQUEST_TEMPLATE.md`、`.github/ISSUE_TEMPLATE/` 至少覆盖 bug 与 feature request
 
 代码验证：
 
