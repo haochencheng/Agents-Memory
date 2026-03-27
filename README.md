@@ -12,6 +12,7 @@ doc_status: active
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
 ![MCP](https://img.shields.io/badge/MCP-enabled-black)
 ![Docs Check](https://img.shields.io/badge/docs--check-governed-orange)
+
 [![Release](https://img.shields.io/github/v/release/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/releases)
 [![Contributors](https://img.shields.io/github/contributors/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/graphs/contributors)
 [![Last Commit](https://img.shields.io/github/last-commit/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/commits/main)
@@ -40,6 +41,13 @@ Keywords: AI coding agents, engineering memory, agent runtime, prompt memory, st
 1. Repeated engineering mistakes across projects.
 2. Missing shared standards, planning workflow, and delivery checks for agents.
 3. Drift between docs, rules, templates, and real implementation.
+
+### Who It's For
+
+1. Teams using Copilot or MCP-capable coding agents in real software projects.
+2. Engineers who want reusable standards, task scaffolds, and validation gates across repos.
+3. Builders creating an internal engineering runtime instead of isolated prompt snippets.
+4. Maintainers who need a cleaner bridge between AI assistance and real delivery discipline.
 
 ### Architecture Snapshot
 
@@ -104,6 +112,13 @@ Near-term roadmap:
 1. 相同错误在不同项目里反复出现。
 2. 工程标准、任务规划和交付验证没有统一入口。
 3. 文档、规则、模板和实际实现容易漂移。
+
+## 适合谁
+
+1. 在真实软件项目里使用 Copilot 或其他 MCP coding agent 的团队。
+2. 希望把工程标准、任务脚手架和验证门禁复用到多个仓库的工程师。
+3. 想构建内部 engineering runtime，而不是只堆 prompt 片段的建设者。
+4. 需要把 AI 辅助开发和真实交付纪律更稳地接起来的维护者。
 
 Agents-Memory 的目标是把这些能力放进同一个共享层：
 
