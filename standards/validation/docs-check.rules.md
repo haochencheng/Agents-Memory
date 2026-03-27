@@ -24,6 +24,7 @@ doc_status: active
 14. 开源协作入口必须完整：`CODE_OF_CONDUCT.md`、`PULL_REQUEST_TEMPLATE.md`、`.github/ISSUE_TEMPLATE/` 至少覆盖 bug 与 feature request
 15. 开源仓库健康入口必须完整：`SECURITY.md`、`SUPPORT.md`、`.github/FUNDING.yml` 需要与 README / CONTRIBUTING 的协作说明保持一致
 16. 开源仓库必须有真实 PR 基础门禁：`.github/workflows/ci.yml` 至少执行 `py_compile`、单元测试和 `docs-check`
+17. 开源仓库必须有公开 release 流程：`CHANGELOG.md` 记录对外变更，`docs/release-checklist.md` 记录发版前后步骤并覆盖 changelog、CI、tag、GitHub Release
 
 代码验证：
 

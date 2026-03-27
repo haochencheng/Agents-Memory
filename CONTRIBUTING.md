@@ -37,6 +37,7 @@ Agents-Memory 正在从共享错误记忆系统演进为面向 AI coding agents 
 6. 常规支持、使用问题与协作路径见 `SUPPORT.md`。
 7. 开源赞助入口配置在 `.github/FUNDING.yml`。
 8. GitHub PR 门禁配置在 `.github/workflows/ci.yml`，运行的就是下面这组基础校验。
+9. 发布前后请按 `docs/release-checklist.md` 执行，并同步更新 `CHANGELOG.md`。
 
 ## Local Validation
 
@@ -56,6 +57,15 @@ python3 scripts/memory.py doctor .
 ```
 
 上述 `py_compile`、单元测试和 `docs-check` 也会在 `.github/workflows/ci.yml` 里作为 PR 基础门禁执行。
+
+## Release Flow
+
+版本发布遵循两个公开工件：
+
+1. `CHANGELOG.md` 记录对外可见变更，优先按 Added / Changed / Fixed 归类。
+2. `docs/release-checklist.md` 记录发布前校验、版本确认、tag / release 和发布后核对步骤。
+
+如果某次变更会影响用户安装、CLI 行为、文档入口或开源协作面，不要等到临近发版才补 changelog。
 
 ## Repository Boundaries
 

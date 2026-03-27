@@ -52,8 +52,13 @@ def _write_raw_text(path: Path, content: str) -> None:
 
 
 def _write_open_source_files(root: Path, *, include_collaboration: bool = True) -> None:
+    _write_text(root / "CHANGELOG.md", "# Changelog\n\n## Unreleased\n\n### Added\n- Demo entry\n")
     _write_text(root / "LICENSE", "MIT\n")
     _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
+    _write_text(
+        root / "docs" / "release-checklist.md",
+        "# Release Checklist\n\n更新 CHANGELOG.md\n.github/workflows/ci.yml\nGit tag\nGitHub Release\n",
+    )
     _write_text(
         root / "pyproject.toml",
         "\n".join(
@@ -208,6 +213,49 @@ class DocsCheckTests(unittest.TestCase):
             findings = collect_docs_check_findings(root)
 
             self.assertTrue(any(f.status == "FAIL" and f.key == "open_source_files" for f in findings))
+
+    def test_collect_docs_check_findings_flags_missing_release_flow_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_text(root / "README.md", _healthy_readme())
+            _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
+            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
+            _write_open_source_files(root)
+            (root / "CHANGELOG.md").unlink()
+            (root / "docs" / "release-checklist.md").unlink()
+            (root / "tests").mkdir(parents=True, exist_ok=True)
+
+            findings = collect_docs_check_findings(root)
+
+            self.assertTrue(any(f.status == "FAIL" and f.key == "open_source_files" for f in findings))
+
+    def test_collect_docs_check_findings_flags_missing_release_checklist_steps(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_text(root / "README.md", _healthy_readme())
+            _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
+            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
+            _write_open_source_files(root)
+            _write_text(root / "docs" / "release-checklist.md", "# Release Checklist\n\n更新 CHANGELOG.md\n")
+            (root / "tests").mkdir(parents=True, exist_ok=True)
+
+            findings = collect_docs_check_findings(root)
+
+            self.assertTrue(any(f.status == "FAIL" and f.key == "open_source_release" for f in findings))
 
     def test_collect_docs_check_findings_flags_missing_ci_workflow(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

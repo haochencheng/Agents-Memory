@@ -193,10 +193,19 @@ OPEN_SOURCE_CI_WORKFLOW_PHRASES = [
     "python scripts/memory.py docs-check .",
 ]
 
+OPEN_SOURCE_RELEASE_CHECKLIST_PHRASES = [
+    "更新 CHANGELOG.md",
+    ".github/workflows/ci.yml",
+    "Git tag",
+    "GitHub Release",
+]
+
 GITHUB_DIR = Path(".github")
 CI_WORKFLOW_PATH = GITHUB_DIR / "workflows" / "ci.yml"
+RELEASE_CHECKLIST_PATH = Path(DOCS_DIR) / "release-checklist.md"
 
 OPEN_SOURCE_REQUIRED_FILES = [
+    Path("CHANGELOG.md"),
     Path(LICENSE_FILE),
     Path(CONTRIBUTING_FILE),
     Path(PYPROJECT_FILE),
@@ -204,6 +213,7 @@ OPEN_SOURCE_REQUIRED_FILES = [
     Path("SECURITY.md"),
     Path("SUPPORT.md"),
     Path("PULL_REQUEST_TEMPLATE.md"),
+    RELEASE_CHECKLIST_PATH,
     GITHUB_DIR / "FUNDING.yml",
     CI_WORKFLOW_PATH,
     GITHUB_DIR / "ISSUE_TEMPLATE" / "bug_report.md",
@@ -919,6 +929,16 @@ def _collect_open_source_findings(project_root: Path) -> list[ValidationFinding]
                 CI_WORKFLOW_PATH.as_posix(),
                 _read_if_exists(ci_workflow),
                 OPEN_SOURCE_CI_WORKFLOW_PHRASES,
+            )
+        )
+    release_checklist = project_root / RELEASE_CHECKLIST_PATH
+    if release_checklist.exists():
+        findings.append(
+            _collect_phrase_coverage_findings(
+                "open_source_release",
+                RELEASE_CHECKLIST_PATH.as_posix(),
+                _read_if_exists(release_checklist),
+                OPEN_SOURCE_RELEASE_CHECKLIST_PHRASES,
             )
         )
     pyproject = project_root / PYPROJECT_FILE

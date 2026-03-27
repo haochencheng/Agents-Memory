@@ -85,6 +85,7 @@ python3.12 -m unittest discover -s tests -p 'test_*.py'
 5. Product architecture baseline: docs/ai-engineering-operating-system.md
 6. Repo ADRs: docs/architecture.md
 7. Modular code structure: docs/modular-architecture.md
+8. Release checklist: docs/release-checklist.md
 
 ### Contribution / Roadmap
 
@@ -94,7 +95,7 @@ Contributions are welcome in three directions:
 2. Stronger open-source readiness: CI, issue templates, release discipline, and repo health gates.
 3. More reusable engineering assets: standards, profiles, planning bundles, and validation policies.
 
-Contribution flow is documented in [CONTRIBUTING.md](CONTRIBUTING.md). Community expectations live in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), issue / PR intake goes through the repository templates, security reporting follows [SECURITY.md](SECURITY.md), support paths are listed in [SUPPORT.md](SUPPORT.md), sponsorship metadata lives in `.github/FUNDING.yml`, and pull requests are gated by `.github/workflows/ci.yml`.
+Contribution flow is documented in [CONTRIBUTING.md](CONTRIBUTING.md). Community expectations live in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), issue / PR intake goes through the repository templates, security reporting follows [SECURITY.md](SECURITY.md), support paths are listed in [SUPPORT.md](SUPPORT.md), sponsorship metadata lives in `.github/FUNDING.yml`, pull requests are gated by `.github/workflows/ci.yml`, and releases should update [CHANGELOG.md](CHANGELOG.md) and [docs/release-checklist.md](docs/release-checklist.md).
 
 Near-term roadmap:
 
@@ -237,6 +238,7 @@ Agents-Memory/
 6. docs/architecture.md: repo 级 ADR 与实现取舍
 7. docs/modular-architecture.md: 代码目录结构、模块职责与扩展点
 8. docs/README.md: 完整文档地图
+9. docs/release-checklist.md: 版本发布前后检查项与 changelog 流程
 
 ## 贡献
 
@@ -249,7 +251,7 @@ Agents-Memory/
 3. 对应测试或验证脚本
 
 贡献说明见 CONTRIBUTING.md。
-问题反馈与能力建议请使用仓库内置 issue 模板；提交合并请求时请按 PULL_REQUEST_TEMPLATE.md 补齐验证信息；协作行为遵循 CODE_OF_CONDUCT.md；安全问题请按 SECURITY.md 私下报告；使用与协作支持入口见 SUPPORT.md；赞助配置见 `.github/FUNDING.yml`；PR 门禁见 `.github/workflows/ci.yml`。
+问题反馈与能力建议请使用仓库内置 issue 模板；提交合并请求时请按 PULL_REQUEST_TEMPLATE.md 补齐验证信息；协作行为遵循 CODE_OF_CONDUCT.md；安全问题请按 SECURITY.md 私下报告；使用与协作支持入口见 SUPPORT.md；赞助配置见 `.github/FUNDING.yml`；PR 门禁见 `.github/workflows/ci.yml`；发布时同步维护 CHANGELOG.md 和 docs/release-checklist.md。
 
 ## License
 

@@ -17,6 +17,7 @@ doc_status: active
 - [CLI 命令总表](commands.md)：命令签名、参数与按域分组参考，不展开接入步骤。
 - [本地启动指南](getting-started.md)：本仓库如何首次安装、启动、做基础验证，不展开日常运维与目标项目接入流程。
 - [运维与故障处理](ops.md)：日志、索引、Qdrant、备份、恢复与日常排障，不重复首次安装与目标项目接入。
+- [发布检查清单](release-checklist.md)：发版前后步骤、CHANGELOG 更新、tag 与 GitHub Release 核对。
 
 ## 目录
 
@@ -28,6 +29,7 @@ doc_status: active
 - [向量搜索扩展](#向量搜索扩展)
 - [本地启动与运维](getting-started.md)
 - [运维与故障处理](ops.md)
+- [发布检查清单](release-checklist.md)
 - [CLI 命令总表](commands.md)
 - [接入其他项目](integration.md)
 - [Copilot 自动激活设计](copilot-auto-activation.md)
