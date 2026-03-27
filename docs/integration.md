@@ -170,6 +170,51 @@ Domains (逗号分隔) [frontend, python]: ↵
 
 > **提示 6**：这里的自动修复目前只覆盖安全、模板化的 planning bundle 缺失文件修复。像 refactor hotspot 这类需要代码判断的项，仍会保留为 runbook / bundle，交给后续人工或 agent 按计划处理。
 
+---
+
+## Standards 来源与装配方式
+
+当前接入链路里的 `standards` 不是由 agent 读取目标项目后临时生成的，而是采取“静态真源 + 动态装配”的模式。
+
+### 1. 当前来源
+
+1. `standards/` 目录保存组织级 canonical standards。
+2. `profiles/*.yaml` 声明每个 profile 需要同步哪些 standards 和 templates。
+3. `profile-apply` 首次安装这些工件。
+4. `standards-sync` 后续刷新 profile 管理的标准文件。
+
+因此，当前 agent 接入项目时读取到的 `.github/instructions/agents-memory/standards/*`，本质上是从 Agents-Memory 仓库静态分发过去的版本化工件。
+
+### 2. 当前动态部分
+
+动态的不是标准正文，而是装配决策：
+
+1. 自动推荐哪个 profile。
+2. 目标项目该安装到哪些路径。
+3. 如何把 AGENTS 受管 block 和 bridge instruction 合并到现有项目。
+4. 当前 project facts 生成和 project-local overlay 渲染。
+
+### 3. 现阶段边界
+
+当前这套模式已经适合作为接入基线，但还没有到“完整生产级工程规范发行版”的程度。
+
+还缺的主要是：
+
+1. 更完整的语言 / 框架 / CI / 测试 / 发布 / observability 规范库。
+2. 参数化模板，而不是只做静态复制。
+3. 更完整的项目本地 overlay 模板矩阵，用于承接 repo-specific 契约。
+4. 更强的 detector 类型与 facts 扫描深度。
+
+### 4. 推荐演进方向
+
+推荐把接入模式进一步升级为：
+
+1. `standards/` 继续做组织级真源。
+2. `profiles/*.yaml` 只做装配清单和变量声明。
+3. `project-facts.json` 做确定性项目扫描。当前仓库已经支持 `path_exists`、`file_contains`、`json_key_exists`、`command_available` 四类 detector，并且内置的 python-service、frontend-app、fullstack-product profiles 已开始真实使用这些 richer detectors 写出 facts 文件。
+4. `project-local.instructions.md` 由 `profile-render` 和 `standards-sync` 承接项目特化规范。
+5. `profile-check` 当前已经校验 manifest、standards、overlay、facts 的一致性。
+
 > **边界提示**：本页只说明接入动作、受管文件和验证方式；`commands/`、`services/`、`integrations/agents/` 的代码分层与插件结构统一放在 `docs/modular-architecture.md`。
 
 ---

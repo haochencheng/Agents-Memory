@@ -11,6 +11,65 @@
   "templates": [
     "templates/profile/frontend-app/docs/plans/README.example.md"
   ],
+  "variables": [
+    {
+      "name": "package_manager",
+      "description": "Preferred package manager used by the frontend project.",
+      "default": "npm",
+      "required": false
+    },
+    {
+      "name": "app_root",
+      "description": "Primary source directory for the frontend application.",
+      "default": "src",
+      "required": false
+    }
+  ],
+  "detectors": [
+    {
+      "id": "node_project",
+      "kind": "path_exists",
+      "output": "language.node",
+      "config": {
+        "any_of": ["package.json"]
+      }
+    },
+    {
+      "id": "package_manager_declared",
+      "kind": "json_key_exists",
+      "output": "tooling.package_manager_declared",
+      "config": {
+        "path": "package.json",
+        "all_of": ["packageManager"]
+      }
+    },
+    {
+      "id": "frontend_framework_manifest",
+      "kind": "file_contains",
+      "output": "framework.frontend_manifest",
+      "config": {
+        "path": "package.json",
+        "any_of": ["next", "react", "vite"]
+      }
+    },
+    {
+      "id": "frontend_shape",
+      "kind": "path_exists",
+      "output": "repo_shape.frontend",
+      "config": {
+        "any_of": ["src/", "app/"]
+      }
+    }
+  ],
+  "overlays": [
+    {
+      "target": ".github/instructions/agents-memory/project-local.instructions.md",
+      "template": "templates/profile/frontend-app/project-local.instructions.example.md",
+      "variables": ["package_manager", "app_root"],
+      "detectors": ["node_project", "frontend_shape"],
+      "managed_by": "profile-render"
+    }
+  ],
   "commands": {
     "standards_sync": "amem standards-sync .",
     "plan_check": "amem plan-check .",

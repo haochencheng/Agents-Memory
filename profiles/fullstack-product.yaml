@@ -11,6 +11,65 @@
   "templates": [
     "templates/profile/fullstack-product/docs/plans/README.example.md"
   ],
+  "variables": [
+    {
+      "name": "package_manager",
+      "description": "Workspace package manager used by the fullstack product.",
+      "default": "npm",
+      "required": false
+    },
+    {
+      "name": "workspace_root",
+      "description": "Primary workspace directory that groups apps and shared packages.",
+      "default": "apps",
+      "required": false
+    }
+  ],
+  "detectors": [
+    {
+      "id": "node_project",
+      "kind": "path_exists",
+      "output": "language.node",
+      "config": {
+        "any_of": ["package.json"]
+      }
+    },
+    {
+      "id": "workspace_manifest",
+      "kind": "json_key_exists",
+      "output": "repo_shape.workspace_manifest",
+      "config": {
+        "path": "package.json",
+        "any_of": ["workspaces"]
+      }
+    },
+    {
+      "id": "workspace_tooling",
+      "kind": "file_contains",
+      "output": "tooling.workspace_stack",
+      "config": {
+        "path": "package.json",
+        "any_of": ["turbo", "pnpm", "nx"]
+      }
+    },
+    {
+      "id": "monorepo_apps",
+      "kind": "path_exists",
+      "output": "repo_shape.monorepo",
+      "config": {
+        "any_of": ["apps/"]
+      }
+    }
+  ],
+  "overlays": [
+    {
+      "target": ".github/instructions/agents-memory/project-local.instructions.md",
+      "template": "templates/profile/fullstack-product/project-local.instructions.example.md",
+      "variables": ["package_manager", "workspace_root"],
+      "detectors": ["node_project", "monorepo_apps"],
+      "managed_by": "profile-render"
+    }
+  ],
   "commands": {
     "standards_sync": "amem standards-sync .",
     "plan_check": "amem plan-check .",

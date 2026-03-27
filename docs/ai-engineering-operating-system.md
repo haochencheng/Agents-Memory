@@ -541,6 +541,128 @@ Agents-Memory 要长期不崩，核心在于把运行状态和任务状态显式
 3. 把 validation 收敛成统一 delivery gate。
 4. 把 learning 做成从单项目沉淀到全项目保护的总线。
 
+### Standards / Templates 当前实现判断
+
+当前实现不是让 agent 读取目标项目后临时生成标准文件，而是分成三层：
+
+1. `standards/` 是版本化的组织级规范真源。
+2. `profiles/*.yaml` 是装配清单，声明当前 profile 需要哪些 standards、templates、bootstrap 目录和命令。
+3. `profile-apply` / `standards-sync` 把这些静态资产安装或刷新到目标项目。
+
+也就是说：
+
+1. `Standards` 内容来源是静态 canonical library。
+2. `Templates` 内容来源是静态模板库。
+3. 动态部分发生在 profile 推荐、目标路径映射、AGENTS 路由合并、project facts 生成和 overlay 变量渲染。
+
+这种设计优于“完全由 agent 动态生成规范”，因为它天然具备：
+
+1. 可版本化：能 review、diff、回滚。
+2. 可验证：`profile-check`、`validate`、drift repair 都依赖确定的期望文件集合。
+3. 可复现：同一 profile 多次安装结果应一致，不依赖模型瞬时输出。
+4. 可治理：组织级规范应该是制度资产，而不是一次对话产物。
+
+### 模板完备度与生产级判断
+
+当前模板和 standards 已经足够支撑一个“工程 Harness 基线”，但还不能视为覆盖大多数生产级项目的完整规范发行版。
+
+目前已经具备的部分：
+
+1. docs / planning / Python 基线规范。
+2. profile-manifest、AGENTS 受管 block、planning bundle README 等核心受管工件。
+3. `profile-apply`、`standards-sync`、`profile-check` 这一套最小闭环。
+
+距离更强的 production-grade 还缺少的部分：
+
+1. 前端、TypeScript、测试、CI、发布、observability、安全、依赖治理等更细颗粒度 standards。
+2. 基于项目事实的参数化装配，而不是只做静态复制。
+3. 项目级 overlay 机制，用于承接组织默认之外的 repo-specific 契约。
+4. 面向不同 repo shape 的模板矩阵，例如 monorepo、Python service、frontend app、fullstack product、agent runtime。
+5. 对“模板是否真的形成工程约束”的更强 gate，例如 CI presence、test command、owner file、release policy、runtime contract。
+
+因此当前更准确的定位是：
+
+1. 已经是可用的接入基线。
+2. 还不是完整的生产级项目规范发行版。
+3. 下一阶段重点不是增加更多孤立模板，而是把 templates 做成可装配、可参数化、可验证的发行系统。
+
+### 通用规范与项目特化规范的边界
+
+应该把规范拆成两类。
+
+第一类是通用规范，适合进入 `standards/` 的 canonical library：
+
+1. 文档同步规则，例如 docs / code / tests / validation 原子更新。
+2. planning 契约，例如 `spec / plan / task-graph / validation` 的字段和职责。
+3. maintainability 约束，例如复杂度阈值、helper 拆分、解释性注释要求。
+4. delivery gate 语义，例如 required / recommended、done_when、verify_with。
+5. profile-manifest、onboarding-state、AGENTS 受管 block 这类平台级工件约束。
+
+第二类是项目特化规范，不应直接写死进通用 standards，而应通过装配产生：
+
+1. 语言与框架差异，例如 Python / TypeScript / React / FastAPI。
+2. 仓库结构差异，例如 monorepo、single-service、agent runtime。
+3. 测试与构建工具差异，例如 pytest、unittest、vitest、pnpm、poetry。
+4. 项目特定目录契约，例如 `apps/`、`runtime/`、`services/`、`infra/`。
+5. 组织默认之外的 repo-local 规则，例如额外的 review checklist、发布策略、可观测性要求。
+
+原则是：
+
+1. 通用规范写成静态标准。
+2. 项目差异通过 profile + project facts + overlay 装配出来。
+3. 不让 agent 直接生成 canonical standards，只允许 agent 参与建议和局部 overlay。
+
+### 面向不同项目的装配模式
+
+建议把 profile 系统升级成四层装配模型：
+
+1. Canonical Standards Layer
+  `standards/` 中保存组织级真源，必须静态、可 review、可测试。
+2. Profile Manifest Layer
+  `profiles/*.yaml` 只声明组合关系、目标文件、变量需求和默认命令，不承载大段规范正文。
+3. Project Facts Layer
+  对目标项目做确定性扫描，生成 `project-facts.json`，沉淀语言、框架、目录形态、包管理器、测试框架、CI 形态等事实。
+4. Overlay Render Layer
+  根据 profile + facts 渲染少量项目特化文件，例如 `project-local.instructions.md`、带变量的 README、语言专属 checklist。
+
+这种模式下：
+
+1. `profile-apply` 负责首次安装发行版。
+2. `standards-sync` 负责刷新 canonical standards。
+3. `profile-render` 负责根据最新 facts 重渲染 overlay，`standards-sync` 也会附带刷新当前 active overlays。
+4. `profile-check` 同时校验静态标准漂移、facts 漂移和 overlay 漂移。
+
+### 模板设计方案
+
+模板不应该只是“示例文件集合”，而应该分成 4 类。
+
+1. Bootstrap Templates
+  负责首次接入时必须出现的最小结构，例如 `AGENTS.md`、planning README、docs-check 配置示例。
+2. Managed Instruction Templates
+  负责 agent 启动路径，例如 bridge instruction、project-local overlay、受管 read-order block。
+3. Project Contract Templates
+  负责项目工程契约，例如测试命令、CI 约定、目录职责、runtime contract、release checklist。
+4. Task Workflow Templates
+  负责任务事务工件，例如 bundle README、spec、plan、task-graph、validation。
+
+建议每个模板都明确 5 个元数据维度：
+
+1. `kind`：bootstrap / managed / contract / workflow。
+2. `scope`：global / profile / project / task。
+3. `inputs`：需要哪些 variables 或 project facts。
+4. `managed_by`：由哪个命令写入或刷新。
+5. `validated_by`：由哪个 checker 负责防漂移。
+
+### 下一阶段最小落地方案
+
+为了从“静态复制”走向“生产级装配模式”，建议按下面顺序演进：
+
+1. 在 `ProfileSpec` 中增加 `variables`、`detectors`、`overlays` 三组字段。
+2. 新增 `project-facts.json`，先只做确定性扫描，不引入 LLM 参与事实生成。当前仓库已完成 `path_exists`、`file_contains`、`json_key_exists`、`command_available` 四类 detector 和 facts 工件写入。
+3. 把现有少量模板升级成参数化模板，例如根据 Python / frontend / monorepo 填充不同默认命令和目录说明。当前仓库已为内置 profiles 增加第一版 `project-local.instructions` overlay 模板，并开始真实使用 `file_contains` / `json_key_exists` 做 profile-specific facts 识别。
+4. 新增 `project-local.instructions.md`，承接 repo-specific 契约，不污染 canonical standards。当前仓库已通过 `profile-render` / `standards-sync` 写入这类 overlay。
+5. 把 `profile-check` 升级为同时校验 manifest、standards、overlays、facts 是否一致。当前仓库已经完成第一版 overlay/facts drift 校验。
+
 ---
 
 ## Repo 级实施方案
@@ -582,6 +704,8 @@ Agents-Memory 要长期不崩，核心在于把运行状态和任务状态显式
 | --- | --- | --- | --- | --- |
 | `.agents-memory/onboarding-state.json` | 项目 bootstrap 状态、下一步动作、执行历史 | `doctor`、`onboarding-execute`、未来 `bootstrap` | agent、`do-next`、CLI、MCP | 必须幂等回写；字段增量演进；不依赖对话上下文 |
 | `profile-manifest.json` | 项目已安装工程契约 | `profile-apply`、`enable --full`、未来 `bootstrap` | `profile-check`、`validate`、agent | 必须可用于 drift 检测，不允许只写 display 信息 |
+| `project-facts.json` | 目标项目的确定性扫描结果 | `profile-apply`、`standards-sync`、`profile-render` | `profile-check`、overlay renderer、agent | 必须由可复现 detector 生成，避免依赖对话态或 LLM 自由发挥 |
+| `project-local.instructions.md` | 基于 profile + facts 渲染的项目局部契约 | `profile-render`、`standards-sync` | `profile-check`、agent | 只承接 repo-specific 契约，不反向污染 canonical standards |
 | `docs/plans/bootstrap-checklist.md` | bootstrap 审计材料 | `doctor --write-checklist`、未来 `bootstrap` | 人、agent、review | 必须和 state 对齐，不允许出现互相矛盾的 next step |
 | `docs/plans/refactor-watch.md` | 复杂度治理工件 | `doctor --write-checklist` | 人、agent、`refactor-bundle` | 必须能追溯到稳定 hotspot token |
 | `docs/plans/<task-slug>/README.md` | 任务入口摘要 | `start-task`、`close-task` | 人、agent | 要能快速定位目标、状态、风险 |

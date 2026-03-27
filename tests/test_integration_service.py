@@ -890,6 +890,21 @@ class IntegrationServiceTests(unittest.TestCase):
                         "applies_to": ["backend", "python"],
                         "standards": ["standards/docs/docs-sync.instructions.md"],
                         "templates": ["templates/profile/python-service/docs/plans/README.example.md"],
+                        "variables": [
+                            {"name": "python_bin", "description": "Python executable", "default": "python3", "required": False}
+                        ],
+                        "detectors": [
+                            {"id": "python_project", "kind": "path_exists", "output": "language.python", "config": {"any_of": ["pyproject.toml"]}}
+                        ],
+                        "overlays": [
+                            {
+                                "target": ".github/instructions/agents-memory/project-local.instructions.md",
+                                "template": "templates/profile/python-service/project-local.instructions.example.md",
+                                "variables": ["python_bin"],
+                                "detectors": ["python_project"],
+                                "managed_by": "profile-render",
+                            }
+                        ],
                         "commands": {"doctor": "amem doctor ."},
                         "bootstrap": {"create": [".github/instructions/", "docs/", "tests/"]},
                     },
@@ -898,6 +913,7 @@ class IntegrationServiceTests(unittest.TestCase):
             )
             _write_text(root / "standards" / "docs" / "docs-sync.instructions.md", "docs sync\n")
             _write_text(root / "templates" / "profile" / "python-service" / "docs" / "plans" / "README.example.md", "planning root\n")
+            _write_text(root / "templates" / "profile" / "python-service" / "project-local.instructions.example.md", "python={{variable.python_bin}}\n")
             _write_text(project_root / "pyproject.toml", "[project]\nname='demo'\n")
             _write_text(
                 project_root / "service.py",
@@ -950,6 +966,7 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertTrue(payload["planned_writes"])
             self.assertIn("apply recommended profile `python-service`", payload["capabilities"])
             self.assertTrue(any(path.endswith(".github/copilot-instructions.md") for path in payload["planned_writes"]))
+            self.assertTrue(any(path.endswith(".github/instructions/agents-memory/project-local.instructions.md") for path in payload["planned_writes"]))
             self.assertTrue(any("hotspot-" in item for item in payload["capabilities"]))
             self.assertFalse((project_root / ".github" / "copilot-instructions.md").exists())
             self.assertFalse((project_root / ".agents-memory" / "onboarding-state.json").exists())

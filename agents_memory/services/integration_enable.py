@@ -9,7 +9,7 @@ from agents_memory.constants import COPILOT_INSTRUCTIONS_REL, DEFAULT_BRIDGE_INS
 from agents_memory.runtime import AppContext
 from agents_memory.services.integration_register import _ensure_registered_project
 from agents_memory.services.integration_setup import cmd_bridge_install, cmd_copilot_setup, write_vscode_mcp_json
-from agents_memory.services.profiles import PROFILE_MANIFEST_REL, ProfileStandardsSyncResult, apply_profile, detect_applied_profile, load_profile, expected_profile_paths, sync_profile_standards
+from agents_memory.services.profiles import PROFILE_MANIFEST_REL, PROJECT_FACTS_REL, ProfileStandardsSyncResult, apply_profile, detect_applied_profile, load_profile, expected_profile_paths, sync_profile_standards
 from agents_memory.services.projects import project_already_registered, resolve_project_target
 from agents_memory.services.validation import collect_refactor_watch_hotspots
 
@@ -52,8 +52,10 @@ def _preview_enable_profile_actions(ctx: AppContext, project_root: Path, *, full
         planned_writes.extend(str(path) for path in expected["bootstrap_dirs"])
         planned_writes.extend(str(path) for path in expected["standard_files"])
         planned_writes.extend(str(path) for path in expected["template_files"])
+        planned_writes.extend(str(path) for path in expected["overlay_files"])
         planned_writes.extend(str(path) for path in expected["managed_files"])
         planned_writes.append(str(project_root / PROFILE_MANIFEST_REL))
+        planned_writes.append(str(project_root / PROJECT_FACTS_REL))
         return capabilities, planned_writes, skipped_existing
 
     if applied_profile_id:
@@ -61,8 +63,10 @@ def _preview_enable_profile_actions(ctx: AppContext, project_root: Path, *, full
         profile = load_profile(ctx, applied_profile_id)
         expected = expected_profile_paths(profile, project_root)
         planned_writes.extend(str(path) for path in expected["standard_files"])
+        planned_writes.extend(str(path) for path in expected["overlay_files"])
         planned_writes.extend(str(path) for path in expected["managed_files"])
         planned_writes.append(str(project_root / PROFILE_MANIFEST_REL))
+        planned_writes.append(str(project_root / PROJECT_FACTS_REL))
     else:
         skipped_existing.append("profile auto-apply skipped in default mode")
     return capabilities, planned_writes, skipped_existing

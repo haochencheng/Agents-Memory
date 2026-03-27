@@ -15,6 +15,46 @@
   "templates": [
     "templates/profile/agent-runtime/docs/plans/README.example.md"
   ],
+  "variables": [
+    {
+      "name": "python_bin",
+      "description": "Preferred Python executable for project-local commands and validations.",
+      "default": "python3",
+      "required": false
+    },
+    {
+      "name": "runtime_dir",
+      "description": "Primary runtime directory used by the target agent project.",
+      "default": "runtime",
+      "required": false
+    }
+  ],
+  "detectors": [
+    {
+      "id": "python_project",
+      "kind": "path_exists",
+      "output": "language.python",
+      "config": {
+        "any_of": [
+          "pyproject.toml",
+          "requirements.txt",
+          "setup.py"
+        ]
+      }
+    },
+    {
+      "id": "runtime_shape",
+      "kind": "path_exists",
+      "output": "repo_shape.runtime",
+      "config": {
+        "any_of": [
+          "runtime/",
+          "scripts/mcp_server.py"
+        ]
+      }
+    }
+  ],
+  "overlays": [],
   "commands": {
     "standards_sync": "amem standards-sync .",
     "plan_check": "amem plan-check .",

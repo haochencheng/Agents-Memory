@@ -9,7 +9,7 @@ from datetime import date
 from pathlib import Path
 
 from agents_memory.runtime import AppContext
-from agents_memory.services.profiles import PROFILE_MANIFEST_REL, detect_applied_profile, expected_profile_paths, load_profile, profile_agents_router_status, read_profile_manifest
+from agents_memory.services.profiles import PROFILE_MANIFEST_REL, PROJECT_FACTS_REL, detect_applied_profile, expected_profile_paths, load_profile, profile_agents_router_status, read_profile_manifest, render_profile_overlay, render_project_facts, resolve_overlay_destination
 
 
 CORE_DOC_COMMANDS = [
@@ -43,6 +43,7 @@ CORE_DOC_COMMANDS = [
     "profile-show",
     "profile-apply",
     "profile-diff",
+    "profile-render",
     "standards-sync",
     "profile-check",
     "docs-check",
@@ -1069,6 +1070,36 @@ def _check_profile_standards_and_router(
     findings.extend(_collect_required_path_findings("profile_template_files", project_root, expected["template_files"]))
     agents_ok, agents_detail = profile_agents_router_status(ctx, profile, project_root)
     findings.append(ValidationFinding("OK" if agents_ok else "FAIL", "profile_agents_file", agents_detail))
+    facts_path = project_root / PROJECT_FACTS_REL
+    if not facts_path.exists():
+        findings.append(ValidationFinding("FAIL", "profile_project_facts", f"missing project facts: {PROJECT_FACTS_REL.as_posix()}"))
+    elif facts_path.read_text(encoding="utf-8") != render_project_facts(profile, project_root):
+        findings.append(ValidationFinding("FAIL", "profile_project_facts", f"stale project facts: {PROJECT_FACTS_REL.as_posix()}"))
+    else:
+        findings.append(ValidationFinding("OK", "profile_project_facts", f"present: {PROJECT_FACTS_REL.as_posix()}"))
+    facts_payload = read_profile_manifest(project_root)
+    current_facts = render_project_facts(profile, project_root)
+    rendered_facts = json.loads(current_facts)
+    variables = rendered_facts.get("variables", {})
+    facts = rendered_facts.get("facts", {})
+    detector_results = {str(item["id"]): item for item in rendered_facts.get("detectors", [])}
+    if not profile.overlays:
+        findings.append(ValidationFinding("OK", "profile_overlay_files", "no overlays declared"))
+    for overlay in profile.overlays:
+        destination = resolve_overlay_destination(project_root, overlay.target)
+        relative = destination.relative_to(project_root).as_posix()
+        is_active = not overlay.detectors or all(bool(detector_results.get(detector_id, {}).get("matched")) for detector_id in overlay.detectors)
+        if not is_active:
+            if destination.exists():
+                findings.append(ValidationFinding("FAIL", "profile_overlay_files", f"inactive overlay should be removed: {relative}"))
+            continue
+        expected_overlay = render_profile_overlay(ctx, profile, overlay, variables=variables, facts=facts)
+        if not destination.exists():
+            findings.append(ValidationFinding("FAIL", "profile_overlay_files", f"missing overlay: {relative}"))
+        elif destination.read_text(encoding="utf-8") != expected_overlay:
+            findings.append(ValidationFinding("FAIL", "profile_overlay_files", f"stale overlay: {relative}"))
+        else:
+            findings.append(ValidationFinding("OK", "profile_overlay_files", f"present: {relative}"))
     invalid_commands = [command for command in profile.commands.values() if not command.startswith(("amem ", "python3 scripts/memory.py "))]
     findings.append(ValidationFinding(
         "OK" if not invalid_commands else "WARN",

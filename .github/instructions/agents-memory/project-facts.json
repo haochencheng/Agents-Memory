@@ -1,0 +1,46 @@
+{
+  "profile_id": "agent-runtime",
+  "variables": {
+    "python_bin": "python3",
+    "runtime_dir": "runtime"
+  },
+  "facts": {
+    "language.python": true,
+    "repo_shape.runtime": true
+  },
+  "detectors": [
+    {
+      "id": "python_project",
+      "kind": "path_exists",
+      "output": "language.python",
+      "matched": true,
+      "matched_paths": [
+        "pyproject.toml",
+        "requirements.txt"
+      ],
+      "config": {
+        "any_of": [
+          "pyproject.toml",
+          "requirements.txt",
+          "setup.py"
+        ]
+      }
+    },
+    {
+      "id": "runtime_shape",
+      "kind": "path_exists",
+      "output": "repo_shape.runtime",
+      "matched": true,
+      "matched_paths": [
+        "runtime/",
+        "scripts/mcp_server.py"
+      ],
+      "config": {
+        "any_of": [
+          "runtime/",
+          "scripts/mcp_server.py"
+        ]
+      }
+    }
+  ]
+}

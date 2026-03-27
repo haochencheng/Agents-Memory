@@ -3,7 +3,6 @@ created_at: 2026-03-27
 updated_at: 2026-03-27
 doc_status: active
 ---
-
 # Bootstrap Checklist
 
 - Project: `agents-memory`
@@ -33,7 +32,7 @@ doc_status: active
 ### Planning
 - Summary: Planning status=HEALTHY (ok=2, warn=0, fail=0, info=0)
 - [OK] `planning_root` present: /Users/cliff/workspace/Agents-Memory/docs/plans
-- [OK] `planning_bundle` 7 planning bundle(s) passed plan-check
+- [OK] `planning_bundle` 9 planning bundle(s) passed plan-check
 
 ### Integration
 - Summary: Integration status=HEALTHY (ok=1, warn=0, fail=0, info=1)
@@ -44,8 +43,8 @@ doc_status: active
 - Summary: Optional status=WATCH (ok=1, warn=5, fail=0, info=1)
 - [OK] `copilot_activation` Agents-Memory activation block present -> /Users/cliff/workspace/Agents-Memory/.github/copilot-instructions.md
 - [INFO] `agents_read_order` bridge not configured; AGENTS read order check skipped
-- [WARN] `refactor_watch` agents_memory/mcp_app.py::memory_record_error high complexity (lines=45>40, locals=9>8, branches=4, missing_guiding_comment)
-- [WARN] `refactor_watch` agents_memory/services/projects.py::parse_projects high complexity (branches=8>5, locals=10>8, nesting=3, missing_guiding_comment)
-- [WARN] `refactor_watch` agents_memory/services/integration_enable.py::cmd_enable high complexity (lines=50>40, locals=11>8, branches=5, missing_guiding_comment)
-- [WARN] `refactor_watch` agents_memory/services/integration_enable.py::_preview_enable_actions high complexity (lines=52>40, locals=14>8, branches=4, missing_guiding_comment)
-- [WARN] `refactor_watch` agents_memory/services/profiles.py::sync_profile_standards high complexity (lines=42>40, locals=15>8, branches=5, missing_guiding_comment)
+- [WARN] `refactor_watch` agents_memory/services/profiles.py::_print_profile high complexity (branches=11>5, lines=40, nesting=3, missing_guiding_comment)
+- [WARN] `refactor_watch` agents_memory/services/profiles.py::cmd_profile_show high complexity (lines=52>40, missing_guiding_comment)
+- [WARN] `refactor_watch` agents_memory/services/profiles.py::_match_path_exists_detector high complexity (locals=9>8, missing_guiding_comment)
+- [WARN] `refactor_watch` agents_memory/services/profiles.py::sync_profile_standards high complexity (locals=9>8)
+- [WARN] `refactor_watch` agents_memory/services/integration_enable.py::_preview_enable_profile_actions high complexity (lines=31, locals=8, missing_guiding_comment)

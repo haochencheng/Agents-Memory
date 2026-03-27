@@ -17,6 +17,56 @@
     "templates/profile/python-service/docs-check.example.yml",
     "templates/profile/python-service/docs/plans/README.example.md"
   ],
+  "variables": [
+    {
+      "name": "python_bin",
+      "description": "Preferred Python executable for commands rendered into local project contracts.",
+      "default": "python3",
+      "required": false
+    },
+    {
+      "name": "tests_dir",
+      "description": "Primary tests directory used by validation and task templates.",
+      "default": "tests",
+      "required": false
+    }
+  ],
+  "detectors": [
+    {
+      "id": "python_project",
+      "kind": "path_exists",
+      "output": "language.python",
+      "config": {
+        "any_of": ["pyproject.toml", "requirements.txt", "setup.py"]
+      }
+    },
+    {
+      "id": "pytest_configured",
+      "kind": "file_contains",
+      "output": "testing.pytest_configured",
+      "config": {
+        "path": "pyproject.toml",
+        "any_of": ["pytest", "tool.pytest", "pytest.ini_options"]
+      }
+    },
+    {
+      "id": "tests_layout",
+      "kind": "path_exists",
+      "output": "testing.layout",
+      "config": {
+        "any_of": ["tests/", "test/"]
+      }
+    }
+  ],
+  "overlays": [
+    {
+      "target": ".github/instructions/agents-memory/project-local.instructions.md",
+      "template": "templates/profile/python-service/project-local.instructions.example.md",
+      "variables": ["python_bin", "tests_dir"],
+      "detectors": ["python_project"],
+      "managed_by": "profile-render"
+    }
+  ],
   "commands": {
     "standards_sync": "amem standards-sync .",
     "plan_check": "amem plan-check .",

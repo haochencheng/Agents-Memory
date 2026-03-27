@@ -224,18 +224,21 @@ python3 scripts/memory.py profile-list
 # 输出: 当前内置 profile 列表
 
 python3 scripts/memory.py profile-show python-service
-# 输出: python-service profile 的 standards / templates / bootstrap 详情
+# 输出: python-service profile 的 standards / templates / bootstrap / variables / detectors / overlays 详情
 
 python3 scripts/memory.py profile-apply python-service . --dry-run
 # 输出: profile 将创建的目录、标准文件和模板写入预览
 
+python3 scripts/memory.py profile-render . --dry-run
+# 输出: 基于当前 project facts 预览将被渲染或移除的 project-local overlays
+
 python3 scripts/memory.py standards-sync .
-# 输出: 将 profile 管理的组织标准文件同步到当前项目
+# 输出: 将 profile 管理的组织标准文件、project facts 和 active overlays 同步到当前项目
 
 # 说明: 如果项目已经通过 profile-apply 或 enable --full 安装过 profile，重新执行 enable 也会自动完成同一轮标准刷新
 
 python3 scripts/memory.py profile-check .
-# 输出: 当前项目已安装 profile 的一致性检查结果
+# 输出: 当前项目已安装 profile 的 manifest / standards / facts / overlays 一致性检查结果
 
 python3 scripts/memory.py docs-check .
 # 输出: 文档入口、contract/test/policy 漂移、明显过期表述检查

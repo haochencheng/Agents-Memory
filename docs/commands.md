@@ -248,7 +248,7 @@ getting-started.md  = 本仓库本地启动与运维
 
 ### `amem profile-show <profile-id>`
 
-展示某个 profile 的标准、模板和 bootstrap 信息。
+展示某个 profile 的标准、模板、bootstrap，以及 schema 中的 `variables / detectors / overlays`。
 
 ### `amem profile-apply <profile-id> [path]`
 
@@ -258,13 +258,17 @@ getting-started.md  = 本仓库本地启动与运维
 
 预览 profile 将写入哪些文件。
 
+### `amem profile-render [path] [--profile <id>] [--dry-run]`
+
+根据当前 `project-facts.json` 对 active overlays 做重渲染，并清理已经失活的 project-local overlay 文件。
+
 ### `amem standards-sync [path]`
 
-同步 profile 管理的组织标准文件。
+同步 profile 管理的组织标准文件，同时刷新 `project-facts.json` 和 active overlays。
 
 ### `amem profile-check [path]`
 
-校验已安装 profile 的一致性。
+校验已安装 profile 的一致性，包括 manifest、standards、facts、overlays 和 AGENTS 路由。
 
 ### `amem docs-check [path]`
 

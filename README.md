@@ -40,6 +40,7 @@ Agents-Memory is a Shared Engineering Brain for AI coding agents. It gives teams
 ```text
 connect project
 	-> bootstrap engineering context with amem bootstrap
+	-> refresh project-local overlays with amem profile-render when repo facts change
 	-> create task bundle
 	-> implement with shared standards
 	-> run delivery gates with amem validate
@@ -119,6 +120,7 @@ Agents-Memory 是面向 AI coding agents 的 Shared Engineering Brain。它把�
 ```text
 连接项目
 	-> 建立工程上下文
+	-> 项目结构变化后刷新 project-local overlay
 	-> 创建任务工件
 	-> 按共享标准实现
 	-> 运行交付门禁
