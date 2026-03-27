@@ -763,36 +763,84 @@ def _recommended_step_metadata(step: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _reconcile_recommended_refactor_state(existing_state: dict[str, object] | None, project_root: Path) -> tuple[list[dict[str, object]], dict[str, object] | None]:
-    if existing_state is None:
-        return [], None
+def _active_refactor_hotspot_keys(project_root: Path) -> tuple[set[str], set[str]]:
     hotspots = collect_refactor_watch_hotspots(project_root)
     active_identifiers = {hotspot.identifier for hotspot in hotspots}
     active_tokens = {hotspot.rank_token for hotspot in hotspots}
-    if not active_identifiers:
-        preserved_steps = [step for step in _state_recommended_steps(existing_state) if step.get("key") != "refactor_bundle"]
-        return preserved_steps, None
+    return active_identifiers, active_tokens
 
+
+def _refactor_payload_matches_active_hotspot(
+    hotspot_payload: object,
+    *,
+    active_identifiers: set[str],
+    active_tokens: set[str],
+) -> bool:
+    if not isinstance(hotspot_payload, dict):
+        return False
+    identifier = hotspot_payload.get("identifier")
+    token = hotspot_payload.get("rank_token")
+    return bool(token in active_tokens or identifier in active_identifiers)
+
+
+def _preserved_recommended_refactor_steps(
+    existing_state: dict[str, object],
+    *,
+    active_identifiers: set[str],
+    active_tokens: set[str],
+) -> list[dict[str, object]]:
     preserved_steps: list[dict[str, object]] = []
     for step in _state_recommended_steps(existing_state):
         if step.get("key") != "refactor_bundle":
             preserved_steps.append(step)
             continue
-        hotspot = step.get("hotspot")
-        identifier = hotspot.get("identifier") if isinstance(hotspot, dict) else None
-        token = hotspot.get("rank_token") if isinstance(hotspot, dict) else None
-        if token in active_tokens or identifier in active_identifiers:
+        if _refactor_payload_matches_active_hotspot(
+            step.get("hotspot"),
+            active_identifiers=active_identifiers,
+            active_tokens=active_tokens,
+        ):
             preserved_steps.append(step)
+    return preserved_steps
 
+
+def _preserved_recommended_refactor_bundle(
+    existing_state: dict[str, object],
+    *,
+    active_identifiers: set[str],
+    active_tokens: set[str],
+) -> dict[str, object] | None:
     bundle = existing_state.get("recommended_refactor_bundle")
-    preserved_bundle: dict[str, object] | None = None
-    if isinstance(bundle, dict):
-        hotspot = bundle.get("hotspot")
-        identifier = hotspot.get("identifier") if isinstance(hotspot, dict) else None
-        token = hotspot.get("rank_token") if isinstance(hotspot, dict) else None
-        if token in active_tokens or identifier in active_identifiers:
-            preserved_bundle = bundle
-    return preserved_steps, preserved_bundle
+    if not isinstance(bundle, dict):
+        return None
+    if _refactor_payload_matches_active_hotspot(
+        bundle.get("hotspot"),
+        active_identifiers=active_identifiers,
+        active_tokens=active_tokens,
+    ):
+        return bundle
+    return None
+
+
+def _reconcile_recommended_refactor_state(existing_state: dict[str, object] | None, project_root: Path) -> tuple[list[dict[str, object]], dict[str, object] | None]:
+    if existing_state is None:
+        return [], None
+
+    active_identifiers, active_tokens = _active_refactor_hotspot_keys(project_root)
+    if not active_identifiers:
+        return [step for step in _state_recommended_steps(existing_state) if step.get("key") != "refactor_bundle"], None
+
+    return (
+        _preserved_recommended_refactor_steps(
+            existing_state,
+            active_identifiers=active_identifiers,
+            active_tokens=active_tokens,
+        ),
+        _preserved_recommended_refactor_bundle(
+            existing_state,
+            active_identifiers=active_identifiers,
+            active_tokens=active_tokens,
+        ),
+    )
 
 
 def _runbook_step_from_state(state: dict[str, object]) -> dict[str, object] | None:
