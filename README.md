@@ -15,6 +15,8 @@ doc_status: active
 
 [![Release](https://img.shields.io/github/v/release/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/releases)
 [![CI](https://github.com/haochencheng/Agents-Memory/actions/workflows/ci.yml/badge.svg)](https://github.com/haochencheng/Agents-Memory/actions/workflows/ci.yml)
+[![Changelog](https://img.shields.io/badge/changelog-managed-0A7EA4)](CHANGELOG.md)
+[![Release Checklist](https://img.shields.io/badge/release-checklist-reviewed-2F855A)](docs/release-checklist.md)
 [![Contributors](https://img.shields.io/github/contributors/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/graphs/contributors)
 [![Last Commit](https://img.shields.io/github/last-commit/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/commits/main)
 [![Repo Size](https://img.shields.io/github/repo-size/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory)
@@ -36,6 +38,13 @@ doc_status: active
 Agents-Memory is an open-source Shared Engineering Brain for AI coding agents. It combines Memory, Standards, Planning, and Validation into an installable and verifiable engineering runtime instead of a loose collection of scripts.
 
 Keywords: AI coding agents, engineering memory, agent runtime, prompt memory, standards sync, planning workflow, validation gate, MCP server, developer tooling, reusable engineering context
+
+### Trust Signals
+
+1. [CI](https://github.com/haochencheng/Agents-Memory/actions/workflows/ci.yml) is public and tied to the same install, compile, test, and docs-check flow contributors run locally.
+2. [Releases](https://github.com/haochencheng/Agents-Memory/releases) are backed by a checked-in [CHANGELOG.md](CHANGELOG.md), not only by ad-hoc GitHub release text.
+3. [docs/release-checklist.md](docs/release-checklist.md) defines how tags and releases are prepared, verified, and checked after publishing.
+4. [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and [CONTRIBUTING.md](CONTRIBUTING.md) make the collaboration path explicit before someone opens an issue or a pull request.
 
 ### What It Solves
 
@@ -87,6 +96,13 @@ python3.12 -m unittest discover -s tests -p 'test_*.py'
 7. Modular code structure: docs/modular-architecture.md
 8. Release checklist: docs/release-checklist.md
 
+### Quality Gates
+
+1. Every pull request is gated by `.github/workflows/ci.yml` for install, compile, unit tests, and `docs-check`.
+2. Public release history is tracked in [CHANGELOG.md](CHANGELOG.md), not only in GitHub release text.
+3. Release execution is governed by [docs/release-checklist.md](docs/release-checklist.md), including CI confirmation, version check, tag, and GitHub Release.
+4. Open-source surface drift is checked by `docs-check`, including collaboration entrypoints, CI workflow semantics, and release checklist semantics.
+
 ### Contribution / Roadmap
 
 Contributions are welcome in three directions:
@@ -123,6 +139,13 @@ Near-term roadmap:
 2. 希望把工程标准、任务脚手架和验证门禁复用到多个仓库的工程师。
 3. 想构建内部 engineering runtime，而不是只堆 prompt 片段的建设者。
 4. 需要把 AI 辅助开发和真实交付纪律更稳地接起来的维护者。
+
+## 可信信号
+
+1. [CI](https://github.com/haochencheng/Agents-Memory/actions/workflows/ci.yml) 是公开的，而且执行的就是贡献者本地会跑的安装、编译、测试和 `docs-check`。
+2. [Releases](https://github.com/haochencheng/Agents-Memory/releases) 对应到仓库内的 [CHANGELOG.md](CHANGELOG.md)，不是只依赖 GitHub 页面上的临时说明。
+3. [docs/release-checklist.md](docs/release-checklist.md) 明确约束了发版前检查、tag、GitHub Release 和发布后核对动作。
+4. [SECURITY.md](SECURITY.md)、[SUPPORT.md](SUPPORT.md)、[CONTRIBUTING.md](CONTRIBUTING.md) 让安全披露、支持路径和贡献入口在首页即可追溯。
 
 Agents-Memory 的目标是把这些能力放进同一个共享层：
 
@@ -238,6 +261,14 @@ Agents-Memory/
 6. docs/architecture.md: repo 级 ADR 与实现取舍
 7. docs/modular-architecture.md: 代码目录结构、模块职责与扩展点
 8. docs/README.md: 完整文档地图
+9. docs/release-checklist.md: 发版前后检查项、tag 与 GitHub Release 流程
+
+## 质量门禁与发布纪律
+
+1. 每个 PR 都会经过 `.github/workflows/ci.yml`，执行安装、编译、单元测试和 `docs-check`。
+2. 对外版本历史记录在 [CHANGELOG.md](CHANGELOG.md)，而不是只留在 GitHub Release 页面。
+3. 发布动作由 [docs/release-checklist.md](docs/release-checklist.md) 约束，覆盖 CI 结果、版本确认、Git tag 和 GitHub Release。
+4. 开源协作入口、CI 语义和 release checklist 语义都已经纳入 `docs-check`，减少首页和真实流程之间的漂移。
 9. docs/release-checklist.md: 版本发布前后检查项与 changelog 流程
 
 ## 贡献
