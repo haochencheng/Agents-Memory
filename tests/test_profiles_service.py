@@ -121,6 +121,25 @@ class ProfilesServiceTests(unittest.TestCase):
             self.assertFalse((target / "docs").exists())
             self.assertFalse((target / "AGENTS.md").exists())
 
+    def test_apply_profile_generates_agents_router_without_template(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "target"
+            target.mkdir()
+            ctx = self._build_context(root)
+            _write_text(
+                root / "profiles" / "frontend-app.yaml",
+                '{"id":"frontend-app","display_name":"Frontend App","applies_to":["frontend"],"standards":["standards/docs/docs-sync.instructions.md"],"templates":[],"commands":{},"bootstrap":{"create":["docs/"]}}\n',
+            )
+            _write_text(root / "standards" / "docs" / "docs-sync.instructions.md", "# Docs Sync\n")
+
+            result = apply_profile(ctx, load_profile(ctx, "frontend-app"), target)
+
+            agents_text = (target / "AGENTS.md").read_text(encoding="utf-8")
+            self.assertIn("agents-memory-bridge.instructions.md", agents_text)
+            self.assertIn(".github/instructions/agents-memory/standards/docs/docs-sync.instructions.md", agents_text)
+            self.assertEqual(result.managed_files, ["AGENTS.md"])
+
     def test_profile_check_reports_ok_for_applied_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -204,3 +223,27 @@ class ProfilesServiceTests(unittest.TestCase):
             self.assertEqual(installed_standard.read_text(encoding="utf-8"), "# old\n")
             self.assertIn(".github/instructions/agents-memory/standards/python/base.instructions.md", result.synced_standards)
             self.assertTrue(result.dry_run)
+
+    def test_sync_profile_standards_refreshes_stale_agents_router(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "target"
+            target.mkdir()
+            ctx = self._build_context(root)
+            _write_text(
+                root / "profiles" / "python-service.yaml",
+                '{"id":"python-service","display_name":"Python Service","applies_to":["backend"],"standards":["standards/python/base.instructions.md","standards/docs/docs-sync.instructions.md"],"templates":[],"commands":{},"bootstrap":{"create":[]}}\n',
+            )
+            _write_text(root / "standards" / "python" / "base.instructions.md", "# Python Base\n")
+            _write_text(root / "standards" / "docs" / "docs-sync.instructions.md", "# Docs Sync\n")
+
+            profile = load_profile(ctx, "python-service")
+            apply_profile(ctx, profile, target)
+            (target / "AGENTS.md").write_text("# AGENTS\n\nLegacy notes only\n", encoding="utf-8")
+
+            result = sync_profile_standards(ctx, profile, target)
+
+            content = (target / "AGENTS.md").read_text(encoding="utf-8")
+            self.assertIn("agents-memory-bridge.instructions.md", content)
+            self.assertIn("standards/python/base.instructions.md", content)
+            self.assertIn("AGENTS.md", result.synced_managed_files)

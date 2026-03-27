@@ -198,7 +198,9 @@ python3 scripts/memory.py docs-check .
 3. `templates/agents-memory-bridge.instructions.md`
 4. `templates/agents-memory-copilot-instructions.md`
 
-`enable` 现在会在目标项目已安装 profile 的情况下自动补跑 standards refresh，所以当 Agents-Memory 新增了 profile-managed 标准文件时，目标项目只需要重新执行 `amem enable .`，不必再额外手动执行一次 `amem standards-sync .`。当前接入链路里，agent 读取的是目标项目中的 `.github/copilot-instructions.md`、`.github/instructions/agents-memory-bridge.instructions.md`、`.github/instructions/agents-memory/standards/*` 和 `.vscode/mcp.json`，并不依赖目标项目额外生成一份 `llms.txt`。
+`enable` 现在会在目标项目已安装 profile 的情况下自动补跑 standards refresh，所以当 Agents-Memory 新增了 profile-managed 标准文件时，目标项目只需要重新执行 `amem enable .`，不必再额外手动执行一次 `amem standards-sync .`。这轮 refresh 现在还会同步更新目标项目根目录下受管的 `AGENTS.md` read-order block，让它始终引用最新的 bridge instruction 和 profile-managed standards。当前接入链路里，agent 读取的是目标项目中的 `.github/copilot-instructions.md`、`.github/instructions/agents-memory-bridge.instructions.md`、`.github/instructions/agents-memory/standards/*`、`AGENTS.md` 和 `.vscode/mcp.json`，并不依赖目标项目额外生成一份 `llms.txt`。
+
+在 `--full` 模式下，`enable` 现在还会顺带补齐现有 planning bundle 缺失的受管文件，例如已有 `docs/plans/completed/` 目录但缺少 `README.md` 这类情况。这样像 `doctor` 里明确可安全修复的 planning 缺口，可以在同一条命令里直接被修好。
 
 MCP 侧现在除了 onboarding tools，还新增了 `memory_get_refactor_hotspots()` 和 `memory_init_refactor_bundle()`：前者让 agent 直接拿结构化 hotspot 列表，不必依赖 doctor 导出文件，而且每个 hotspot 都会带稳定的 `rank_token`；后者则可直接用这个 token 生成对应的 refactor planning bundle，避免后续 hotspot 排序变化导致 bundle 指向漂移。生成成功后，bundle 路径和 follow-up step 还会回写到 `.agents-memory/onboarding-state.json`，让 refactor 进入统一推荐动作队列。
 
@@ -213,7 +215,7 @@ MCP 侧现在除了 onboarding tools，还新增了 `memory_get_refactor_hotspot
 
 仓库当前应用的 `agent-runtime` profile 会把 `docs-sync`、`harness-engineering`、`review-checklist` 和 `python/base.instructions.md` 一起同步到 `.github/instructions/agents-memory/standards/`，这样规划约束和 Python 复杂度约束都会真正进入当前仓库的 agent 上下文，而不只是停留在 `standards/` 源目录。
 
-`profile-apply` 现在会默认写出 `docs/plans/README.md` 入口模板，`doctor` 也会开始感知 planning root 和 planning bundle 健康状态。
+`profile-apply` 现在会默认写出 `docs/plans/README.md` 入口模板，并在项目根目录生成一个最小受管 `AGENTS.md` read-order block；即使项目原本已经有自己的 `AGENTS.md`，Agents-Memory 也只会更新自己的受管 block，不会粗暴覆盖其余内容。`doctor` 也会开始感知 planning root、planning bundle，以及 `AGENTS.md` 是否仍引用最新 bridge / standards 健康状态。
 `doctor` 的输出现在按 `Core / Planning / Integration / Optional` 分组，并为每个分组生成健康小结、修复建议、按优先级排序的行动序列，以及带 `Command / Verify with / Next command / Done when` 的 onboarding runbook，同时给出 `Project Bootstrap Checklist`。
 它现在还会追加 `refactor_watch`，用 AST 规则扫描 Python 函数是否逼近复杂度阈值，并提示哪些函数应该先重构再继续叠加能力。`docs/plans/refactor-watch.md` 现在不只是“发现问题”，还会直接给出 `amem refactor-bundle .` / `--token <hotspot-token>` 入口，把目标 hotspot 落成 `docs/plans/refactor-<slug>/` bundle。
 如果加上 `--write-checklist --write-state`，它还会导出 `docs/plans/bootstrap-checklist.md`、`docs/plans/refactor-watch.md` 和 `.agents-memory/onboarding-state.json`，把控制台状态沉淀成可复查工件。

@@ -140,6 +140,7 @@ Agents-Memory/
 | `.github/instructions/agents-memory/profile-manifest.json` | Applied profile manifest in target project | `profile-apply`, `profile-check`, `doctor` |
 | `.github/instructions/agents-memory/standards/*` | Active repository instruction set consumed by Copilot/agents | Repo-local agent sessions |
 | `.github/copilot-instructions.md` | Repo-wide activation entrypoint | GitHub Copilot |
+| `AGENTS.md` | Managed read-order router for profile-managed projects | Copilot / ChatGPT / Claude style agents |
 | `.agents-memory/onboarding-state.json` | Current onboarding / refactor recommendation state | `doctor`, `onboarding-execute`, `refactor-bundle` |
 | `templates/profile/*` | Profile bootstrap templates | `profile-apply` |
 | `templates/planning/*` | Planning bundle templates | `plan-init` |
@@ -166,7 +167,7 @@ python3 scripts/memory.py copilot-setup [project-id]   # install repo-wide Copil
 python3 scripts/memory.py agent-list                   # list built-in agent adapters
 python3 scripts/memory.py agent-setup <agent> [path]   # install a specific agent adapter
 python3 scripts/memory.py register [path]              # one-command project registration + default agent + bridge install
-python3 scripts/memory.py enable [path] [--full] [--dry-run] [--json] # one-command Shared Engineering Brain enable; rerunning on a profile-managed project also refreshes managed standards, --full adds profile, Copilot, and refactor follow-up, --dry-run previews Capabilities/Planned Writes/Skipped Existing, --json emits structured preview
+python3 scripts/memory.py enable [path] [--full] [--dry-run] [--json] # one-command Shared Engineering Brain enable; rerunning on a profile-managed project also refreshes managed standards plus the root AGENTS.md router, and --full also repairs safe missing planning bundle files before Copilot/refactor follow-up, --dry-run previews Capabilities/Planned Writes/Skipped Existing, --json emits structured preview
 python3 scripts/memory.py bridge-install <project-id>  # install bridge instruction in a project
 python3 scripts/memory.py mcp-setup [project-id]       # write .vscode/mcp.json for a registered project
 python3 scripts/memory.py doctor [project-id] [--write-checklist] [--write-state] # verify a project's full integration health

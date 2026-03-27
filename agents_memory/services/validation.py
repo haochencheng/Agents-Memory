@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from agents_memory.runtime import AppContext
-from agents_memory.services.profiles import PROFILE_MANIFEST_REL, detect_applied_profile, expected_profile_paths, load_profile, read_profile_manifest
+from agents_memory.services.profiles import PROFILE_MANIFEST_REL, detect_applied_profile, expected_profile_paths, load_profile, profile_agents_router_status, read_profile_manifest
 
 
 CORE_DOC_COMMANDS = [
@@ -707,6 +707,8 @@ def collect_profile_check_findings(ctx: AppContext, project_root: Path, profile_
     findings.extend(_collect_required_path_findings("profile_bootstrap_dirs", project_root, expected["bootstrap_dirs"]))
     findings.extend(_collect_required_path_findings("profile_standard_files", project_root, expected["standard_files"]))
     findings.extend(_collect_required_path_findings("profile_template_files", project_root, expected["template_files"]))
+    agents_ok, agents_detail = profile_agents_router_status(ctx, profile, project_root)
+    findings.append(ValidationFinding("OK" if agents_ok else "FAIL", "profile_agents_file", agents_detail))
 
     invalid_commands = [command for command in profile.commands.values() if not command.startswith(("amem ", "python3 scripts/memory.py "))]
     findings.append(

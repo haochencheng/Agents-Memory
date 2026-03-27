@@ -73,6 +73,14 @@ class RefactorBundleResult:
     dry_run: bool
 
 
+@dataclass(frozen=True)
+class PlanRepairResult:
+    target_root: Path
+    repaired_files: list[str]
+    skipped_bundles: list[str]
+    dry_run: bool
+
+
 def slugify_task_name(task_name: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9]+", "-", task_name.strip().lower()).strip("-")
     return cleaned or "untitled-task"
@@ -111,6 +119,12 @@ def _merge_managed_section(existing_content: str, rendered_content: str, heading
 
 def _target_plan_root(target_root: Path, task_slug: str) -> Path:
     return target_root / DEFAULT_PLAN_ROOT / task_slug
+
+
+def _resolve_plan_bundle_targets(target_root: Path) -> tuple[Path, list[Path]]:
+    plans_root = target_root / DEFAULT_PLAN_ROOT
+    bundles = sorted(path for path in plans_root.iterdir() if path.is_dir()) if plans_root.exists() else []
+    return target_root, bundles
 
 
 def _sanitize_bundle_value(value: Any, target_root: Path) -> Any:
@@ -329,6 +343,13 @@ def _write_plan_template_files(
     return wrote_files, skipped_files
 
 
+def _task_name_from_plan_slug(task_slug: str) -> str:
+    words = [part for part in task_slug.replace("_", "-").split("-") if part]
+    if not words:
+        return "Untitled Task"
+    return " ".join(word.capitalize() for word in words)
+
+
 def init_plan_bundle(
     ctx: AppContext,
     task_name: str,
@@ -368,6 +389,45 @@ def init_plan_bundle(
         created_dirs=created_dirs,
         wrote_files=wrote_files,
         skipped_files=skipped_files,
+        dry_run=dry_run,
+    )
+
+
+def repair_plan_bundles(
+    ctx: AppContext,
+    target_root: Path,
+    *,
+    dry_run: bool = False,
+) -> PlanRepairResult:
+    templates_dir = _planning_templates_dir(ctx)
+    if not templates_dir.exists():
+        raise FileNotFoundError(f"planning templates directory not found: {templates_dir}")
+
+    root, bundles = _resolve_plan_bundle_targets(target_root)
+    repaired_files: list[str] = []
+    skipped_bundles: list[str] = []
+
+    for bundle in bundles:
+        task_slug = bundle.name
+        task_name = _task_name_from_plan_slug(task_slug)
+        wrote_files, _skipped_files = _write_plan_template_files(
+            ctx,
+            templates_dir=templates_dir,
+            plan_root=bundle,
+            target_root=root,
+            task_name=task_name,
+            task_slug=task_slug,
+            dry_run=dry_run,
+        )
+        if wrote_files:
+            repaired_files.extend(wrote_files)
+            continue
+        skipped_bundles.append(bundle.relative_to(root).as_posix())
+
+    return PlanRepairResult(
+        target_root=root,
+        repaired_files=repaired_files,
+        skipped_bundles=skipped_bundles,
         dry_run=dry_run,
     )
 

@@ -137,10 +137,11 @@ python3 scripts/memory.py enable . --full --dry-run --json
 # 输出: 结构化 JSON 预览，方便 agent 或 CI 直接消费
 
 python3 scripts/memory.py enable . --full
-# 输出: 在默认模式基础上继续启用推荐 profile、Copilot 激活，以及第一条 refactor hotspot 对应的 bundle / follow-up state
+# 输出: 在默认模式基础上继续启用推荐 profile、Copilot 激活、根目录最小 AGENTS.md read-order router，以及第一条 refactor hotspot 对应的 bundle / follow-up state
+# 提示: 现在也会补齐现有 planning bundle 缺失的受管文件
 
 python3 scripts/memory.py enable .
-# 输出: 如果项目已经安装 profile，会顺便刷新 profile 管理的 standards，把新增标准文件同步到目标项目
+# 输出: 如果项目已经安装 profile，会顺便刷新 profile 管理的 standards，并同步更新根目录 AGENTS.md 中的受管 read-order block
 
 python3 scripts/memory.py doctor . --write-checklist --write-state
 # 输出: 在 docs/plans/bootstrap-checklist.md、docs/plans/refactor-watch.md 和 .agents-memory/onboarding-state.json 导出 onboarding / hotspot 工件

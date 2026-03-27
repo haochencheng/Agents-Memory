@@ -2,6 +2,9 @@ from __future__ import annotations
 
 DEFAULT_BRIDGE_INSTRUCTION_REL = ".github/instructions/agents-memory-bridge.instructions.md"
 COPILOT_INSTRUCTIONS_REL = ".github/copilot-instructions.md"
+AGENTS_ROUTER_REL = "AGENTS.md"
+AGENTS_BLOCK_START = "<!-- agents-memory:read-order:start -->"
+AGENTS_BLOCK_END = "<!-- agents-memory:read-order:end -->"
 COPILOT_TEMPLATE_NAME = "agents-memory-copilot-instructions.md"
 BRIDGE_TEMPLATE_NAME = "agents-memory-bridge.instructions.md"
 COPILOT_BLOCK_START = "<!-- agents-memory:start -->"

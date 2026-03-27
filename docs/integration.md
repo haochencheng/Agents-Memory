@@ -78,7 +78,8 @@ amem enable . --full --dry-run --json
 1. 自动应用推荐 profile
 2. 后续再次执行 `amem enable .` 时，会继续自动同步该 profile 管理的标准文件
 3. 安装或更新 `.github/copilot-instructions.md`
-4. 为第一条 refactor hotspot 生成 bundle，并把 follow-up 写回 onboarding state
+4. 安全补齐现有 planning bundle 缺失的受管文件
+5. 为第一条 refactor hotspot 生成 bundle，并把 follow-up 写回 onboarding state
 
 如果你仍然想逐项确认或手动控制每一步，也可以继续使用交互式 `amem register`：
 
@@ -121,21 +122,24 @@ Domains (逗号分隔) [frontend, python]: ↵
 
 > **提示 4**：`enable --dry-run` 不会写任何文件，适合先评估将要启用的能力和目标路径。
 
-> **提示 5**：当前目标项目里的 agent 读取入口是 `.github/copilot-instructions.md`、`.github/instructions/agents-memory-bridge.instructions.md`、`.github/instructions/agents-memory/standards/*` 和 `.vscode/mcp.json`。这条接入链路不要求目标项目额外生成 `llms.txt` 才能生效；`llms.txt` 仍主要用于 Agents-Memory 仓库自身的机器可读地图。
+> **提示 5**：当前目标项目里的 agent 读取入口是 `.github/copilot-instructions.md`、`.github/instructions/agents-memory-bridge.instructions.md`、`.github/instructions/agents-memory/standards/*`、根目录 `AGENTS.md` 中的受管 read-order block，以及 `.vscode/mcp.json`。这条接入链路不要求目标项目额外生成 `llms.txt` 才能生效；`llms.txt` 仍主要用于 Agents-Memory 仓库自身的机器可读地图。
+
+> **提示 6**：这里的自动修复目前只覆盖安全、模板化的 planning bundle 缺失文件修复。像 refactor hotspot 这类需要代码判断的项，仍会保留为 runbook / bundle，交给后续人工或 agent 按计划处理。
 
 ---
 
-## 可选：AGENTS.md 读序注册
+## 受管：AGENTS.md 读序路由
 
-如果你的项目有 `AGENTS.md`，把 bridge instruction 加到读序最前，让 Agent 每次 session 自动加载：
+对 profile-managed 项目，`profile-apply` 和 `enable --full` 现在都会在项目根目录生成或更新一个最小 `AGENTS.md` 受管 block，用来路由 read order：
 
 ```markdown
-## Read Order
+## Agents-Memory Read Order
 
 1. `.github/instructions/agents-memory-bridge.instructions.md`  ← 加在最前
-2. `.github/instructions/python.instructions.md`
-...
+2. `.github/instructions/agents-memory/standards/...`
 ```
+
+如果项目本来已经有自己的 `AGENTS.md`，Agents-Memory 只会更新自己的受管 block，不覆盖其他项目说明。
 
 ---
 
@@ -256,7 +260,7 @@ amem doctor my-service
 3. bridge instruction 是否存在
 4. `.vscode/mcp.json` 是否包含 `agents-memory`
 5. 当前机器上的 `python3.12` / `mcp` 是否就绪
-6. `AGENTS.md` 或 `docs/AGENTS.md` 是否引用了 bridge instruction（可选项）
+6. 根目录 `AGENTS.md` 的受管 block 是否引用了最新 bridge instruction 和 profile-managed standards
 
 如果你希望把体检结果直接变成 agent 可执行状态：
 

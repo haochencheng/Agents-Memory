@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from agents_memory.runtime import build_context
-from agents_memory.services.planning import cmd_refactor_bundle, init_onboarding_bundle, init_plan_bundle, init_refactor_bundle, slugify_task_name
+from agents_memory.services.planning import cmd_refactor_bundle, init_onboarding_bundle, init_plan_bundle, init_refactor_bundle, repair_plan_bundles, slugify_task_name
 from agents_memory.services.validation import cmd_plan_check, collect_plan_check_findings
 
 
@@ -82,6 +82,25 @@ class PlanningServiceTests(unittest.TestCase):
             findings = collect_plan_check_findings(target, str(target))
 
             self.assertTrue(any(f.status == "FAIL" and f.key == "plan_files" for f in findings))
+
+    def test_repair_plan_bundles_creates_missing_files_for_existing_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "target"
+            bundle = target / "docs" / "plans" / "completed"
+            bundle.mkdir(parents=True)
+            ctx = self._build_context(root)
+            for name in ["README.template.md", "spec.template.md", "plan.template.md", "task-graph.template.md", "validation.template.md"]:
+                _write_text(root / "templates" / "planning" / name, f"# {name}\nplanning bundle\n## Acceptance Criteria\n## Change Set\n## Work Items\n## Exit Criteria\n## Required Checks\n{{{{TASK_NAME}}}}\n")
+            _write_text(bundle / "spec.md", "## Acceptance Criteria\n")
+            _write_text(bundle / "plan.md", "## Change Set\n")
+            _write_text(bundle / "task-graph.md", "## Work Items\n## Exit Criteria\n")
+            _write_text(bundle / "validation.md", "## Required Checks\n")
+
+            result = repair_plan_bundles(ctx, target)
+
+            self.assertTrue((bundle / "README.md").exists())
+            self.assertIn("docs/plans/completed/README.md", result.repaired_files)
 
     def test_init_onboarding_bundle_uses_exported_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

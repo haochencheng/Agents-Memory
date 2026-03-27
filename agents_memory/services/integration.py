@@ -32,12 +32,11 @@ from agents_memory.services.projects import (
     detect_instruction_files,
     detect_project_id,
     parse_projects,
-    project_agents_reference_exists,
     project_already_registered,
     resolve_bridge_rel,
     resolve_project_target,
 )
-from agents_memory.services.profiles import PROFILE_MANIFEST_REL, ProfileStandardsSyncResult, apply_profile, detect_applied_profile, load_profile, expected_profile_paths, sync_profile_standards
+from agents_memory.services.profiles import PROFILE_MANIFEST_REL, ProfileStandardsSyncResult, apply_profile, detect_applied_profile, load_profile, expected_profile_paths, profile_agents_router_status, sync_profile_standards
 from agents_memory.services.validation import collect_plan_check_findings, collect_profile_check_findings, collect_refactor_watch_findings, collect_refactor_watch_hotspots
 
 if TYPE_CHECKING:
@@ -149,12 +148,12 @@ DOCTOR_RUNBOOK = {
         "approval_reason": "copilot activation writes tracked repository instructions that should be explicitly approved",
     },
     "agents_read_order": {
-        "action": "Add the bridge reference to AGENTS.md or docs/AGENTS.md so humans and agents share the same startup order.",
-        "command": 'rg -n "agents-memory-bridge" AGENTS.md docs/AGENTS.md',
+        "action": "Refresh the managed AGENTS.md read-order block so it references the current bridge instruction and profile-managed standards.",
+        "command": "amem standards-sync .",
         "verify_with": "amem doctor .",
-        "done_when": "`amem doctor .` shows `[INFO] agents_read_order bridge referenced in AGENTS/docs/AGENTS`.",
+        "done_when": "`amem doctor .` shows `[OK] agents_read_order`.",
         "safe_to_auto_execute": False,
-        "approval_reason": "the current command is diagnostic only; updating AGENTS read order should be a human-reviewed doc edit",
+        "approval_reason": "refreshing AGENTS.md updates tracked repository instructions and should be reviewed before commit",
     },
 }
 DOCTOR_GROUP_REMEDIATION = {
@@ -177,7 +176,7 @@ DOCTOR_GROUP_REMEDIATION = {
     },
     "Optional": {
         "copilot_activation": "Run `amem copilot-setup .` to add repo-wide Copilot auto-activation.",
-        "agents_read_order": "Reference the bridge in AGENTS.md or docs/AGENTS.md if you want explicit read-order guidance.",
+        "agents_read_order": "Re-run `amem standards-sync .` or `amem enable . --full` so AGENTS.md references the current bridge and managed standards.",
         "refactor_watch": "Refactor flagged functions before adding more behavior, and add a short guiding comment when complex logic must remain in place.",
     },
 }
@@ -221,6 +220,15 @@ def _doctor_mcp_check(ctx: AppContext, project_root: Path) -> tuple[str, str, st
         return mcp_status, "mcp_config", f"agents-memory server entry missing in {mcp_file}"
     except Exception as exc:
         return mcp_status, "mcp_config", f"invalid JSON in {mcp_file}: {exc}"
+
+
+def _doctor_agents_router_check(ctx: AppContext, project_root: Path, applied_profile_id: str | None) -> tuple[str, str, str]:
+    if not applied_profile_id:
+        return "INFO", "agents_read_order", "AGENTS read-order check skipped: no applied profile"
+
+    profile = load_profile(ctx, applied_profile_id)
+    is_current, detail = profile_agents_router_status(ctx, profile, project_root)
+    return ("OK" if is_current else "WARN"), "agents_read_order", detail
 
 
 def _doctor_runtime_checks() -> list[tuple[str, str, str]]:
@@ -1068,11 +1076,10 @@ def _doctor_report(ctx: AppContext, project_id_or_path: str) -> dict[str, object
     checks.append(_doctor_mcp_check(ctx, project_root))
     checks.extend(_doctor_runtime_checks())
 
-    if bridge_rel:
-        agents_ref_exists = project_agents_reference_exists(project_root, bridge_rel)
-        checks.append((("INFO" if agents_ref_exists else "WARN"), "agents_read_order", "bridge referenced in AGENTS/docs/AGENTS" if agents_ref_exists else "bridge not referenced in AGENTS.md or docs/AGENTS.md (optional but recommended)"))
-    else:
+    if not bridge_rel:
         checks.append(("INFO", "agents_read_order", "bridge not configured; AGENTS read order check skipped"))
+    else:
+        checks.append(_doctor_agents_router_check(ctx, project_root, detect_applied_profile(project_root)))
     checks.extend(_doctor_profile_checks(ctx, project_root))
     checks.extend(_doctor_planning_checks(project_root))
     checks.extend(_doctor_refactor_watch_checks(project_root))
@@ -1602,6 +1609,7 @@ def _preview_enable_profile_actions(ctx: AppContext, project_root: Path, *, full
         planned_writes.extend(str(path) for path in expected["bootstrap_dirs"])
         planned_writes.extend(str(path) for path in expected["standard_files"])
         planned_writes.extend(str(path) for path in expected["template_files"])
+        planned_writes.extend(str(path) for path in expected["managed_files"])
         planned_writes.append(str(project_root / PROFILE_MANIFEST_REL))
         return capabilities, planned_writes, skipped_existing
 
@@ -1610,6 +1618,7 @@ def _preview_enable_profile_actions(ctx: AppContext, project_root: Path, *, full
         profile = load_profile(ctx, applied_profile_id)
         expected = expected_profile_paths(profile, project_root)
         planned_writes.extend(str(path) for path in expected["standard_files"])
+        planned_writes.extend(str(path) for path in expected["managed_files"])
         planned_writes.append(str(project_root / PROFILE_MANIFEST_REL))
     else:
         skipped_existing.append("profile auto-apply skipped in default mode")
@@ -1816,8 +1825,11 @@ def _print_enable_standards_sync(result: ProfileStandardsSyncResult) -> None:
         missing = ", ".join(result.missing_sources)
         print(f"- standards: incomplete (missing sources: {missing})")
         return
-    if result.synced_standards or result.manifest_updated:
-        print(f"- standards: synced ({len(result.synced_standards)} updated)")
+    if result.synced_standards or result.synced_managed_files or result.manifest_updated:
+        detail = f"{len(result.synced_standards)} standards"
+        if result.synced_managed_files:
+            detail += ", AGENTS.md refreshed"
+        print(f"- standards: synced ({detail})")
         return
     print("- standards: ready")
 
@@ -1828,6 +1840,19 @@ def _sync_enable_profile_standards(ctx: AppContext, project_root: Path, profile_
     profile = load_profile(ctx, profile_id)
     result = sync_profile_standards(ctx, profile, project_root)
     _print_enable_standards_sync(result)
+
+
+def _repair_enable_planning_bundles(ctx: AppContext, project_root: Path, *, full: bool) -> None:
+    if not full:
+        return
+
+    from agents_memory.services.planning import repair_plan_bundles
+
+    result = repair_plan_bundles(ctx, project_root)
+    if result.repaired_files:
+        print(f"- planning bundles: repaired ({len(result.repaired_files)} files)")
+        return
+    print("- planning bundles: ready")
 
 
 def _write_enable_refactor_followup(
@@ -1910,6 +1935,7 @@ def cmd_enable(ctx: AppContext, project_id_or_path: str = ".", *, full: bool = F
 
     profile_id = _apply_enable_profile(ctx, project_root, full=full)
     _sync_enable_profile_standards(ctx, project_root, profile_id)
+    _repair_enable_planning_bundles(ctx, project_root, full=full)
 
     if full:
         print("- copilot activation: applying")

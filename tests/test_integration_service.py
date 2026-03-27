@@ -439,6 +439,42 @@ class IntegrationServiceTests(unittest.TestCase):
 
             self.assertIn("planning_root", buffer.getvalue())
 
+    def test_cmd_doctor_warns_when_agents_router_is_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(
+                root / "memory" / "projects.md",
+                "\n".join(
+                    [
+                        "# Project Registry",
+                        "",
+                        "## demo-project",
+                        "- **id**: demo-project",
+                        f"- **root**: {project_root}",
+                        "- **bridge_instruction**: .github/instructions/agents-memory-bridge.instructions.md",
+                        "- **active**: true",
+                    ]
+                ),
+            )
+            _write_text(
+                root / "profiles" / "python-service.yaml",
+                '{"id":"python-service","display_name":"Python Service","applies_to":["backend"],"standards":["standards/docs/docs-sync.instructions.md"],"templates":[],"commands":{"doctor":"amem doctor ."},"bootstrap":{"create":["docs/"]}}\n',
+            )
+            _write_text(root / "standards" / "docs" / "docs-sync.instructions.md", "docs sync\n")
+            apply_profile(ctx, load_profile(ctx, "python-service"), project_root)
+            _write_text(project_root / "AGENTS.md", "# AGENTS\n\nLegacy file\n")
+
+            buffer = StringIO()
+            with redirect_stdout(buffer):
+                cmd_doctor(ctx, str(project_root))
+
+            output = buffer.getvalue()
+            self.assertIn("agents_read_order", output)
+            self.assertIn("AGENTS.md missing managed references", output)
+
     def test_cmd_doctor_skips_bridge_noise_when_registry_disables_bridge(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -994,6 +1030,7 @@ class IntegrationServiceTests(unittest.TestCase):
                 exit_code = cmd_enable(ctx, str(project_root), full=True)
 
             self.assertEqual(exit_code, 0)
+            self.assertTrue((project_root / "AGENTS.md").exists())
             self.assertTrue((project_root / ".github" / "copilot-instructions.md").exists())
             self.assertTrue((project_root / ".github" / "instructions" / "agents-memory" / "profile-manifest.json").exists())
             self.assertTrue(any(path.is_dir() for path in (project_root / "docs" / "plans").glob("refactor-*")))
@@ -1043,3 +1080,48 @@ class IntegrationServiceTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             self.assertEqual(installed_standard.read_text(encoding="utf-8"), "docs sync v2\n")
+
+    def test_cmd_enable_full_repairs_missing_plan_bundle_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(root / "templates" / "agents-memory-bridge.instructions.md", "root={{AGENTS_MEMORY_ROOT}}\nproject={{PROJECT_ID}}\n")
+            _write_text(root / "templates" / "agents-memory-copilot-instructions.md", "<!-- AGENTS-MEMORY:START -->\nproject={{PROJECT_ID}}\nroot={{AGENTS_MEMORY_ROOT}}\n<!-- AGENTS-MEMORY:END -->\n")
+            for name in ["README.template.md", "spec.template.md", "plan.template.md", "task-graph.template.md", "validation.template.md"]:
+                _write_text(root / "templates" / "planning" / name, f"# {name}\nplanning bundle\n## Acceptance Criteria\n## Change Set\n## Work Items\n## Exit Criteria\n## Required Checks\n{{{{TASK_NAME}}}}\n")
+            _write_text(
+                root / "profiles" / "python-service.yaml",
+                json.dumps(
+                    {
+                        "id": "python-service",
+                        "display_name": "Python Service",
+                        "applies_to": ["backend", "python"],
+                        "standards": ["standards/docs/docs-sync.instructions.md"],
+                        "templates": ["templates/profile/python-service/docs/plans/README.example.md"],
+                        "commands": {"doctor": "amem doctor ."},
+                        "bootstrap": {"create": [".github/instructions/", "docs/", "tests/"]},
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            _write_text(root / "standards" / "docs" / "docs-sync.instructions.md", "docs sync\n")
+            _write_text(root / "templates" / "profile" / "python-service" / "docs" / "plans" / "README.example.md", "planning root\n")
+            _write_text(project_root / "pyproject.toml", "[project]\nname='demo'\n")
+            completed_bundle = project_root / "docs" / "plans" / "completed"
+            completed_bundle.mkdir(parents=True)
+            _write_text(completed_bundle / "spec.md", "## Acceptance Criteria\n")
+            _write_text(completed_bundle / "plan.md", "## Change Set\n")
+            _write_text(completed_bundle / "task-graph.md", "## Work Items\n## Exit Criteria\n")
+            _write_text(completed_bundle / "validation.md", "## Required Checks\n")
+            _write_text(
+                project_root / "service.py",
+                "def heavy(value):\n    total = 0\n    items = []\n    results = {}\n    status = None\n    errors = []\n    flags = set()\n    cache = {}\n    index = 0\n    if value > 0:\n        for outer in range(value):\n            if outer % 2 == 0:\n                for inner in range(3):\n                    if inner == 1:\n                        total += outer + inner\n                        items.append(total)\n                        results[outer] = inner\n                        status = 'hot'\n                    else:\n                        errors.append(inner)\n            else:\n                while index < 2:\n                    flags.add(index)\n                    index += 1\n    if total > 3:\n        cache['total'] = total\n    if items:\n        return total + len(items) + len(results) + len(errors) + len(flags) + len(cache)\n    return total\n",
+            )
+
+            with redirect_stdout(StringIO()):
+                exit_code = cmd_enable(ctx, str(project_root), full=True)
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((completed_bundle / "README.md").exists())
