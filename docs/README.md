@@ -8,6 +8,12 @@ doc_status: active
 
 > Shared Engineering Brain for AI coding agents：Memory + Standards + Planning + Validation。
 
+## 文档边界
+
+- [AI Engineering Operating System](ai-engineering-operating-system.md)：产品定位、系统基线、顶层 workflow、状态机、实施状态。
+- [架构决策](architecture.md)：repo 级实现决策与技术取舍，不重复产品定位和系统总设计。
+- [模块化与插件化结构](modular-architecture.md)：代码目录结构、模块分层、插件扩展点，不重复 ADR 技术取舍。
+
 ## 目录
 
 - [功能概述](#功能概述)
@@ -32,4 +38,4 @@ doc_status: active
 - [System Architecture](ai-engineering-operating-system.md#系统架构图)
 - [Repo Implementation Plan](ai-engineering-operating-system.md#repo-级实施方案)
 - [日常运维操作](ops.md)
-- [架构决策](architecture.md)
+- [架构决策（Repo ADR）](architecture.md)

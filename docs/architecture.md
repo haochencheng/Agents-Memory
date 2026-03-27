@@ -4,7 +4,42 @@ updated_at: 2026-03-27
 doc_status: active
 ---
 
-# 架构决策记录 (ADR)
+# Repo Architecture ADR
+
+> 本文档只记录仓库级实现决策与技术取舍，不重复产品定位、顶层命令模型、状态机、实施状态矩阵。那些内容统一以 [AI Engineering Operating System](ai-engineering-operating-system.md) 为准。
+
+---
+
+## 边界说明
+
+`docs/ai-engineering-operating-system.md` 负责：
+
+1. 产品定位与系统目标。
+2. Shared Engineering Brain 的能力模型。
+3. 顶层 workflow、状态机、系统架构图。
+4. 当前实施状态与 repo 级推进路线。
+
+`docs/architecture.md` 只负责：
+
+1. repo 级实现决策。
+2. 关键技术取舍与后果。
+3. 低层存储、检索、升级机制等 ADR。
+4. 为什么采用某种实现路线，而不是目录树或模块分层清单本身。
+
+`docs/modular-architecture.md` 负责：
+
+1. 代码目录结构。
+2. runtime / services / commands / integrations 的分层边界。
+3. 插件层如何扩展，而不是为什么做某个技术取舍。
+
+换句话说：
+
+```text
+AI Engineering Operating System = 产品与系统基线
+architecture.md               = 仓库实现 ADR
+```
+
+---
 
 ## ADR-001: 三层分级记忆而非单文件
 
@@ -123,3 +158,13 @@ TurboQuant 解决的是 **LLM 推理时 KV Cache 的服务端压缩**（H100 GPU
 | 离线支持 | 否 | 是 |
 
 本项目错误记录以中英文混合为主，OpenAI embedding 质量明显更好。向量库一旦建立，日常搜索无需再调用 API（只有 embed 命令需要）。
+
+---
+
+## 使用规则
+
+后续新增内容时，遵守下面 3 条：
+
+1. 如果是在说明产品能力、workflow、状态机或实施状态，写入 `docs/ai-engineering-operating-system.md`。
+2. 如果是在解释某个 repo 级技术决策为什么这样做，写入 `docs/architecture.md`。
+3. 如果一个段落同时在回答“产品要成为什么”和“代码为什么这样实现”，优先拆开，避免双向漂移。

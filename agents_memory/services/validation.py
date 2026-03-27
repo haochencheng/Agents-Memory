@@ -105,6 +105,14 @@ CONTRACT_REQUIREMENTS = {
         "path": Path(DOCS_DIR) / "ai-engineering-operating-system.md",
         "phrases": ["Shared Engineering Brain", "Memory", "Standards", "Planning", "Validation", "实施状态矩阵"],
     },
+    "repo_architecture": {
+        "path": Path(DOCS_DIR) / "architecture.md",
+        "phrases": ["仓库级实现决策与技术取舍", "不重复产品定位", "AI Engineering Operating System", "仓库实现 ADR"],
+    },
+    "modular_architecture": {
+        "path": Path(DOCS_DIR) / "modular-architecture.md",
+        "phrases": ["代码目录结构与模块分层", "runtime / services / commands / integrations", "为什么这样实现", "代码如何分层与扩展"],
+    },
     "foundation_hardening": {
         "path": Path(DOCS_DIR) / "foundation-hardening.md",
         "phrases": ["Behavior change", "=> code change", "=> docs change", "=> test or validation change"],

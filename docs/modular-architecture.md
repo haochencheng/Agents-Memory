@@ -10,6 +10,29 @@ doc_status: active
 
 ---
 
+## 边界说明
+
+`docs/modular-architecture.md` 负责：
+
+1. 代码目录结构与模块分层。
+2. runtime / services / commands / integrations 的职责边界。
+3. 插件扩展点和模块装配方式。
+
+`docs/architecture.md` 负责：
+
+1. repo 级技术决策与 ADR。
+2. 为什么采用某种实现路线。
+3. 某个设计选择带来的后果与权衡。
+
+换句话说：
+
+```text
+architecture.md         = 为什么这样实现
+modular-architecture.md = 代码如何分层与扩展
+```
+
+---
+
 ## 新结构
 
 ```text
@@ -134,3 +157,13 @@ scripts/
 3. 对应 doctor 校验规则
 
 核心的错误记录、规则同步、向量检索、项目注册表都不用再动。
+
+---
+
+## 使用规则
+
+后续新增内容时，遵守下面 3 条：
+
+1. 如果是在解释模块目录、层级职责、adapter 扩展点，写入 `docs/modular-architecture.md`。
+2. 如果是在解释某个 repo 级技术决策为什么成立，写入 `docs/architecture.md`。
+3. 如果一个段落同时在写“为什么”与“怎么分层”，优先拆开，避免 ADR 和模块设计互相漂移。

@@ -14,6 +14,8 @@ doc_status: active
 4. 文档元数据完整：`created_at`、`updated_at`、`doc_status` 可解析且合法
 5. 设计/规划类文档的实施状态需要与当前实现一致
 6. `docs/ai-engineering-operating-system.md` 必须保持单一 canonical 结构，不允许重复 front matter、重复主标题或历史章节回流
+7. `docs/architecture.md` 只记录 repo 级实现 ADR，不重复产品定位、顶层 workflow、状态机与实施状态矩阵
+8. `docs/modular-architecture.md` 只记录代码目录结构、模块分层与插件扩展点，不重复 ADR 技术取舍
 
 代码验证：
 
