@@ -186,7 +186,15 @@ OPEN_SOURCE_URL_PHRASES = [
     'Issues = "',
 ]
 
+OPEN_SOURCE_CI_WORKFLOW_PHRASES = [
+    "python -m pip install .",
+    "python -m py_compile",
+    "python -m unittest discover -s tests -p 'test_*.py'",
+    "python scripts/memory.py docs-check .",
+]
+
 GITHUB_DIR = Path(".github")
+CI_WORKFLOW_PATH = GITHUB_DIR / "workflows" / "ci.yml"
 
 OPEN_SOURCE_REQUIRED_FILES = [
     Path(LICENSE_FILE),
@@ -197,6 +205,7 @@ OPEN_SOURCE_REQUIRED_FILES = [
     Path("SUPPORT.md"),
     Path("PULL_REQUEST_TEMPLATE.md"),
     GITHUB_DIR / "FUNDING.yml",
+    CI_WORKFLOW_PATH,
     GITHUB_DIR / "ISSUE_TEMPLATE" / "bug_report.md",
     GITHUB_DIR / "ISSUE_TEMPLATE" / "feature_request.md",
 ]
@@ -902,6 +911,16 @@ def _collect_open_source_findings(project_root: Path) -> list[ValidationFinding]
         project_root,
         [project_root / path for path in OPEN_SOURCE_REQUIRED_FILES],
     )
+    ci_workflow = project_root / CI_WORKFLOW_PATH
+    if ci_workflow.exists():
+        findings.append(
+            _collect_phrase_coverage_findings(
+                "open_source_ci",
+                CI_WORKFLOW_PATH.as_posix(),
+                _read_if_exists(ci_workflow),
+                OPEN_SOURCE_CI_WORKFLOW_PHRASES,
+            )
+        )
     pyproject = project_root / PYPROJECT_FILE
     if not pyproject.exists():
         return findings

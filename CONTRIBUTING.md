@@ -36,6 +36,7 @@ Agents-Memory 正在从共享错误记忆系统演进为面向 AI coding agents 
 5. 安全漏洞与敏感披露按 `SECURITY.md` 走私下通道，不使用公开 issue。
 6. 常规支持、使用问题与协作路径见 `SUPPORT.md`。
 7. 开源赞助入口配置在 `.github/FUNDING.yml`。
+8. GitHub PR 门禁配置在 `.github/workflows/ci.yml`，运行的就是下面这组基础校验。
 
 ## Local Validation
 
@@ -53,6 +54,8 @@ python3 scripts/memory.py docs-check .
 python3 scripts/memory.py profile-check .
 python3 scripts/memory.py doctor .
 ```
+
+上述 `py_compile`、单元测试和 `docs-check` 也会在 `.github/workflows/ci.yml` 里作为 PR 基础门禁执行。
 
 ## Repository Boundaries
 
