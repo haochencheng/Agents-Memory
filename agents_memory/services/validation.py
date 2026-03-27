@@ -187,6 +187,8 @@ OPEN_SOURCE_URL_PHRASES = [
 ]
 
 OPEN_SOURCE_CI_WORKFLOW_PHRASES = [
+    "tests:",
+    "docs:",
     "python -m pip install .",
     "python -m py_compile",
     "python -m unittest discover -s tests -p 'test_*.py'",
