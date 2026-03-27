@@ -53,6 +53,23 @@ STALE_PHRASES = [
     "CLI 主入口（所有命令）",
 ]
 
+AI_OS_LEGACY_SECTION_MARKERS = [
+    "### 已有",
+    "### 缺失",
+    "## 3. 目标能力模型",
+    "## 4. 产品核心闭环",
+    "## 5. 新的目录设计",
+    "## 6. `standards/` 目录设计",
+    "## 7. `profiles/` 目录设计",
+    "## 8. `amem profile-apply` 命令设计",
+    "## 9. `amem docs-check` 命令设计",
+    "## 10. 同步机制设计",
+    "## 11. Harness Engineering 与 Spec Kit 的纳入方式",
+    "## 12. MVP 路线",
+    "## 13. 成功标准",
+    "## 14. 下一步实现建议",
+]
+
 README_FILE = "README.md"
 DOCS_DIR = "docs"
 GETTING_STARTED_FILE = "getting-started.md"
@@ -757,7 +774,37 @@ def _collect_contract_findings(project_root: Path) -> list[ValidationFinding]:
                 requirement["phrases"],
             )
         )
+    findings.extend(_collect_ai_os_structure_findings(project_root))
     return findings
+
+
+def _collect_ai_os_structure_findings(project_root: Path) -> list[ValidationFinding]:
+    path = project_root / DOCS_DIR / "ai-engineering-operating-system.md"
+    text = _read_if_exists(path)
+    if not text:
+        return []
+
+    issues: list[str] = []
+    if text.count("# AI Engineering Operating System") != 1:
+        issues.append("expected exactly one top-level title '# AI Engineering Operating System'")
+
+    body = _doc_body_without_front_matter(text)
+    if body.count("# AI Engineering Operating System") != 1:
+        issues.append("found duplicate top-level title in document body")
+    if "\n---\ncreated_at:" in body:
+        issues.append("found duplicate front matter block in document body")
+
+    legacy_hits = [marker for marker in AI_OS_LEGACY_SECTION_MARKERS if marker in text]
+    if legacy_hits:
+        issues.append(f"legacy sections present: {', '.join(legacy_hits)}")
+
+    return [
+        ValidationFinding(
+            "FAIL" if issues else "OK",
+            "ai_os_structure",
+            "AI OS doc canonical structure OK" if not issues else "; ".join(issues),
+        )
+    ]
 
 
 def _collect_test_findings(project_root: Path) -> list[ValidationFinding]:

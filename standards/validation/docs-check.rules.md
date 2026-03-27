@@ -13,6 +13,7 @@ doc_status: active
 3. deprecated 内容已删除或显式标记
 4. 文档元数据完整：`created_at`、`updated_at`、`doc_status` 可解析且合法
 5. 设计/规划类文档的实施状态需要与当前实现一致
+6. `docs/ai-engineering-operating-system.md` 必须保持单一 canonical 结构，不允许重复 front matter、重复主标题或历史章节回流
 
 代码验证：
 
