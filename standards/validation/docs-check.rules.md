@@ -22,6 +22,7 @@ doc_status: active
 12. `docs/getting-started.md` 只记录本仓库本地安装、启动与调试，不重复目标项目接入流程
 13. `docs/ops.md` 只记录日常运维、日志、索引、Qdrant、备份与故障处理，不重复首次安装与目标项目接入流程
 14. 开源协作入口必须完整：`CODE_OF_CONDUCT.md`、`PULL_REQUEST_TEMPLATE.md`、`.github/ISSUE_TEMPLATE/` 至少覆盖 bug 与 feature request
+15. 开源仓库健康入口必须完整：`SECURITY.md`、`SUPPORT.md`、`.github/FUNDING.yml` 需要与 README / CONTRIBUTING 的协作说明保持一致
 
 代码验证：
 

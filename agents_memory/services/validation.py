@@ -186,14 +186,19 @@ OPEN_SOURCE_URL_PHRASES = [
     'Issues = "',
 ]
 
+GITHUB_DIR = Path(".github")
+
 OPEN_SOURCE_REQUIRED_FILES = [
     Path(LICENSE_FILE),
     Path(CONTRIBUTING_FILE),
     Path(PYPROJECT_FILE),
     Path("CODE_OF_CONDUCT.md"),
+    Path("SECURITY.md"),
+    Path("SUPPORT.md"),
     Path("PULL_REQUEST_TEMPLATE.md"),
-    Path(".github") / "ISSUE_TEMPLATE" / "bug_report.md",
-    Path(".github") / "ISSUE_TEMPLATE" / "feature_request.md",
+    GITHUB_DIR / "FUNDING.yml",
+    GITHUB_DIR / "ISSUE_TEMPLATE" / "bug_report.md",
+    GITHUB_DIR / "ISSUE_TEMPLATE" / "feature_request.md",
 ]
 
 REFACTOR_SKIP_PARTS = {
