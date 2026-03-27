@@ -28,6 +28,7 @@ doc_status: active
 - README 首页现在把中英文重复的开场说明收敛到共享 hero 区，语言区块直接进入正文，整体更接近产品落地页而不是双份文档。
 - README 进一步收敛为共享双语落地页：公共价值主张、workflow、trust signals、quick start 和文档入口集中展示，语言区块缩成摘要而不再重复整套正文。
 - README 首页进一步强化转化路径：Quick Start 前移到 trust signals 之前，文档入口收敛为 4 个最高优先入口并指向 docs/README.md，总览区新增三栏卖点布局。
+- README 首页改为完整英文介绍在上、完整中文介绍在下，并移除“不开教程正文”的首页强制文案与对应 docs-check 契约，减少中英混排带来的阅读噪音。
 
 ## 0.1.0
 

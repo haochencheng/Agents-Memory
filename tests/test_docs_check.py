@@ -31,7 +31,6 @@ def _healthy_readme() -> str:
     return "\n".join(
         [
             "# Demo",
-            "README 是开源仓库首页，不展开完整教程正文",
             "安装与启动细节见 docs/getting-started.md",
             "接入其他项目见 docs/integration.md",
             "最新架构设计见 docs/ai-engineering-operating-system.md",
