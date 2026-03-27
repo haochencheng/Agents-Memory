@@ -1,3 +1,9 @@
+---
+created_at: 2026-03-26
+updated_at: 2026-03-27
+doc_status: active
+---
+
 # Docs Check Rules
 
 第一版文档校验至少应覆盖：

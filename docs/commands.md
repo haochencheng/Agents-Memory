@@ -1,3 +1,9 @@
+---
+created_at: 2026-03-26
+updated_at: 2026-03-27
+doc_status: active
+---
+
 # CLI Commands
 
 > Agents-Memory CLI 全量命令总表。默认推荐从 `amem enable .` 开始接入项目。
@@ -171,3 +177,13 @@
 ### `amem docs-check [path]`
 
 校验仓库文档入口、命令说明和 contract/test/policy 漂移。
+
+### `amem docs-touch [path] [--date YYYY-MM-DD] [--dry-run] [--format text|json]`
+
+自动刷新受管 Markdown 文档的 `updated_at`。如果目标文档缺少 front matter，会顺带补齐 `created_at / updated_at / doc_status`。
+
+适用场景：
+
+- 代码改动后批量同步文档最后修改时间
+- 新增文档元数据契约后补齐旧文档头部
+- 在 CI 或脚本里先用 `--dry-run` 预览将改动哪些文档

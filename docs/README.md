@@ -1,3 +1,9 @@
+---
+created_at: 2026-03-26
+updated_at: 2026-03-27
+doc_status: active
+---
+
 # Agents-Memory 项目文档
 
 > Shared Engineering Brain for AI coding agents：Memory + Standards + Planning + Validation。

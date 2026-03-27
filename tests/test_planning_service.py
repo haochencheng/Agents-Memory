@@ -11,8 +11,26 @@ from agents_memory.services.planning import cmd_refactor_bundle, init_onboarding
 from agents_memory.services.validation import cmd_plan_check, collect_plan_check_findings
 
 
+def _doc(content: str) -> str:
+    if content.startswith("---\n"):
+        return content
+    return "\n".join(
+        [
+            "---",
+            "created_at: 2026-03-27",
+            "updated_at: 2026-03-27",
+            "doc_status: active",
+            "---",
+            "",
+            content,
+        ]
+    )
+
+
 def _write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.suffix == ".md":
+        content = _doc(content)
     path.write_text(content, encoding="utf-8")
 
 
@@ -82,6 +100,23 @@ class PlanningServiceTests(unittest.TestCase):
             findings = collect_plan_check_findings(target, str(target))
 
             self.assertTrue(any(f.status == "FAIL" and f.key == "plan_files" for f in findings))
+
+    def test_collect_plan_check_findings_flags_missing_bundle_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "target"
+            bundle = target / "docs" / "plans" / "demo-task"
+            bundle.mkdir(parents=True)
+            self._build_context(root)
+            (bundle / "README.md").write_text("# Demo\nplanning bundle\n", encoding="utf-8")
+            _write_text(bundle / "spec.md", "## Acceptance Criteria\n")
+            _write_text(bundle / "plan.md", "## Change Set\n")
+            _write_text(bundle / "task-graph.md", "## Work Items\n## Exit Criteria\n")
+            _write_text(bundle / "validation.md", "## Required Checks\n")
+
+            findings = collect_plan_check_findings(target, str(target))
+
+            self.assertTrue(any(f.status == "FAIL" and f.key == "plan_metadata" for f in findings))
 
     def test_repair_plan_bundles_creates_missing_files_for_existing_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

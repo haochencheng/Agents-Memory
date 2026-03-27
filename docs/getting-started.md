@@ -1,3 +1,9 @@
+---
+created_at: 2026-03-26
+updated_at: 2026-03-27
+doc_status: active
+---
+
 # 本地启动与运维指南
 
 > 从零搭建 Agents-Memory 本地环境，5 分钟内完成。
@@ -189,6 +195,12 @@ python3 scripts/memory.py profile-check .
 
 python3 scripts/memory.py docs-check .
 # 输出: 文档入口、contract/test/policy 漂移、明显过期表述检查
+
+python3 scripts/memory.py docs-touch .
+# 输出: 自动刷新受管 Markdown 文档的 updated_at，必要时补齐 front matter
+
+python3 scripts/memory.py docs-touch docs/ --dry-run
+# 输出: 仅预览 docs/ 目录下哪些文档会被刷新
 
 python3 scripts/memory.py to-qdrant
 # 输出: 把本地向量索引迁移到共享 Qdrant（可选）

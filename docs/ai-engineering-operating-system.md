@@ -1,3 +1,9 @@
+---
+created_at: 2026-03-26
+updated_at: 2026-03-27
+doc_status: active
+---
+
 # AI Engineering Operating System
 
 > 最新产品设计基线：把 Agents-Memory 从“共享错误记忆系统”收敛成一个面向 AI coding agents 的工程 Harness。目标不是提供零散工具，而是提供一套开箱即用、可验证、可长期维护的 Shared Engineering Brain。
@@ -166,6 +172,23 @@ flowchart TD
   L --> VG[validation rules]
   L --> EVAL[workflow and eval tests]
 ```
+
+### 实施状态矩阵
+
+| 能力 | 当前状态 | 说明 |
+| --- | --- | --- |
+| `Memory` 记录与 promote 基础链路 | done | `new / list / stats / search / promote / sync` 已存在，错误沉淀链路已运行 |
+| `Standards` 同步与 profile 受管文件 | partial | profile 管理与 standards-sync 已存在，但仍缺更强的统一发行版入口 |
+| `Planning` 基础 bundle 生成 | done | `plan-init`、onboarding/refactor bundle 已存在，bundle 工件已可生成 |
+| `Planning` 事务闭环 | partial | 已有 bundle 与 plan-check，但 `close-task` 事务提交还未实现 |
+| `Validation` 单项校验器 | done | `docs-check`、`profile-check`、`plan-check`、`doctor` 均已存在 |
+| `Validation` 统一 delivery gate | partial | 能力已分散具备，但 `amem validate .` 聚合入口还未落地 |
+| `bootstrap` 单入口 workflow | partial | `enable` 已覆盖大部分 bootstrap 语义，但命令模型尚未收敛到 `bootstrap` |
+| `start-task` workflow | partial | `plan-init` 已可用，但仍缺完整 task metadata/status contract |
+| `do-next` workflow | not_done | 当前主要依赖 onboarding state 和 doctor 输出，尚无统一命令入口 |
+| `close-task` workflow | not_done | 尚未实现统一状态回写与完成事务 |
+| `promote-learning` workflow | partial | error promote / sync 已有，但还未收敛成跨项目 workflow 命令 |
+| 文档元数据与状态校验 | done | 本轮补入 `created_at` / `updated_at` / `doc_status` 规则，并纳入 docs-check / plan-check |
 
 ---
 

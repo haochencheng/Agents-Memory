@@ -39,6 +39,8 @@ USAGE = """Agents-Memory CLI — 错误记录管理工具
     python3 memory.py refactor-bundle [path] [--token <hotspot-token>] [--index <n>]
                                                                                              # 根据稳定 hotspot token 或当前排序位置生成 refactor task bundle
   python3 memory.py plan-check [path]          # 校验 docs/plans 下 planning bundle 的完整性
+        python3 memory.py docs-touch [path] [--date YYYY-MM-DD] [--dry-run] [--format text|json]
+                                                                                                                                                                                         # 自动刷新受管 Markdown 文档的 updated_at；缺失 front matter 时补齐元数据
     python3 memory.py profile-list               # 查看可用 profile 列表
     python3 memory.py profile-show <profile-id>  # 查看指定 profile 的装配内容
     python3 memory.py profile-apply <id> [path]  # 把 profile 安装到目标项目

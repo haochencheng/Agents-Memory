@@ -1,3 +1,9 @@
+---
+created_at: {{DOC_CREATED_AT}}
+updated_at: {{DOC_UPDATED_AT}}
+doc_status: active
+---
+
 # Task Graph
 
 ## Work Items

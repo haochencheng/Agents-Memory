@@ -8,11 +8,29 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from agents_memory.runtime import build_context
-from agents_memory.services.validation import cmd_docs_check, collect_docs_check_findings
+from agents_memory.services.validation import cmd_docs_check, cmd_docs_touch, collect_docs_check_findings
+
+
+def _doc(content: str) -> str:
+    if content.startswith("---\n"):
+        return content
+    return "\n".join(
+        [
+            "---",
+            "created_at: 2026-03-27",
+            "updated_at: 2026-03-27",
+            "doc_status: active",
+            "---",
+            "",
+            content,
+        ]
+    )
 
 
 def _write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.suffix == ".md":
+        content = _doc(content)
     path.write_text(content, encoding="utf-8")
 
 
@@ -85,6 +103,40 @@ class DocsCheckTests(unittest.TestCase):
 
             self.assertTrue(any(f.status == "FAIL" and f.key == "open_source_files" for f in findings))
 
+    def test_collect_docs_check_findings_flags_missing_doc_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            path = root / "README.md"
+            path.write_text("# Demo\n", encoding="utf-8")
+            _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
+            _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
+            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "ops.md", "# Ops\n")
+            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
+            _write_text(root / "LICENSE", "MIT\n")
+            _write_text(root / "pyproject.toml", "[project]\nname='demo'\n[project.urls]\nRepository = \"https://example.com/repo\"\nDocumentation = \"https://example.com/docs\"\nIssues = \"https://example.com/issues\"\n")
+            _write_text(root / "standards" / "docs" / "docs-sync.instructions.md", "docs\ncode\ntests\ncreated_at\nupdated_at\ndoc_status\n")
+            _write_text(root / "standards" / "validation" / "docs-check.rules.md", "docs entrypoint 完整\n文档元数据完整\n核心 services 有单元测试\n行为变更必须同时看到 code diff、docs diff、test diff 中至少两层联动\n")
+            _write_text(root / "standards" / "planning" / "harness-engineering.md", "docs、code、validation\nplan / task graph / validation route\n文档元数据\n")
+            _write_text(root / "standards" / "planning" / "review-checklist.md", "docs / code / tests\n最小验证结果\n")
+            _write_text(root / "standards" / "planning" / "spec-kit.md", "spec-first\n验收标准必须可被测试或命令验证\n")
+            _write_text(root / "standards" / "python" / "base.instructions.md", "复杂度\n重构\n40 行\n嵌套深度\n注释\n")
+            for test_file in [
+                "test_runtime_bootstrap.py",
+                "test_projects_service.py",
+                "test_records_service.py",
+                "test_integration_service.py",
+                "test_planning_service.py",
+                "test_docs_check.py",
+            ]:
+                _write_text(root / "tests" / test_file, "import unittest\n")
+
+            findings = collect_docs_check_findings(root)
+
+            self.assertTrue(any(f.status == "FAIL" and f.key == "doc_metadata" for f in findings))
+
     def test_cmd_docs_check_returns_zero_for_minimal_healthy_repo(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -100,6 +152,7 @@ class DocsCheckTests(unittest.TestCase):
                         "Standards",
                         "Planning",
                         "Validation",
+                        "实施状态矩阵",
                     ]
                 ),
             )
@@ -146,6 +199,7 @@ class DocsCheckTests(unittest.TestCase):
                         "python3 scripts/memory.py standards-sync .",
                         "python3 scripts/memory.py profile-check .",
                         "python3 scripts/memory.py docs-check .",
+                        "python3 scripts/memory.py docs-touch .",
                         "python3 scripts/memory.py archive",
                         "python3 scripts/memory.py update-index",
                         "python3 scripts/memory.py to-qdrant",
@@ -186,6 +240,7 @@ class DocsCheckTests(unittest.TestCase):
                         "python3 scripts/memory.py standards-sync [path]",
                         "python3 scripts/memory.py profile-check .",
                         "python3 scripts/memory.py docs-check [path]",
+                        "python3 scripts/memory.py docs-touch [path] [--date YYYY-MM-DD] [--dry-run]",
                         "python3 scripts/memory.py archive",
                         "python3 scripts/memory.py to-qdrant",
                         "python3 scripts/memory.py update-index",
@@ -211,13 +266,14 @@ class DocsCheckTests(unittest.TestCase):
             )
             _write_text(
                 root / "standards" / "docs" / "docs-sync.instructions.md",
-                "docs\ncode\ntests\n",
+                "docs\ncode\ntests\ncreated_at\nupdated_at\ndoc_status\n",
             )
             _write_text(
                 root / "standards" / "validation" / "docs-check.rules.md",
                 "\n".join(
                     [
                         "docs entrypoint 完整",
+                        "文档元数据完整",
                         "核心 services 有单元测试",
                         "行为变更必须同时看到 code diff、docs diff、test diff 中至少两层联动",
                     ]
@@ -225,7 +281,7 @@ class DocsCheckTests(unittest.TestCase):
             )
             _write_text(
                 root / "standards" / "planning" / "harness-engineering.md",
-                "docs、code、validation\nplan / task graph / validation route\n",
+                "docs、code、validation\nplan / task graph / validation route\n文档元数据\n",
             )
             _write_text(
                 root / "standards" / "planning" / "review-checklist.md",
@@ -255,3 +311,32 @@ class DocsCheckTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             self.assertIn("Overall: OK", buffer.getvalue())
+
+    def test_cmd_docs_touch_updates_existing_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            _write_text(root / "README.md", "# Demo\n")
+
+            exit_code = cmd_docs_touch(ctx, str(root / "README.md"), updated_at="2026-03-28")
+
+            content = (root / "README.md").read_text(encoding="utf-8")
+            self.assertEqual(exit_code, 0)
+            self.assertIn("created_at: 2026-03-27", content)
+            self.assertIn("updated_at: 2026-03-28", content)
+
+    def test_cmd_docs_touch_repairs_missing_front_matter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            path = root / "docs" / "README.md"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("# Demo\n", encoding="utf-8")
+
+            exit_code = cmd_docs_touch(ctx, str(path), updated_at="2026-03-28")
+
+            content = path.read_text(encoding="utf-8")
+            self.assertEqual(exit_code, 0)
+            self.assertTrue(content.startswith("---\n"))
+            self.assertIn("created_at: 2026-03-28", content)
+            self.assertIn("updated_at: 2026-03-28", content)

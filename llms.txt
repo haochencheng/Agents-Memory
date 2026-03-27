@@ -183,6 +183,7 @@ python3 scripts/memory.py profile-diff <id> [path]     # preview profile install
 python3 scripts/memory.py standards-sync [path]        # sync profile-managed organization standards into target project
 python3 scripts/memory.py profile-check [path]         # verify installed profile consistency
 python3 scripts/memory.py docs-check [path]            # validate docs entrypoints plus contract/test/policy drift
+python3 scripts/memory.py docs-touch [path] [--date YYYY-MM-DD] [--dry-run] # refresh governed markdown updated_at metadata and repair missing front matter
 python3 scripts/memory.py archive                      # archive old records
 python3 scripts/memory.py to-qdrant                    # migrate to shared Qdrant
 python3 scripts/memory.py update-index                 # regenerate index.md stats

@@ -1,3 +1,9 @@
+---
+created_at: 2026-03-27
+updated_at: 2026-03-27
+doc_status: active
+---
+
 # Refactor hotspot: agents_memory/services/integration.py::cmd_enable
 
 这是当前任务的 planning bundle。

@@ -1,3 +1,9 @@
+---
+created_at: 2026-03-26
+updated_at: 2026-03-27
+doc_status: active
+---
+
 # 接入其他项目
 
 > 把任意项目的 AI Agent 接入 Agents-Memory Shared Engineering Brain，全程约 2 分钟。

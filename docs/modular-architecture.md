@@ -1,3 +1,9 @@
+---
+created_at: 2026-03-26
+updated_at: 2026-03-27
+doc_status: active
+---
+
 # 模块化与插件化结构
 
 > 目标：把原来堆在 `scripts/memory.py` 里的所有能力，拆成“共享运行时 + 服务层 + 命令层 + agent adapter 层”，让后续接入 ChatGPT、Claude、其他 IDE Agent 时不再改动核心业务逻辑。

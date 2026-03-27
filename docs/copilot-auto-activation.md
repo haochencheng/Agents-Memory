@@ -1,3 +1,9 @@
+---
+created_at: 2026-03-26
+updated_at: 2026-03-27
+doc_status: active
+---
+
 # Copilot 自动激活设计
 
 > 目标：让用户只执行一次 `amem register`，后续 GitHub Copilot 在该仓库上下文里默认先走 Agents-Memory 协议。

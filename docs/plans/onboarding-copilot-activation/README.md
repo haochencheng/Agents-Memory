@@ -1,3 +1,9 @@
+---
+created_at: 2026-03-26
+updated_at: 2026-03-27
+doc_status: active
+---
+
 # Optional onboarding: copilot_activation
 
 这是当前任务的 planning bundle。

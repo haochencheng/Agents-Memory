@@ -1,3 +1,9 @@
+---
+created_at: 2026-03-26
+updated_at: 2026-03-27
+doc_status: active
+---
+
 # Profile Check Rules
 
 未来 `profiles/` 落地后，至少要校验：

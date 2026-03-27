@@ -1,3 +1,9 @@
+---
+created_at: 2026-03-26
+updated_at: 2026-03-27
+doc_status: active
+---
+
 # Agents-Memory
 
 Agents-Memory 正在从“共享错误记忆系统”升级成一个面向 AI coding agents 的 **Shared Engineering Brain**: 用统一的记忆、标准、规划和验证能力，把一次项目里的经验沉淀成跨项目可复用的工程操作系统。
@@ -171,6 +177,7 @@ python3 scripts/memory.py profile-apply python-service .
 python3 scripts/memory.py standards-sync .
 python3 scripts/memory.py profile-check .
 python3 scripts/memory.py docs-check .
+python3 scripts/memory.py docs-touch .
 ```
 
 ### 验证仓库

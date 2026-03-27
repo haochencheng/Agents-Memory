@@ -1,3 +1,9 @@
+---
+created_at: 2026-03-26
+updated_at: 2026-03-27
+doc_status: active
+---
+
 # Foundation Hardening Plan
 
 > 目标：先把 Agents-Memory 的地基搭好，再继续往 AI Engineering Operating System 演进。

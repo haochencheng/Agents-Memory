@@ -1,3 +1,9 @@
+---
+created_at: 2026-03-26
+updated_at: 2026-03-27
+doc_status: active
+---
+
 # Planning Governance Gate
 
 这是把 `plan-check` 引入 Agents-Memory 的 planning bundle。

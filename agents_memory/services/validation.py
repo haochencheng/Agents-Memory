@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass
+from datetime import date
 from pathlib import Path
 
 from agents_memory.runtime import AppContext
@@ -40,6 +41,7 @@ CORE_DOC_COMMANDS = [
     "standards-sync",
     "profile-check",
     "docs-check",
+    "docs-touch",
     "archive",
     "to-qdrant",
     "update-index",
@@ -69,10 +71,22 @@ PLAN_FILE_REQUIREMENTS = {
     "validation.md": ["## Required Checks"],
 }
 
+DOC_METADATA_REQUIRED_FIELDS = ("created_at", "updated_at", "doc_status")
+DOC_METADATA_ALLOWED_STATUS = {"draft", "active", "stable", "deprecated", "archived"}
+DOC_METADATA_PATTERNS = (
+    README_FILE,
+    CONTRIBUTING_FILE,
+    f"{DOCS_DIR}/**/*.md",
+    ".github/instructions/**/*.md",
+    "standards/**/*.md",
+)
+DOC_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+DOC_FRONT_MATTER_PATTERN = re.compile(r"\A---\n(?P<body>.*?)\n---\n", re.DOTALL)
+
 CONTRACT_REQUIREMENTS = {
     "engineering_brain": {
         "path": Path(DOCS_DIR) / "ai-engineering-operating-system.md",
-        "phrases": ["Shared Engineering Brain", "Memory", "Standards", "Planning", "Validation"],
+        "phrases": ["Shared Engineering Brain", "Memory", "Standards", "Planning", "Validation", "实施状态矩阵"],
     },
     "foundation_hardening": {
         "path": Path(DOCS_DIR) / "foundation-hardening.md",
@@ -92,19 +106,20 @@ REQUIRED_TEST_FILES = [
 POLICY_REQUIREMENTS = {
     "docs_sync": {
         "path": Path("standards") / "docs" / "docs-sync.instructions.md",
-        "phrases": ["docs", "code", "tests"],
+        "phrases": ["docs", "code", "tests", "created_at", "updated_at", "doc_status"],
     },
     "docs_check_rules": {
         "path": Path("standards") / "validation" / "docs-check.rules.md",
         "phrases": [
             "docs entrypoint 完整",
+            "文档元数据完整",
             "核心 services 有单元测试",
             "行为变更必须同时看到 code diff、docs diff、test diff 中至少两层联动",
         ],
     },
     "harness_engineering": {
         "path": Path("standards") / "planning" / "harness-engineering.md",
-        "phrases": ["docs、code、validation", "plan / task graph / validation route"],
+        "phrases": ["docs、code、validation", "plan / task graph / validation route", "文档元数据"],
     },
     "review_checklist": {
         "path": Path("standards") / "planning" / "review-checklist.md",
@@ -164,6 +179,200 @@ def _required_doc_files(project_root: Path) -> list[tuple[str, Path]]:
 
 def _read_if_exists(path: Path) -> str:
     return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+@dataclass(frozen=True)
+class DocumentMetadata:
+    created_at: str
+    updated_at: str
+    doc_status: str
+
+
+@dataclass(frozen=True)
+class DocsTouchResult:
+    target: str
+    updated_at: str
+    updated_files: list[str]
+    skipped_files: list[str]
+    dry_run: bool
+
+
+def _iter_governed_doc_files(project_root: Path) -> list[Path]:
+    seen: set[Path] = set()
+    files: list[Path] = []
+    for pattern in DOC_METADATA_PATTERNS:
+        for path in sorted(project_root.glob(pattern)):
+            if not path.is_file() or path.suffix != ".md" or path in seen:
+                continue
+            seen.add(path)
+            files.append(path)
+    return files
+
+
+def _doc_front_matter_body(content: str) -> str | None:
+    match = DOC_FRONT_MATTER_PATTERN.match(content)
+    if not match:
+        return None
+    return match.group("body")
+
+
+def _doc_front_matter_match(content: str) -> re.Match[str] | None:
+    return DOC_FRONT_MATTER_PATTERN.match(content)
+
+
+def _parse_doc_metadata_fields(front_matter_body: str) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for raw_line in front_matter_body.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
+
+
+def _doc_metadata_missing_fields(values: dict[str, str]) -> list[str]:
+    missing = [field for field in DOC_METADATA_REQUIRED_FIELDS if not values.get(field)]
+    return [f"missing fields: {', '.join(missing)}"] if missing else []
+
+
+def _doc_metadata_value_issues(created_at: str, updated_at: str, doc_status: str) -> list[str]:
+    issues: list[str] = []
+    if created_at and not DOC_DATE_PATTERN.match(created_at):
+        issues.append("created_at must use YYYY-MM-DD")
+    if updated_at and not DOC_DATE_PATTERN.match(updated_at):
+        issues.append("updated_at must use YYYY-MM-DD")
+    if doc_status and doc_status not in DOC_METADATA_ALLOWED_STATUS:
+        issues.append(f"doc_status must be one of: {', '.join(sorted(DOC_METADATA_ALLOWED_STATUS))}")
+    if created_at and updated_at and DOC_DATE_PATTERN.match(created_at) and DOC_DATE_PATTERN.match(updated_at) and created_at > updated_at:
+        issues.append("updated_at must be >= created_at")
+    return issues
+
+
+def _parse_doc_metadata(content: str) -> tuple[DocumentMetadata | None, list[str]]:
+    front_matter_body = _doc_front_matter_body(content)
+    if front_matter_body is None:
+        return None, ["missing front matter"]
+
+    values = _parse_doc_metadata_fields(front_matter_body)
+    issues = _doc_metadata_missing_fields(values)
+
+    created_at = values.get("created_at", "")
+    updated_at = values.get("updated_at", "")
+    doc_status = values.get("doc_status", "")
+    issues.extend(_doc_metadata_value_issues(created_at, updated_at, doc_status))
+
+    if issues:
+        return None, issues
+    return DocumentMetadata(created_at=created_at, updated_at=updated_at, doc_status=doc_status), []
+
+
+def _fallback_doc_metadata(content: str, *, updated_at: str) -> DocumentMetadata:
+    front_matter_body = _doc_front_matter_body(content)
+    values = _parse_doc_metadata_fields(front_matter_body) if front_matter_body is not None else {}
+    created_at = values.get("created_at", "")
+    if not DOC_DATE_PATTERN.match(created_at):
+        created_at = updated_at
+    doc_status = values.get("doc_status", "")
+    if doc_status not in DOC_METADATA_ALLOWED_STATUS:
+        doc_status = "active"
+    return DocumentMetadata(created_at=created_at, updated_at=updated_at, doc_status=doc_status)
+
+
+def _serialize_doc_metadata(metadata: DocumentMetadata) -> str:
+    return "\n".join(
+        [
+            "---",
+            f"created_at: {metadata.created_at}",
+            f"updated_at: {metadata.updated_at}",
+            f"doc_status: {metadata.doc_status}",
+            "---",
+            "",
+        ]
+    )
+
+
+def _doc_body_without_front_matter(content: str) -> str:
+    match = _doc_front_matter_match(content)
+    if match is None:
+        return content.lstrip("\n")
+    return content[match.end():]
+
+
+def _render_doc_with_metadata(content: str, metadata: DocumentMetadata) -> str:
+    body = _doc_body_without_front_matter(content)
+    return _serialize_doc_metadata(metadata) + body
+
+
+def _collect_doc_metadata_findings(project_root: Path) -> list[ValidationFinding]:
+    findings: list[ValidationFinding] = []
+    for path in _iter_governed_doc_files(project_root):
+        metadata, issues = _parse_doc_metadata(_read_if_exists(path))
+        relative = path.relative_to(project_root).as_posix()
+        if issues:
+            findings.append(ValidationFinding("FAIL", "doc_metadata", f"{relative} -> {'; '.join(issues)}"))
+            continue
+        assert metadata is not None
+        findings.append(
+            ValidationFinding(
+                "OK",
+                "doc_metadata",
+                f"{relative} metadata OK (created_at={metadata.created_at}, updated_at={metadata.updated_at}, doc_status={metadata.doc_status})",
+            )
+        )
+    return findings
+
+
+def _resolve_docs_touch_targets(project_root: Path, target_path: Path) -> list[Path]:
+    governed_files = _iter_governed_doc_files(project_root)
+    resolved = target_path.expanduser().resolve()
+    if resolved.is_file():
+        return [resolved] if resolved.suffix == ".md" else []
+    if resolved.is_dir():
+        governed_targets = [path for path in governed_files if path == resolved or resolved in path.parents]
+        if governed_targets:
+            return governed_targets
+        return sorted(path for path in resolved.rglob("*.md") if path.is_file())
+    return governed_files
+
+
+def _touch_result_path(path: Path, project_root: Path) -> str:
+    try:
+        return path.relative_to(project_root).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def touch_doc_metadata(project_root: Path, target_path: str = ".", *, updated_at: str | None = None, dry_run: bool = False) -> DocsTouchResult:
+    touch_date = updated_at or date.today().isoformat()
+    targets = _resolve_docs_touch_targets(project_root, Path(target_path))
+    updated_files: list[str] = []
+    skipped_files: list[str] = []
+    for path in targets:
+        original = path.read_text(encoding="utf-8")
+        metadata, _issues = _parse_doc_metadata(original)
+        normalized = metadata or _fallback_doc_metadata(original, updated_at=touch_date)
+        if normalized.updated_at != touch_date:
+            normalized = DocumentMetadata(
+                created_at=normalized.created_at,
+                updated_at=touch_date,
+                doc_status=normalized.doc_status,
+            )
+        rendered = _render_doc_with_metadata(original, normalized)
+        relative = _touch_result_path(path, project_root)
+        if rendered == original:
+            skipped_files.append(relative)
+            continue
+        updated_files.append(relative)
+        if not dry_run:
+            path.write_text(rendered, encoding="utf-8")
+    return DocsTouchResult(
+        target=target_path,
+        updated_at=touch_date,
+        updated_files=updated_files,
+        skipped_files=skipped_files,
+        dry_run=dry_run,
+    )
 
 
 @dataclass(frozen=True)
@@ -634,43 +843,61 @@ def _resolve_plan_bundle_targets(project_root: Path, target_path: Path) -> tuple
     return root, bundles
 
 
+def _plan_root_finding(plans_root: Path) -> ValidationFinding:
+    return ValidationFinding(
+        "OK" if plans_root.exists() else "WARN",
+        "plan_root",
+        f"present: {PLAN_BUNDLES_DIR.as_posix()}" if plans_root.exists() else f"missing planning root: {PLAN_BUNDLES_DIR.as_posix()}",
+    )
+
+
+def _plan_file_presence_finding(bundle_rel: str, filename: str, file_path: Path) -> ValidationFinding:
+    return ValidationFinding(
+        "OK" if file_path.exists() else "FAIL",
+        "plan_files",
+        f"present: {bundle_rel}/{filename}" if file_path.exists() else f"missing required file: {bundle_rel}/{filename}",
+    )
+
+
+def _plan_metadata_finding(bundle_rel: str, filename: str, file_path: Path) -> ValidationFinding:
+    _, issues = _parse_doc_metadata(_read_if_exists(file_path))
+    return ValidationFinding(
+        "OK" if not issues else "FAIL",
+        "plan_metadata",
+        f"{bundle_rel}/{filename} metadata OK" if not issues else f"{bundle_rel}/{filename} -> {'; '.join(issues)}",
+    )
+
+
+def _collect_bundle_plan_findings(bundle: Path, root: Path) -> list[ValidationFinding]:
+    bundle_rel = bundle.relative_to(root).as_posix()
+    findings = [ValidationFinding("OK", "plan_bundle", f"bundle: {bundle_rel}")]
+    for filename, phrases in PLAN_FILE_REQUIREMENTS.items():
+        file_path = bundle / filename
+        findings.append(_plan_file_presence_finding(bundle_rel, filename, file_path))
+        if not file_path.exists():
+            continue
+        findings.append(_plan_metadata_finding(bundle_rel, filename, file_path))
+        findings.append(
+            _collect_phrase_coverage_findings(
+                "plan_semantics",
+                f"{bundle_rel}/{filename}",
+                _read_if_exists(file_path),
+                phrases,
+            )
+        )
+    return findings
+
+
 def collect_plan_check_findings(project_root: Path, target_path: str = ".") -> list[ValidationFinding]:
     root, bundles = _resolve_plan_bundle_targets(project_root, Path(target_path))
     plans_root = root / PLAN_BUNDLES_DIR
-    findings: list[ValidationFinding] = [
-        ValidationFinding(
-            "OK" if plans_root.exists() else "WARN",
-            "plan_root",
-            f"present: {PLAN_BUNDLES_DIR.as_posix()}" if plans_root.exists() else f"missing planning root: {PLAN_BUNDLES_DIR.as_posix()}",
-        )
-    ]
+    findings: list[ValidationFinding] = [_plan_root_finding(plans_root)]
     if not bundles:
         findings.append(ValidationFinding("WARN", "plan_bundles", f"no planning bundles found under {PLAN_BUNDLES_DIR.as_posix()}"))
         return findings
 
     for bundle in bundles:
-        bundle_rel = bundle.relative_to(root).as_posix()
-        findings.append(ValidationFinding("OK", "plan_bundle", f"bundle: {bundle_rel}"))
-        for filename, phrases in PLAN_FILE_REQUIREMENTS.items():
-            file_path = bundle / filename
-            file_key = "plan_files"
-            findings.append(
-                ValidationFinding(
-                    "OK" if file_path.exists() else "FAIL",
-                    file_key,
-                    f"present: {bundle_rel}/{filename}" if file_path.exists() else f"missing required file: {bundle_rel}/{filename}",
-                )
-            )
-            if not file_path.exists():
-                continue
-            findings.append(
-                _collect_phrase_coverage_findings(
-                    "plan_semantics",
-                    f"{bundle_rel}/{filename}",
-                    _read_if_exists(file_path),
-                    phrases,
-                )
-            )
+        findings.extend(_collect_bundle_plan_findings(bundle, root))
     return findings
 
 
@@ -729,6 +956,7 @@ def collect_docs_check_findings(project_root: Path) -> list[ValidationFinding]:
     searchable_files = [path for _, path in _required_doc_files(project_root) if path.exists()]
 
     findings.extend(_collect_required_file_findings(project_root))
+    findings.extend(_collect_doc_metadata_findings(project_root))
     findings.extend(_collect_docs_readme_link_findings(docs_readme))
     findings.extend(_collect_command_coverage_findings(getting_started, llms))
     findings.extend(_collect_contract_findings(project_root))
@@ -810,6 +1038,36 @@ def cmd_docs_check(ctx: AppContext, project_id_or_path: str = ".", *, strict: bo
 
     should_fail = has_fail or (strict and has_warn)
     return 1 if should_fail else 0
+
+
+def cmd_docs_touch(ctx: AppContext, project_id_or_path: str = ".", *, updated_at: str | None = None, dry_run: bool = False, output_format: str = "text") -> int:
+    project_root = Path(".").expanduser().resolve()
+    result = touch_doc_metadata(project_root, project_id_or_path, updated_at=updated_at, dry_run=dry_run)
+    ctx.logger.info(
+        "docs_touch | root=%s | target=%s | updated_at=%s | dry_run=%s | updated=%s | skipped=%s",
+        project_root,
+        project_id_or_path,
+        result.updated_at,
+        dry_run,
+        len(result.updated_files),
+        len(result.skipped_files),
+    )
+
+    if output_format == "json":
+        print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
+    else:
+        print("\n=== Docs Touch ===")
+        print(f"Root:      {project_root}")
+        print(f"Target:    {project_id_or_path}")
+        print(f"UpdatedAt: {result.updated_at}")
+        print(f"DryRun:    {str(dry_run).lower()}\n")
+        print(f"Updated ({len(result.updated_files)}):")
+        for path in result.updated_files:
+            print(f"- {path}")
+        print(f"Skipped ({len(result.skipped_files)}):")
+        for path in result.skipped_files:
+            print(f"- {path}")
+    return 0
 
 
 def cmd_profile_check(ctx: AppContext, project_id_or_path: str = ".", *, profile_id: str | None = None, strict: bool = False, output_format: str = "text") -> int:

@@ -4,6 +4,7 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -60,7 +61,13 @@ def _planning_templates_dir(ctx: AppContext) -> Path:
 
 def _render_template(source: Path, *, task_name: str, task_slug: str) -> str:
     content = source.read_text(encoding="utf-8")
-    return content.replace("{{TASK_NAME}}", task_name).replace("{{TASK_SLUG}}", task_slug)
+    today = date.today().isoformat()
+    return (
+        content.replace("{{TASK_NAME}}", task_name)
+        .replace("{{TASK_SLUG}}", task_slug)
+        .replace("{{DOC_CREATED_AT}}", today)
+        .replace("{{DOC_UPDATED_AT}}", today)
+    )
 
 
 def _merge_managed_section(existing_content: str, rendered_content: str, heading: str) -> str:
