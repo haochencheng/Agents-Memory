@@ -649,25 +649,30 @@ def _report_project_root(report: dict[str, object]) -> Path:
     return Path(str(report.get("project_root") or "."))
 
 
+def _report_group_check(check: object) -> tuple[str, str, str] | None:
+    if not isinstance(check, (list, tuple)) or len(check) != 3:
+        return None
+    status, key, detail = check
+    return str(status), str(key), str(detail)
+
+
+def _report_group_entry(item: object) -> tuple[str, list[tuple[str, str, str]]] | None:
+    if not isinstance(item, (list, tuple)) or len(item) != 2:
+        return None
+
+    group_name, raw_checks = item
+    if not isinstance(group_name, str) or not isinstance(raw_checks, list):
+        return None
+
+    checks = [parsed for check in raw_checks if (parsed := _report_group_check(check)) is not None]
+    return group_name, checks
+
+
 def _report_grouped_checks(report: dict[str, object]) -> list[tuple[str, list[tuple[str, str, str]]]]:
     raw_groups = report.get("grouped_checks")
     if not isinstance(raw_groups, list):
         return []
-    grouped_checks: list[tuple[str, list[tuple[str, str, str]]]] = []
-    for item in raw_groups:
-        if not isinstance(item, (list, tuple)) or len(item) != 2:
-            continue
-        group_name, raw_checks = item
-        if not isinstance(group_name, str) or not isinstance(raw_checks, list):
-            continue
-        checks: list[tuple[str, str, str]] = []
-        for check in raw_checks:
-            if not isinstance(check, (list, tuple)) or len(check) != 3:
-                continue
-            status, key, detail = check
-            checks.append((str(status), str(key), str(detail)))
-        grouped_checks.append((group_name, checks))
-    return grouped_checks
+    return [parsed for item in raw_groups if (parsed := _report_group_entry(item)) is not None]
 
 
 def _report_steps(report: dict[str, object], key: str) -> list[dict[str, object]]:
