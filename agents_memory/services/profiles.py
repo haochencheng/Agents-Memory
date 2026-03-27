@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
@@ -100,6 +100,27 @@ class ProfileOverlayRenderResult:
     unchanged_overlays: list[str]
     removed_overlays: list[str]
     dry_run: bool
+
+
+@dataclass(frozen=True)
+class ProfileManagedSyncResult:
+    manifest_updated: bool
+    synced_overlays: list[str]
+    unchanged_overlays: list[str]
+    removed_overlays: list[str]
+    synced_managed_files: list[str]
+    unchanged_managed_files: list[str]
+
+
+@dataclass
+class ProfileApplyAccumulator:
+    created_dirs: list[str] = field(default_factory=list)
+    installed_standards: list[str] = field(default_factory=list)
+    wrote_templates: list[str] = field(default_factory=list)
+    rendered_overlays: list[str] = field(default_factory=list)
+    removed_overlays: list[str] = field(default_factory=list)
+    managed_files: list[str] = field(default_factory=list)
+    skipped_paths: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -704,36 +725,59 @@ def _sync_standards_files(
     return synced, unchanged, missing
 
 
-def sync_profile_standards(ctx: AppContext, profile: ProfileSpec, target_root: Path, *, dry_run: bool = False) -> ProfileStandardsSyncResult:
-    # Sync profile standard files, manifest, and agents router to target.
-    synced_standards, unchanged_standards, missing_sources = _sync_standards_files(ctx, profile, target_root, dry_run=dry_run)
-
+def _sync_profile_manifest_file(ctx: AppContext, profile: ProfileSpec, target_root: Path, *, dry_run: bool) -> bool:
     manifest_path = target_root / PROFILE_MANIFEST_REL
     manifest_updated = not manifest_path.exists() or _read_text(manifest_path) != render_profile_manifest(profile)
     if manifest_updated and not dry_run:
         write_profile_manifest(ctx, target_root, profile)
+    return manifest_updated
 
+
+def _sync_project_facts_file(ctx: AppContext, profile: ProfileSpec, target_root: Path, *, dry_run: bool) -> None:
     facts_path = project_facts_path(target_root)
     facts_updated = not facts_path.exists() or _read_text(facts_path) != render_project_facts(profile, target_root)
     if facts_updated and not dry_run:
         write_project_facts(ctx, target_root, profile)
 
-    synced_overlays, unchanged_overlays, removed_overlays = _sync_profile_overlays(ctx, profile, target_root, dry_run=dry_run)
 
-    updated_managed, current_managed = _sync_profile_agents_router(ctx, profile, target_root, dry_run=dry_run)
+def _sync_profile_managed_artifacts(
+    ctx: AppContext,
+    profile: ProfileSpec,
+    target_root: Path,
+    *,
+    dry_run: bool,
+) -> ProfileManagedSyncResult:
+    manifest_updated = _sync_profile_manifest_file(ctx, profile, target_root, dry_run=dry_run)
+    _sync_project_facts_file(ctx, profile, target_root, dry_run=dry_run)
+    synced_overlays, unchanged_overlays, removed_overlays = _sync_profile_overlays(ctx, profile, target_root, dry_run=dry_run)
+    synced_managed_files, unchanged_managed_files = _sync_profile_agents_router(ctx, profile, target_root, dry_run=dry_run)
+    return ProfileManagedSyncResult(
+        manifest_updated=manifest_updated,
+        synced_overlays=synced_overlays,
+        unchanged_overlays=unchanged_overlays,
+        removed_overlays=removed_overlays,
+        synced_managed_files=list(synced_managed_files),
+        unchanged_managed_files=list(unchanged_managed_files),
+    )
+
+
+def sync_profile_standards(ctx: AppContext, profile: ProfileSpec, target_root: Path, *, dry_run: bool = False) -> ProfileStandardsSyncResult:
+    # Sync profile standard files, manifest, and agents router to target.
+    synced_standards, unchanged_standards, missing_sources = _sync_standards_files(ctx, profile, target_root, dry_run=dry_run)
+    managed = _sync_profile_managed_artifacts(ctx, profile, target_root, dry_run=dry_run)
 
     return ProfileStandardsSyncResult(
         profile_id=profile.id,
         target_root=target_root,
         synced_standards=synced_standards,
         unchanged_standards=unchanged_standards,
-        synced_overlays=synced_overlays,
-        unchanged_overlays=unchanged_overlays,
-        removed_overlays=removed_overlays,
-        synced_managed_files=list(updated_managed),
-        unchanged_managed_files=list(current_managed),
+        synced_overlays=managed.synced_overlays,
+        unchanged_overlays=managed.unchanged_overlays,
+        removed_overlays=managed.removed_overlays,
+        synced_managed_files=managed.synced_managed_files,
+        unchanged_managed_files=managed.unchanged_managed_files,
         missing_sources=missing_sources,
-        manifest_updated=manifest_updated,
+        manifest_updated=managed.manifest_updated,
         dry_run=dry_run,
     )
 
@@ -761,42 +805,68 @@ def _apply_profile_files(
     _apply_file_items(ctx, profile.id, target_root, template_items, wrote_templates, skipped_paths, "profile_write_template", dry_run=dry_run)
 
 
-def apply_profile(ctx: AppContext, profile: ProfileSpec, target_root: Path, *, dry_run: bool = False) -> ProfileApplyResult:
-    # Apply all profile components: bootstrap dirs, standards, templates, agents router, manifest.
-    created_dirs: list[str] = []
-    installed_standards: list[str] = []
-    wrote_templates: list[str] = []
-    rendered_overlays: list[str] = []
-    removed_overlays: list[str] = []
-    managed_files: list[str] = []
-    skipped_paths: list[str] = []
+def _apply_profile_static_assets(
+    ctx: AppContext,
+    profile: ProfileSpec,
+    target_root: Path,
+    state: ProfileApplyAccumulator,
+    *,
+    dry_run: bool,
+) -> None:
+    _apply_directory_items(ctx, profile.id, target_root, profile.bootstrap_create, state.created_dirs, state.skipped_paths, dry_run=dry_run)
+    _apply_profile_files(
+        ctx,
+        profile,
+        target_root,
+        state.installed_standards,
+        state.wrote_templates,
+        state.skipped_paths,
+        dry_run=dry_run,
+    )
 
-    _apply_directory_items(ctx, profile.id, target_root, profile.bootstrap_create, created_dirs, skipped_paths, dry_run=dry_run)
-    _apply_profile_files(ctx, profile, target_root, installed_standards, wrote_templates, skipped_paths, dry_run=dry_run)
 
+def _apply_profile_managed_artifacts(
+    ctx: AppContext,
+    profile: ProfileSpec,
+    target_root: Path,
+    state: ProfileApplyAccumulator,
+    *,
+    dry_run: bool,
+) -> None:
     updated_overlays, current_overlays, cleared_overlays = _sync_profile_overlays(ctx, profile, target_root, dry_run=dry_run)
-    rendered_overlays.extend(updated_overlays)
-    removed_overlays.extend(cleared_overlays)
-    skipped_paths.extend(current_overlays)
+    state.rendered_overlays.extend(updated_overlays)
+    state.removed_overlays.extend(cleared_overlays)
+    state.skipped_paths.extend(current_overlays)
 
     updated_managed_files, current_managed_files = _sync_profile_agents_router(ctx, profile, target_root, dry_run=dry_run)
-    managed_files.extend(updated_managed_files)
-    skipped_paths.extend(current_managed_files)
+    state.managed_files.extend(updated_managed_files)
+    state.skipped_paths.extend(current_managed_files)
 
-    if not dry_run:
-        write_profile_manifest(ctx, target_root, profile)
-        write_project_facts(ctx, target_root, profile)
+
+def _persist_profile_install(ctx: AppContext, target_root: Path, profile: ProfileSpec, *, dry_run: bool) -> None:
+    if dry_run:
+        return
+    write_profile_manifest(ctx, target_root, profile)
+    write_project_facts(ctx, target_root, profile)
+
+
+def apply_profile(ctx: AppContext, profile: ProfileSpec, target_root: Path, *, dry_run: bool = False) -> ProfileApplyResult:
+    # Apply all profile components: bootstrap dirs, standards, templates, agents router, manifest.
+    state = ProfileApplyAccumulator()
+    _apply_profile_static_assets(ctx, profile, target_root, state, dry_run=dry_run)
+    _apply_profile_managed_artifacts(ctx, profile, target_root, state, dry_run=dry_run)
+    _persist_profile_install(ctx, target_root, profile, dry_run=dry_run)
 
     return ProfileApplyResult(
         profile_id=profile.id,
         target_root=target_root,
-        created_dirs=created_dirs,
-        installed_standards=installed_standards,
-        wrote_templates=wrote_templates,
-        rendered_overlays=rendered_overlays,
-        removed_overlays=removed_overlays,
-        managed_files=managed_files,
-        skipped_paths=skipped_paths,
+        created_dirs=state.created_dirs,
+        installed_standards=state.installed_standards,
+        wrote_templates=state.wrote_templates,
+        rendered_overlays=state.rendered_overlays,
+        removed_overlays=state.removed_overlays,
+        managed_files=state.managed_files,
+        skipped_paths=state.skipped_paths,
         dry_run=dry_run,
     )
 
