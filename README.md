@@ -1,14 +1,101 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-03-27
+updated_at: 2026-03-28
 doc_status: active
 ---
 
 # Agents-Memory
 
+<a id="top"></a>
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+![MCP](https://img.shields.io/badge/MCP-enabled-black)
+![Docs Check](https://img.shields.io/badge/docs--check-governed-orange)
+[![Release](https://img.shields.io/github/v/release/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/releases)
+[![Contributors](https://img.shields.io/github/contributors/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/graphs/contributors)
+[![Last Commit](https://img.shields.io/github/last-commit/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/commits/main)
+[![Repo Size](https://img.shields.io/github/repo-size/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory)
+
+中文 | [English](#english)
+
 开源的 Shared Engineering Brain for AI coding agents。它把 Memory、Standards、Planning、Validation 组合成一个可安装、可验证、可持续演进的工程运行层，而不是一组松散的脚本。
 
 > README 是开源仓库首页，不展开完整教程正文。
+
+关键词：AI coding agent、shared engineering brain、engineering memory、agent runtime、prompt memory、standards sync、planning workflow、validation gate、MCP server、developer tooling
+
+<a id="english"></a>
+
+## English
+
+[中文](#top) | English
+
+Agents-Memory is an open-source Shared Engineering Brain for AI coding agents. It combines Memory, Standards, Planning, and Validation into an installable and verifiable engineering runtime instead of a loose collection of scripts.
+
+Keywords: AI coding agents, engineering memory, agent runtime, prompt memory, standards sync, planning workflow, validation gate, MCP server, developer tooling, reusable engineering context
+
+### What It Solves
+
+1. Repeated engineering mistakes across projects.
+2. Missing shared standards, planning workflow, and delivery checks for agents.
+3. Drift between docs, rules, templates, and real implementation.
+
+### Architecture Snapshot
+
+1. Agents consume not only memory, but also standards, profiles, onboarding state, and task bundles.
+2. Project bootstrap is a unified workflow around register, profile, bridge, doctor, and planning root.
+3. Delivery is gated by docs, plans, profiles, tests, and complexity checks.
+4. Project experience should be promoted into shared standards, validation rules, and reusable workflow defaults.
+
+### Quick Start
+
+```bash
+git clone https://github.com/haochencheng/Agents-Memory.git
+cd Agents-Memory
+python3 -m pip install -e .
+amem list
+python3 scripts/memory.py docs-check .
+python3.12 -m unittest discover -s tests -p 'test_*.py'
+```
+
+### Use Cases
+
+1. Give coding agents persistent engineering memory across multiple repositories.
+2. Install reusable standards, profiles, and task workflows into a new project bootstrap.
+3. Add docs, planning, profile, and validation gates around AI-assisted delivery.
+4. Turn repeated implementation mistakes into reusable rules and workflow protection.
+5. Build an MCP-backed engineering runtime for Copilot or other coding agents.
+
+### Docs
+
+1. Setup and first local run: docs/getting-started.md
+2. Integrate into another repo: docs/integration.md
+3. Operations and troubleshooting: docs/ops.md
+4. CLI reference: docs/commands.md
+5. Product architecture baseline: docs/ai-engineering-operating-system.md
+6. Repo ADRs: docs/architecture.md
+7. Modular code structure: docs/modular-architecture.md
+
+### Contribution / Roadmap
+
+Contributions are welcome in three directions:
+
+1. Better agent workflows: bootstrap, task execution, validation, and learning loops.
+2. Stronger open-source readiness: CI, issue templates, release discipline, and repo health gates.
+3. More reusable engineering assets: standards, profiles, planning bundles, and validation policies.
+
+Near-term roadmap:
+
+1. Converge more top-level workflows into clearer user-facing commands.
+2. Strengthen delivery gates across docs, plans, profiles, tests, and maintainability checks.
+3. Improve profile distribution, conflict handling, and cross-project standards sync.
+
+<a id="中文"></a>
+
+## 中文
+
+[English](#english) | 中文
 
 ## 它解决什么问题
 
