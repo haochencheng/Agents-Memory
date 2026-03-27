@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-03-27
+updated_at: 2026-03-28
 doc_status: active
 ---
 
@@ -85,7 +85,7 @@ amem stats
 
 ### 最小安装（CLI 基础功能，零依赖）
 
-CLI 的 `new / list / stats / search / register / enable / copilot-setup / agent-list / agent-setup / bridge-install / mcp-setup / doctor / plan-init / onboarding-bundle / refactor-bundle / plan-check / profile-list / profile-show / profile-apply / profile-diff / standards-sync / profile-check / docs-check / sync / archive / update-index` 命令使用纯标准库，**无需任何额外 pip 安装**。直接运行：
+CLI 的 `new / list / stats / search / register / enable / bootstrap / do-next / validate / start-task / copilot-setup / agent-list / agent-setup / bridge-install / mcp-setup / doctor / plan-init / onboarding-bundle / refactor-bundle / plan-check / profile-list / profile-show / profile-apply / profile-diff / standards-sync / profile-check / docs-check / sync / archive / update-index` 命令使用纯标准库，**无需任何额外 pip 安装**。直接运行：
 
 ```bash
 python3 scripts/memory.py list
@@ -170,6 +170,9 @@ python3 scripts/memory.py doctor .
 python3 scripts/memory.py enable .
 # 输出: 命令可执行性 smoke test；目标项目接入链路说明请看 docs/integration.md
 
+python3 scripts/memory.py bootstrap . --dry-run
+# 输出: 按顶层 workflow 语义预览接入影响面
+
 python3 scripts/memory.py enable . --dry-run
 # 输出: 命令可执行性 smoke test；详细接入预览语义请看 docs/integration.md
 
@@ -188,6 +191,9 @@ python3 scripts/memory.py doctor . --write-checklist --write-state
 python3 scripts/memory.py onboarding-execute .
 # 输出: 本地命令 smoke test；完整 onboarding 接入语义请看 docs/integration.md
 
+python3 scripts/memory.py do-next .
+# 输出: 当前 onboarding 的下一步动作、验证命令和后续动作
+
 python3 scripts/memory.py onboarding-bundle .
 # 输出: 本地命令 smoke test；bundle 语义请结合 planning 文档阅读
 
@@ -202,8 +208,17 @@ python3 scripts/memory.py refactor-bundle .
 python3 scripts/memory.py plan-init "shared engineering brain task" .
 # 输出: 在 docs/plans/<slug>/ 生成 spec / plan / task-graph / validation bundle
 
+python3 scripts/memory.py start-task "shared engineering brain task" .
+# 输出: 顶层 workflow 入口；生成 bundle 后会把 active_task 写入 onboarding state
+
 python3 scripts/memory.py plan-check .
 # 输出: 校验 docs/plans/ 下 planning bundle 的完整性和关键语义
+
+python3 scripts/memory.py validate .
+# 输出: 聚合 docs / profile / planning / doctor 的统一交付门
+
+python3 scripts/memory.py close-task . --slug shared-engineering-brain-task
+# 输出: gate 通过后回写 bundle 完成标记，并把 completed task 写回 onboarding state
 
 python3 scripts/memory.py profile-list
 # 输出: 当前内置 profile 列表

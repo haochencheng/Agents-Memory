@@ -18,6 +18,9 @@ doc_status: active
 
 ### Changed
 
+- CLI 现在新增顶层 workflow 入口：`bootstrap`、`start-task`、`do-next`、`validate`，把对外主路径从模块命令收敛到用户意图命令。
+- `start-task` / `close-task` 现在会把 active/completed task 生命周期写回 `.agents-memory/onboarding-state.json`，并把完成状态回写到 planning bundle 工件。
+- 仓库现在用自身的 profile-managed `AGENTS.md` 路由参与自验证，`doctor`/`validate` 不再因为缺失或漂移的 AGENTS router 卡在 Core FAIL。
 - GitHub Actions CI 现在拆分为独立的 `tests` 和 `docs` jobs，便于 branch protection 分别要求通过。
 - `pyproject.toml` 构建后端切换为 `setuptools.build_meta`，使干净环境中的 `pip install .` 可用。
 - `docs-check` 现在会验证 `.github/workflows/ci.yml` 和 `docs/release-checklist.md` 的关键语义，而不只检查文件存在。

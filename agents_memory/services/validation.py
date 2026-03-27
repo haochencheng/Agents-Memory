@@ -27,10 +27,15 @@ CORE_DOC_COMMANDS = [
     "agent-setup",
     "register",
     "enable",
+    "bootstrap",
     "mcp-setup",
     "doctor",
     "onboarding-execute",
     "plan-init",
+    "start-task",
+    "do-next",
+    "validate",
+    "close-task",
     "onboarding-bundle",
     "refactor-bundle",
     "plan-check",
@@ -1091,6 +1096,52 @@ def collect_docs_check_findings(project_root: Path) -> list[ValidationFinding]:
     findings.extend(_collect_policy_findings(project_root))
     findings.extend(_collect_open_source_findings(project_root))
     findings.extend(_collect_hygiene_findings(project_root, searchable_files))
+    return findings
+
+
+# Bundle-scoped exit criteria gate helpers
+
+_BUNDLE_PLACEHOLDER_FRAGMENTS: frozenset[str] = frozenset([
+    "任务完成时必须满足哪些条件",
+    "写下本任务额外需要跑的命令",
+])
+
+
+def _parse_checkbox_items(text: str, heading: str) -> list[tuple[bool, str]]:
+    lines = text.splitlines()
+    in_section = False
+    results: list[tuple[bool, str]] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped == heading:
+            in_section = True
+            continue
+        if in_section and stripped.startswith("##"):
+            break
+        if not in_section or not stripped.startswith("- ["):
+            continue
+        checked = stripped[3:4].lower() == "x"
+        item_text = stripped[6:].strip()
+        if not any(frag in item_text for frag in _BUNDLE_PLACEHOLDER_FRAGMENTS):
+            results.append((checked, item_text))
+    return results
+
+
+def collect_bundle_exit_criteria_findings(plan_root: Path) -> list[ValidationFinding]:
+    """Return WARN findings for any unchecked exit criteria in the bundle."""
+    findings: list[ValidationFinding] = []
+    tg_path = plan_root / "task-graph.md"
+    if tg_path.exists():
+        for checked, text in _parse_checkbox_items(tg_path.read_text(encoding="utf-8"), "## Exit Criteria"):
+            if not checked:
+                findings.append(ValidationFinding(status="WARN", key="exit_criteria_unchecked", detail=text))
+    vr_path = plan_root / "validation.md"
+    if vr_path.exists():
+        for checked, text in _parse_checkbox_items(vr_path.read_text(encoding="utf-8"), "## Task-Specific Checks"):
+            if not checked:
+                findings.append(ValidationFinding(status="WARN", key="task_check_unchecked", detail=text))
+    if not findings:
+        findings.append(ValidationFinding(status="OK", key="bundle_gate", detail="no unresolved exit criteria"))
     return findings
 
 

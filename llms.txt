@@ -168,14 +168,19 @@ python3 scripts/memory.py agent-list                   # list built-in agent ada
 python3 scripts/memory.py agent-setup <agent> [path]   # install a specific agent adapter
 python3 scripts/memory.py register [path]              # one-command project registration + default agent + bridge install
 python3 scripts/memory.py enable [path] [--full] [--dry-run] [--json] # one-command Shared Engineering Brain enable; rerunning on a profile-managed project also refreshes managed standards plus the root AGENTS.md router, and --full also repairs safe missing planning bundle files before Copilot/refactor follow-up, --dry-run previews Capabilities/Planned Writes/Skipped Existing, --json emits structured preview
+python3 scripts/memory.py bootstrap [path] [--full] [--dry-run] [--json] # intent-level bootstrap entry; currently delegates to enable with the same semantics
 python3 scripts/memory.py bridge-install <project-id>  # install bridge instruction in a project
 python3 scripts/memory.py mcp-setup [project-id]       # write .vscode/mcp.json for a registered project
 python3 scripts/memory.py doctor [project-id] [--write-checklist] [--write-state] # verify a project's full integration health
 python3 scripts/memory.py onboarding-execute [path] [--approve-unsafe] # execute the first onboarding action; unsafe steps require explicit approval
+python3 scripts/memory.py do-next [path] [--format text|json] # inspect onboarding state and print the current recommended action
 python3 scripts/memory.py onboarding-bundle [path]   # generate onboarding planning bundle from onboarding-state.json
 python3 scripts/memory.py plan-init <task-name> [path] # scaffold spec / plan / task-graph / validation bundle
+python3 scripts/memory.py start-task <task-name> [path] # intent-level alias for plan-init
 python3 scripts/memory.py refactor-bundle [path] [--token <hotspot-token>] [--index <n>] # scaffold a refactor bundle from a stable hotspot token or current hotspot rank
 python3 scripts/memory.py plan-check [path]            # validate planning bundles under docs/plans
+python3 scripts/memory.py validate [path] [--strict] [--format text|json] # aggregate docs/profile/planning/doctor as a single delivery gate
+python3 scripts/memory.py close-task [path] [--slug <task-slug>] [--strict] [--format text|json] # close the current task after gate success and persist bundle/state completion markers
 python3 scripts/memory.py profile-list                 # list installable project profiles
 python3 scripts/memory.py profile-show <profile-id>    # show one profile contract
 python3 scripts/memory.py profile-apply <id> [path]    # install profile into target project

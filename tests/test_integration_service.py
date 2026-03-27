@@ -583,6 +583,11 @@ class IntegrationServiceTests(unittest.TestCase):
                         "last_verified_action": {"key": "mcp_config", "status": "verified"},
                         "last_execution_status": "verified",
                         "last_execution_at": "2026-03-26T00:00:00+00:00",
+                        "active_task": {"task_slug": "demo-task", "status": "active"},
+                        "last_started_task": {"task_slug": "demo-task", "status": "active"},
+                        "completed_tasks": [{"task_slug": "older-task", "status": "completed"}],
+                        "last_completed_task": {"task_slug": "older-task", "status": "completed"},
+                        "last_validation_report": {"overall": "OK"},
                     },
                     ensure_ascii=False,
                 ),
@@ -595,6 +600,9 @@ class IntegrationServiceTests(unittest.TestCase):
             self.assertEqual(state["execution_history"][0]["key"], "mcp_config")
             self.assertEqual(state["last_execution_status"], "verified")
             self.assertEqual(state["last_verified_action"]["key"], "mcp_config")
+            self.assertEqual(state["active_task"]["task_slug"], "demo-task")
+            self.assertEqual(state["completed_tasks"][0]["task_slug"], "older-task")
+            self.assertEqual(state["last_completed_task"]["status"], "completed")
 
     def test_cmd_doctor_preserves_live_refactor_followup_metadata_when_rewriting_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

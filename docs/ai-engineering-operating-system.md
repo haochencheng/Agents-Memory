@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-03-27
+updated_at: 2026-03-28
 doc_status: active
 ---
 
@@ -172,13 +172,13 @@ flowchart TD
 | `Memory` 记录与 promote 基础链路 | done | `new / list / stats / search / promote / sync` 已存在，错误沉淀链路已运行 |
 | `Standards` 同步与 profile 受管文件 | partial | profile 管理与 standards-sync 已存在，但仍缺更强的统一发行版入口 |
 | `Planning` 基础 bundle 生成 | done | `plan-init`、onboarding/refactor bundle 已存在，bundle 工件已可生成 |
-| `Planning` 事务闭环 | partial | 已有 bundle 与 plan-check，但 `close-task` 事务提交还未实现 |
+| `Planning` 事务闭环 | partial | `close-task` 已能回写 bundle 完成状态与 onboarding state，但 task-scoped test gate 和更多事务规则还未补齐 |
 | `Validation` 单项校验器 | done | `docs-check`、`profile-check`、`plan-check`、`doctor` 均已存在 |
-| `Validation` 统一 delivery gate | partial | 能力已分散具备，但 `amem validate .` 聚合入口还未落地 |
-| `bootstrap` 单入口 workflow | partial | `enable` 已覆盖大部分 bootstrap 语义，但命令模型尚未收敛到 `bootstrap` |
-| `start-task` workflow | partial | `plan-init` 已可用，但仍缺完整 task metadata/status contract |
-| `do-next` workflow | not_done | 当前主要依赖 onboarding state 和 doctor 输出，尚无统一命令入口 |
-| `close-task` workflow | not_done | 尚未实现统一状态回写与完成事务 |
+| `Validation` 统一 delivery gate | partial | `amem validate .` 已落地并聚合 docs/profile/planning/doctor，并被 `close-task` 复用；focused test gate 仍未收敛进同一入口 |
+| `bootstrap` 单入口 workflow | done | `amem bootstrap .` 已作为顶层 workflow 入口收敛到 `enable` 语义 |
+| `start-task` workflow | done | `amem start-task "<task>" .` 已作为顶层 workflow 入口收敛到 `plan-init` |
+| `do-next` workflow | done | `amem do-next .` 已统一读取 onboarding state 并输出当前推荐动作 |
+| `close-task` workflow | done | `amem close-task .` 已能先过 gate，再回写 task bundle 和 onboarding state 的完成记录 |
 | `promote-learning` workflow | partial | error promote / sync 已有，但还未收敛成跨项目 workflow 命令 |
 | 文档元数据与状态校验 | done | 已纳入 `created_at` / `updated_at` / `doc_status` 规则，并进入 docs-check / plan-check |
 

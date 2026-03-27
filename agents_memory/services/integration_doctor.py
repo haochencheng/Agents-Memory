@@ -454,7 +454,18 @@ def _doctor_preserved_execution_metadata(existing_state: dict[str, object] | Non
     if not existing_state:
         return {}
     payload: dict[str, object] = {}
-    for key in ("execution_history", "last_executed_action", "last_verified_action", "last_execution_status", "last_execution_at"):
+    for key in (
+        "execution_history",
+        "last_executed_action",
+        "last_verified_action",
+        "last_execution_status",
+        "last_execution_at",
+        "active_task",
+        "last_started_task",
+        "completed_tasks",
+        "last_completed_task",
+        "last_validation_report",
+    ):
         if key in existing_state:
             payload[key] = existing_state[key]
     return payload

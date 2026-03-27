@@ -1,12 +1,12 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-03-27
+updated_at: 2026-03-28
 doc_status: active
 ---
 
 # CLI Commands
 
-> Agents-Memory CLI 全量命令总表。默认推荐从 `amem enable .` 开始接入项目。
+> Agents-Memory CLI 全量命令总表。默认推荐从 `amem bootstrap .` 开始走顶层 workflow。
 
 ---
 
@@ -39,11 +39,41 @@ getting-started.md  = 本仓库本地启动与运维
 
 ## Recommended Entry
 
+### `amem bootstrap .`
+
+顶层 workflow 入口。
+
+适合首次接入项目，希望按“用户意图”而不是内部模块名来理解命令。当前语义等价于 `amem enable .`，但文档与后续产品演进都以 `bootstrap` 作为主入口。
+
+### `amem start-task "<task>" .`
+
+顶层 workflow 入口。
+
+适合把新需求快速收敛成标准 planning bundle。当前语义等价于 `amem plan-init "<task>" .`。
+
+### `amem do-next .`
+
+顶层 workflow 入口。
+
+适合让 agent 直接读取当前 onboarding state，输出当前阻塞项、推荐动作、验证命令和下一步命令，而不是自己猜测。
+
+### `amem validate .`
+
+顶层 workflow 入口。
+
+聚合 `docs-check`、`profile-check`、`plan-check` 与 `doctor`，形成一个统一交付门。`--strict` 会把 `WARN/PARTIAL` 也视为失败退出。
+
+### `amem close-task .`
+
+顶层 workflow 入口。
+
+在统一 gate 通过后，把当前 task bundle 的完成状态回写到 `README.md`、`task-graph.md`、`validation.md`，并把完成记录写回 `.agents-memory/onboarding-state.json`。如果当前项目有多个任务 bundle，建议显式传 `--slug <task-slug>`。
+
 ### `amem enable .`
 
-默认模式的一键接入命令。
+兼容层入口，一键接入命令。
 
-适合首次接入项目，目标是最小成本启用可运行链路。具体接入顺序、受管文件和验证步骤统一见 `docs/integration.md`。
+适合已有用户继续沿用现有命令。具体接入顺序、受管文件和验证步骤统一见 `docs/integration.md`。
 
 ### `amem enable . --dry-run`
 
@@ -77,6 +107,30 @@ getting-started.md  = 本仓库本地启动与运维
 - 把 refactor follow-up 写回 onboarding state
 
 适合希望一次性把 Shared Engineering Brain 核心能力全部打开的项目。完整接入说明见 `docs/integration.md`。
+
+---
+
+## Workflow Commands
+
+### `amem bootstrap [path] [--full] [--dry-run] [--json]`
+
+按用户意图组织的一键 bootstrap 入口。当前委托给 `enable` 实现，参数语义保持一致。
+
+### `amem start-task <task-name> [path] [--slug <task-slug>] [--dry-run]`
+
+按用户意图组织的 task 启动入口。当前委托给 `plan-init` 实现，生成 `spec / plan / task-graph / validation`。
+
+### `amem do-next [path] [--format text|json]`
+
+输出当前 onboarding 下一步动作。如果项目还没准备好，会给出推荐命令；如果 onboarding 已完成，会提示继续正常实现或开启下一个 task。
+
+### `amem validate [path] [--strict] [--format text|json]`
+
+统一交付门。输出 `docs / profile / planning / doctor` 四组结果，并给出统一退出码。
+
+### `amem close-task [path] [--slug <task-slug>] [--strict] [--format text|json]`
+
+任务关闭入口。会先跑统一 gate，再原子化回写 task bundle 的完成标记和 onboarding state 中的任务闭环状态。
 
 ---
 

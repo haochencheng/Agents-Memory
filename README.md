@@ -39,10 +39,11 @@ Agents-Memory is a Shared Engineering Brain for AI coding agents. It gives teams
 
 ```text
 connect project
-	-> bootstrap engineering context
+	-> bootstrap engineering context with amem bootstrap
 	-> create task bundle
 	-> implement with shared standards
-	-> run delivery gates
+	-> run delivery gates with amem validate
+	-> close the task with amem close-task
 	-> promote lessons back into shared defaults
 ```
 
@@ -52,8 +53,10 @@ connect project
 git clone https://github.com/haochencheng/Agents-Memory.git
 cd Agents-Memory
 python3 -m pip install -e .
-amem list
-python3 scripts/memory.py docs-check .
+amem bootstrap . --dry-run
+amem start-task "demo task" . --dry-run
+amem validate .
+amem close-task . --slug demo-task
 python3.12 -m unittest discover -s tests -p 'test_*.py'
 ```
 

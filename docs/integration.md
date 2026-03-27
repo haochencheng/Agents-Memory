@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-03-27
+updated_at: 2026-03-28
 doc_status: active
 ---
 
@@ -48,7 +48,7 @@ modular-architecture.md  = 仓库内部代码如何分层
 
 ## 接入需要做什么？
 
-接入共 4 步，推荐通过 `amem enable .` 一次编排完成：
+接入共 4 步，推荐通过 `amem bootstrap .` 一次编排完成：
 
 | 步骤 | 做什么 | 效果 |
 |------|--------|------|
@@ -79,13 +79,13 @@ bash Agents-Memory/scripts/install-cli.sh
 
 ```bash
 cd /path/to/your-project
-amem enable .
+amem bootstrap .
 ```
 
 如果你想先看影响面，不立刻写文件：
 
 ```bash
-amem enable . --dry-run
+amem bootstrap . --dry-run
 ```
 
 它会输出三组预览信息：
@@ -97,14 +97,16 @@ amem enable . --dry-run
 如果你想把 profile、Copilot 激活和第一条 refactor follow-up 也一起打开：
 
 ```bash
-amem enable . --full
+amem bootstrap . --full
 ```
 
 如果你希望把全量预览交给 agent 或 CI 直接消费：
 
 ```bash
-amem enable . --full --dry-run --json
+amem bootstrap . --full --dry-run --json
 ```
+
+`bootstrap` 是当前推荐的顶层 workflow 命令；它与 `enable` 保持同样的参数和行为，用来把对外心智从“内部实现命令”收敛到“用户意图命令”。
 
 默认模式会自动完成：
 
@@ -160,9 +162,9 @@ Domains (逗号分隔) [frontend, python]: ↵
 
 > **提示 2**：如果目标项目已有 `.vscode/mcp.json`（含其他 MCP server），命令会**合并写入** `agents-memory` 条目，不覆盖现有配置。
 
-> **提示 3**：`enable` 默认模式不会自动写 `.github/copilot-instructions.md`；如果你要连同 repo-wide Copilot 激活一起接上，请用 `amem enable . --full`。
+> **提示 3**：`bootstrap`/`enable` 默认模式都不会自动写 `.github/copilot-instructions.md`；如果你要连同 repo-wide Copilot 激活一起接上，请用 `amem bootstrap . --full`。
 
-> **提示 4**：`enable --dry-run` 不会写任何文件，适合先评估将要启用的能力和目标路径。
+> **提示 4**：`bootstrap --dry-run` / `enable --dry-run` 都不会写任何文件，适合先评估将要启用的能力和目标路径。
 
 > **提示 5**：当前目标项目里的 agent 读取入口是 `.github/copilot-instructions.md`、`.github/instructions/agents-memory-bridge.instructions.md`、`.github/instructions/agents-memory/standards/*`、根目录 `AGENTS.md` 中的受管 read-order block，以及 `.vscode/mcp.json`。这条接入链路不要求目标项目额外生成 `llms.txt` 才能生效；`llms.txt` 仍主要用于 Agents-Memory 仓库自身的机器可读地图。
 

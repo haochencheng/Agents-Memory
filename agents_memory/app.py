@@ -9,6 +9,7 @@ from agents_memory.commands import profiles as profile_commands
 from agents_memory.commands import records as record_commands
 from agents_memory.commands import validation as validation_commands
 from agents_memory.commands import vector as vector_commands
+from agents_memory.commands import workflows as workflow_commands
 from agents_memory.runtime import build_context
 
 USAGE = """Agents-Memory CLI — 错误记录管理工具
@@ -30,11 +31,20 @@ USAGE = """Agents-Memory CLI — 错误记录管理工具
   python3 memory.py mcp-setup [project-id]     # 在已注册项目中写入 .vscode/mcp.json
     python3 memory.py enable [path] [--full] [--dry-run] [--json]
                                                                                              # 一键启用 Shared Engineering Brain；--full 会附加 profile、Copilot 和 refactor bundle，--dry-run 预览变更，--json 输出结构化预览
+    python3 memory.py bootstrap [path] [--full] [--dry-run] [--json]
+                                                                                                                                                                                         # 顶层 workflow 入口；语义等价于 enable，更适合按用户意图组织接入流程
   python3 memory.py doctor [project-id] [--write-checklist] [--write-state]
                                                # 检查项目是否已完整接入 Agents-Memory，并可导出 onboarding 工件
   python3 memory.py onboarding-execute [path] [--approve-unsafe]
                                                # 执行当前第一条 onboarding action；仅自动执行安全步骤，危险步骤需显式批准
   python3 memory.py plan-init <task> [path]    # 初始化 spec / plan / task-graph / validation bundle
+    python3 memory.py start-task <task> [path]   # 顶层 workflow 入口；语义等价于 plan-init
+    python3 memory.py do-next [path] [--format text|json]
+                                                                                             # 输出当前 onboarding 下一步动作，避免 agent 自行猜测当前阻塞项
+    python3 memory.py validate [path] [--strict] [--format text|json]
+                                                                                             # 聚合 docs/profile/planning/doctor 成统一交付门
+        python3 memory.py close-task [path] [--slug <task-slug>] [--strict] [--format text|json]
+                                                                                                                                                                                                                                                                                                                                                                                 # 在 gate 通过后回写 planning bundle 与 onboarding state，完成任务事务闭环
   python3 memory.py onboarding-bundle [path]   # 从 onboarding-state.json 生成 onboarding task bundle
     python3 memory.py refactor-bundle [path] [--token <hotspot-token>] [--index <n>]
                                                                                              # 根据稳定 hotspot token 或当前排序位置生成 refactor task bundle
@@ -62,6 +72,7 @@ def command_registry() -> dict[str, Callable]:
     registry.update(planning_commands.register())
     registry.update(profile_commands.register())
     registry.update(validation_commands.register())
+    registry.update(workflow_commands.register())
     return registry
 
 
