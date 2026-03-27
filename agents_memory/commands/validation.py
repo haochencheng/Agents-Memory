@@ -6,6 +6,7 @@ from agents_memory.services.validation import cmd_docs_check, cmd_docs_touch, cm
 
 
 def _parse_validation_flags(args: list[str]) -> tuple[str, bool, str, str | None]:
+    # Parse --strict, --format, --profile flags; first positional is target.
     target = "."
     strict = False
     output_format = "text"
@@ -13,17 +14,15 @@ def _parse_validation_flags(args: list[str]) -> tuple[str, bool, str, str | None
     index = 0
     while index < len(args):
         arg = args[index]
-        if arg == "--strict":
-            strict = True
-        elif arg == "--format" and index + 1 < len(args):
-            output_format = args[index + 1]
-            index += 1
-        elif arg == "--profile" and index + 1 < len(args):
-            profile_id = args[index + 1]
-            index += 1
-        elif not arg.startswith("--"):
-            target = arg
         index += 1
+        if arg == "--strict":
+            strict = True; continue
+        if arg == "--format" and index < len(args):
+            output_format = args[index]; index += 1; continue
+        if arg == "--profile" and index < len(args):
+            profile_id = args[index]; index += 1; continue
+        if not arg.startswith("--"):
+            target = arg
     return target, strict, output_format, profile_id
 
 
@@ -43,6 +42,7 @@ def _handle_plan_check(ctx, args: list[str]) -> None:
 
 
 def _parse_docs_touch_flags(args: list[str]) -> tuple[str, str | None, bool, str]:
+    # Parse --date, --dry-run, --format flags; first positional is target.
     target = "."
     updated_at: str | None = None
     dry_run = False
@@ -50,17 +50,15 @@ def _parse_docs_touch_flags(args: list[str]) -> tuple[str, str | None, bool, str
     index = 0
     while index < len(args):
         arg = args[index]
-        if arg == "--date" and index + 1 < len(args):
-            updated_at = args[index + 1]
-            index += 1
-        elif arg == "--dry-run":
-            dry_run = True
-        elif arg == "--format" and index + 1 < len(args):
-            output_format = args[index + 1]
-            index += 1
-        elif not arg.startswith("--"):
-            target = arg
         index += 1
+        if arg == "--date" and index < len(args):
+            updated_at = args[index]; index += 1; continue
+        if arg == "--dry-run":
+            dry_run = True; continue
+        if arg == "--format" and index < len(args):
+            output_format = args[index]; index += 1; continue
+        if not arg.startswith("--"):
+            target = arg
     return target, updated_at, dry_run, output_format
 
 

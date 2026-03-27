@@ -48,6 +48,7 @@ def _resolve_refactor_hotspot(
     hotspot_index: int,
     hotspot_token: str | None,
 ) -> tuple[int, RefactorHotspot]:
+    # Resolve a hotspot by stable token (preferred) or by 1-based integer index.
     if hotspot_token:
         for resolved_index, candidate in enumerate(hotspots, start=1):
             if candidate.rank_token == hotspot_token:
@@ -63,33 +64,53 @@ def _resolve_refactor_hotspot(
     return hotspot_index, hotspots[hotspot_index - 1]
 
 
-def _render_refactor_bundle_content(
-    source: Path,
-    *,
-    filename: str,
-    task_name: str,
-    task_slug: str,
+def _refactor_task_graph_lines(hotspot_payload: dict) -> list[str]:
+    # Return the task-graph appendix block listing the three standard refactor steps.
+    return [
+        "## Refactor Work Items",
+        JSON_CODE_FENCE,
+        json.dumps(
+            [
+                {"step": 1, "title": "Map decision branches and data mutations", "done_when": "Current control flow is documented in spec.md."},
+                {"step": 2, "title": "Extract or simplify the hotspot", "done_when": "Complexity drivers are reduced without behavior regression."},
+                {"step": 3, "title": "Re-run validation", "done_when": "`amem doctor .` shows a smaller refactor_watch surface."},
+            ],
+            ensure_ascii=False,
+            indent=2,
+        ),
+        "```",
+    ]
+
+
+def _refactor_readme_appendix(
     hotspot: RefactorHotspot,
-    hotspot_index: int,
     hotspot_token: str,
-) -> str:
-    if not source.exists():
-        raise FileNotFoundError(f"planning template not found: {source}")
-    base = _render_template(source, task_name=task_name, task_slug=task_slug).rstrip()
-    hotspot_payload = serialize_refactor_hotspot(hotspot)
-    init_command = f"amem refactor-bundle . --token {hotspot_token}"
-    appendix_map = {
-        README_PLAN_FILE: [
-            "## Refactor Hotspot",
-            f"- hotspot: `{hotspot.identifier}`",
-            f"- hotspot token: `{hotspot_token}`",
-            f"- current rank index: `{hotspot_index}`",
-            f"- line: `{hotspot.line}`",
-            f"- status: `{hotspot.status}`",
-            f"- issues: `{', '.join(hotspot.issues)}`",
-            f"- bundle entry command: `{init_command}`",
-            "- verify with: `amem doctor .`",
-        ],
+    hotspot_index: int,
+    init_command: str,
+) -> list[str]:
+    return [
+        "## Refactor Hotspot",
+        f"- hotspot: `{hotspot.identifier}`",
+        f"- hotspot token: `{hotspot_token}`",
+        f"- current rank index: `{hotspot_index}`",
+        f"- line: `{hotspot.line}`",
+        f"- status: `{hotspot.status}`",
+        f"- issues: `{', '.join(hotspot.issues)}`",
+        f"- bundle entry command: `{init_command}`",
+        "- verify with: `amem doctor .`",
+    ]
+
+
+def _build_refactor_appendix_map(
+    hotspot: RefactorHotspot,
+    hotspot_token: str,
+    hotspot_payload: dict,
+    hotspot_index: int,
+    init_command: str,
+) -> dict[str, list[str]]:
+    # Map each plan filename to its refactor-context appendix lines.
+    return {
+        README_PLAN_FILE: _refactor_readme_appendix(hotspot, hotspot_token, hotspot_index, init_command),
         SPEC_PLAN_FILE: [
             "## Refactor Inputs",
             "",
@@ -104,20 +125,7 @@ def _render_refactor_bundle_content(
             "- Preserve behavior with focused tests or validation commands before and after extraction.",
             "- Re-run `amem doctor .` after the refactor and confirm the hotspot disappears or shrinks.",
         ],
-        TASK_GRAPH_PLAN_FILE: [
-            "## Refactor Work Items",
-            JSON_CODE_FENCE,
-            json.dumps(
-                [
-                    {"step": 1, "title": "Map decision branches and data mutations", "done_when": "Current control flow is documented in spec.md."},
-                    {"step": 2, "title": "Extract or simplify the hotspot", "done_when": "Complexity drivers are reduced without behavior regression."},
-                    {"step": 3, "title": "Re-run validation", "done_when": "`amem doctor .` shows a smaller refactor_watch surface."},
-                ],
-                ensure_ascii=False,
-                indent=2,
-            ),
-            "```",
-        ],
+        TASK_GRAPH_PLAN_FILE: _refactor_task_graph_lines(hotspot_payload),
         VALIDATION_PLAN_FILE: [
             "## Refactor Verification",
             "- primary verification command: `amem doctor .`",
@@ -129,6 +137,25 @@ def _render_refactor_bundle_content(
             "```",
         ],
     }
+
+
+def _render_refactor_bundle_content(
+    source: Path,
+    *,
+    filename: str,
+    task_name: str,
+    task_slug: str,
+    hotspot: RefactorHotspot,
+    hotspot_index: int,
+    hotspot_token: str,
+) -> str:
+    # Render the plan template then append the refactor-context section for this file.
+    if not source.exists():
+        raise FileNotFoundError(f"planning template not found: {source}")
+    base = _render_template(source, task_name=task_name, task_slug=task_slug).rstrip()
+    hotspot_payload = serialize_refactor_hotspot(hotspot)
+    init_command = f"amem refactor-bundle . --token {hotspot_token}"
+    appendix_map = _build_refactor_appendix_map(hotspot, hotspot_token, hotspot_payload, hotspot_index, init_command)
     appendix = appendix_map.get(filename, [])
     appendix_text = "\n".join(appendix).rstrip()
     return base + ("\n\n" + appendix_text if appendix_text else "") + "\n"
@@ -145,31 +172,20 @@ def _refactor_appendix_heading(filename: str) -> str:
     return heading_map[filename]
 
 
-def init_refactor_bundle(
+def _build_refactor_plan(
     ctx: AppContext,
     target_root: Path,
     *,
-    hotspot_index: int = 1,
-    hotspot_token: str | None = None,
-    task_slug: str | None = None,
-    dry_run: bool = False,
-) -> RefactorBundleResult:
-    hotspots = collect_refactor_watch_hotspots(target_root)
-    if not hotspots:
-        raise FileNotFoundError(f"no refactor hotspots found under: {target_root}")
-
-    hotspot_index, hotspot = _resolve_refactor_hotspot(
-        hotspots,
-        hotspot_index=hotspot_index,
-        hotspot_token=hotspot_token,
-    )
-
-    task_name = f"Refactor hotspot: {hotspot.identifier}"
-    resolved_slug = _default_refactor_slug(hotspot, task_slug)
+    task_name: str,
+    resolved_slug: str,
+    hotspot: RefactorHotspot,
+    hotspot_index: int,
+    dry_run: bool,
+) -> tuple:
+    # Initialize the plan bundle and refresh managed files with refactor context.
     templates_dir = _planning_templates_dir(ctx)
     if not templates_dir.exists():
         raise FileNotFoundError(f"planning templates directory not found: {templates_dir}")
-
     plan_result = init_plan_bundle(ctx, task_name, target_root, task_slug=resolved_slug, dry_run=dry_run)
     created_now = set(plan_result.wrote_files)
     refreshed_files, skipped_files = refresh_managed_bundle_files(
@@ -192,6 +208,35 @@ def init_refactor_bundle(
         create_action="refactor_bundle_file",
         refresh_action="refactor_bundle_refresh",
         log_detail=f"task_slug={resolved_slug};hotspot={hotspot.identifier}",
+    )
+    return plan_result, refreshed_files, skipped_files
+
+
+def init_refactor_bundle(
+    ctx: AppContext,
+    target_root: Path,
+    *,
+    hotspot_index: int = 1,
+    hotspot_token: str | None = None,
+    task_slug: str | None = None,
+    dry_run: bool = False,
+) -> RefactorBundleResult:
+    # Resolve hotspot, build plan files, and return the assembled refactor bundle result.
+    hotspots = collect_refactor_watch_hotspots(target_root)
+    if not hotspots:
+        raise FileNotFoundError(f"no refactor hotspots found under: {target_root}")
+
+    hotspot_index, hotspot = _resolve_refactor_hotspot(
+        hotspots,
+        hotspot_index=hotspot_index,
+        hotspot_token=hotspot_token,
+    )
+
+    task_name = f"Refactor hotspot: {hotspot.identifier}"
+    resolved_slug = _default_refactor_slug(hotspot, task_slug)
+    plan_result, refreshed_files, skipped_files = _build_refactor_plan(
+        ctx, target_root, task_name=task_name, resolved_slug=resolved_slug,
+        hotspot=hotspot, hotspot_index=hotspot_index, dry_run=dry_run,
     )
 
     return RefactorBundleResult(

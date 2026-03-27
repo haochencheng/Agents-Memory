@@ -68,6 +68,23 @@ def offer_mcp_setup(ctx: AppContext, project_id: str, project_root: Path) -> Non
         print(f"跳过。稍后可手动运行: amem mcp-setup {project_id}")
 
 
+def _prompt_domains(instruction_dir: Path, root: Path) -> list[str]:
+    # Print detected files/domains and prompt the user to confirm or override.
+    domains = detect_domains(instruction_dir)
+    instruction_files = detect_instruction_files(instruction_dir, root)
+    print("\n📂 扫描到 instruction 文件:")
+    if instruction_files:
+        for domain, instruction_path in instruction_files.items():
+            print(f"   {domain:<12} → {instruction_path}")
+    else:
+        print("   (未找到 .instructions.md 文件，将使用空映射)")
+    print(f"\n🏷  推断的 domains: {', '.join(domains)}")
+    domains_input = input(f"Domains (逗号分隔) [{', '.join(domains)}]: ").strip()
+    if domains_input:
+        domains = [d.strip() for d in domains_input.split(",") if d.strip()]
+    return domains
+
+
 def cmd_register(ctx: AppContext, path: str = ".") -> None:
     # Registration is intentionally interactive because it binds together
     # project identity, detected domains, managed instruction roots, and the
@@ -94,19 +111,7 @@ def cmd_register(ctx: AppContext, path: str = ".") -> None:
     default_instruction_dir = ".github/instructions"
     instruction_dir_input = input(f"Instruction 目录 [{default_instruction_dir}]: ").strip() or default_instruction_dir
     instruction_dir = root / instruction_dir_input
-    domains = detect_domains(instruction_dir)
-    instruction_files = detect_instruction_files(instruction_dir, root)
-
-    print("\n📂 扫描到 instruction 文件:")
-    if instruction_files:
-        for domain, instruction_path in instruction_files.items():
-            print(f"   {domain:<12} → {instruction_path}")
-    else:
-        print("   (未找到 .instructions.md 文件，将使用空映射)")
-    print(f"\n🏷  推断的 domains: {', '.join(domains)}")
-    domains_input = input(f"Domains (逗号分隔) [{', '.join(domains)}]: ").strip()
-    if domains_input:
-        domains = [domain.strip() for domain in domains_input.split(",") if domain.strip()]
+    domains = _prompt_domains(instruction_dir, root)
 
     entry = _render_project_registry_entry(project_id, root, instruction_dir_input)
     append_project_entry(ctx, entry)

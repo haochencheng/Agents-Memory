@@ -57,6 +57,7 @@ def _handle_profile_diff(ctx, args: list[str]) -> None:
 
 
 def _handle_standards_sync(ctx, args: list[str]) -> None:
+    # Parse CLI args and dispatch to cmd_standards_sync.
     dry_run = False
     profile_id: str | None = None
     positionals: list[str] = []

@@ -102,6 +102,70 @@ def _preview_refactor_bundle_actions(project_root: Path) -> tuple[list[str], lis
     return [capability], planned_writes, []
 
 
+def _collect_registry_preview(ctx: AppContext, project_id: str) -> tuple[list[str], list[str], list[str]]:
+    # Determine whether project registration is needed or already present.
+    if not project_already_registered(ctx, project_id):
+        return [f"register project `{project_id}`"], [str(ctx.projects_file)], []
+    return [], [], [f"registry entry already exists for `{project_id}`"]
+
+
+def _collect_bridge_preview(project_root: Path) -> tuple[list[str], list[str], list[str]]:
+    # Determine whether the bridge instruction file needs to be installed.
+    bridge_path = project_root / DEFAULT_BRIDGE_INSTRUCTION_REL
+    if not bridge_path.exists():
+        return ["install bridge instruction"], [str(bridge_path)], []
+    return [], [], [str(bridge_path)]
+
+
+def _collect_full_mode_preview(
+    ctx: AppContext,
+    project_root: Path,
+) -> tuple[list[str], list[str], list[str]]:
+    # Collect preview items that are only executed in --full mode.
+    capabilities = ["install or update Copilot activation block"]
+    planned_writes = [str(project_root / COPILOT_INSTRUCTIONS_REL)]
+    refactor_caps, refactor_writes, refactor_skipped = _preview_refactor_bundle_actions(project_root)
+    return capabilities + refactor_caps, planned_writes + refactor_writes, refactor_skipped
+
+
+def _extend_previews(
+    caps: list[str],
+    writes: list[str],
+    skipped: list[str],
+    preview: tuple[list[str], list[str], list[str]],
+) -> None:
+    # Unpack a (caps, writes, skipped) preview tuple and extend the accumulators.
+    c, w, s = preview
+    caps.extend(c)
+    writes.extend(w)
+    skipped.extend(s)
+
+
+def _collect_standard_previews(
+    ctx: AppContext,
+    project_root: Path,
+    *,
+    project_id: str,
+    full: bool,
+    doctor_report_fn: DoctorReportFn,
+) -> tuple[list[str], list[str], list[str]]:
+    # Collect preview data for registry, bridge, MCP, profile, doctor, and onboarding steps.
+    caps: list[str] = []
+    writes: list[str] = []
+    skipped: list[str] = []
+    _extend_previews(caps, writes, skipped, _collect_registry_preview(ctx, project_id))
+    _extend_previews(caps, writes, skipped, _collect_bridge_preview(project_root))
+    writes.append(str(project_root / VSCODE_DIRNAME / MCP_CONFIG_NAME))
+    caps.append("merge agents-memory MCP server config")
+    _extend_previews(caps, writes, skipped, _preview_enable_profile_actions(ctx, project_root, full=full))
+    caps.append("refresh doctor state and checklist artifacts")
+    writes.extend(str(path) for path in _doctor_artifact_paths(project_root, write_state=True, write_checklist=True))
+    onboarding_caps, onboarding_writes = _preview_onboarding_bundle_actions(ctx, project_root, doctor_report_fn=doctor_report_fn)
+    caps.extend(onboarding_caps)
+    writes.extend(onboarding_writes)
+    return caps, writes, skipped
+
+
 def _preview_enable_actions(
     ctx: AppContext,
     project_root: Path,
@@ -110,64 +174,29 @@ def _preview_enable_actions(
     full: bool,
     doctor_report_fn: DoctorReportFn,
 ) -> dict[str, object]:
-    capabilities: list[str] = []
-    planned_writes: list[str] = []
-    skipped_existing: list[str] = []
-
-    if not project_already_registered(ctx, project_id):
-        capabilities.append(f"register project `{project_id}`")
-        planned_writes.append(str(ctx.projects_file))
-    else:
-        skipped_existing.append(f"registry entry already exists for `{project_id}`")
-
-    bridge_path = project_root / DEFAULT_BRIDGE_INSTRUCTION_REL
-    if not bridge_path.exists():
-        capabilities.append("install bridge instruction")
-        planned_writes.append(str(bridge_path))
-    else:
-        skipped_existing.append(str(bridge_path))
-
-    mcp_path = project_root / VSCODE_DIRNAME / MCP_CONFIG_NAME
-    capabilities.append("merge agents-memory MCP server config")
-    planned_writes.append(str(mcp_path))
-
-    profile_capabilities, profile_writes, profile_skipped = _preview_enable_profile_actions(ctx, project_root, full=full)
-    capabilities.extend(profile_capabilities)
-    planned_writes.extend(profile_writes)
-    skipped_existing.extend(profile_skipped)
-
+    # Aggregate all planned capabilities and writes for a dry-run preview.
+    caps, writes, skipped = _collect_standard_previews(
+        ctx, project_root, project_id=project_id, full=full, doctor_report_fn=doctor_report_fn
+    )
     if full:
-        capabilities.append("install or update Copilot activation block")
-        planned_writes.append(str(project_root / COPILOT_INSTRUCTIONS_REL))
-
-    capabilities.append("refresh doctor state and checklist artifacts")
-    planned_writes.extend(str(path) for path in _doctor_artifact_paths(project_root, write_state=True, write_checklist=True))
-
-    onboarding_capabilities, onboarding_writes = _preview_onboarding_bundle_actions(ctx, project_root, doctor_report_fn=doctor_report_fn)
-    capabilities.extend(onboarding_capabilities)
-    planned_writes.extend(onboarding_writes)
-
-    if full:
-        refactor_capabilities, refactor_writes, refactor_skipped = _preview_refactor_bundle_actions(project_root)
-        capabilities.extend(refactor_capabilities)
-        planned_writes.extend(refactor_writes)
-        skipped_existing.extend(refactor_skipped)
-
+        full_caps, full_writes, full_skipped = _collect_full_mode_preview(ctx, project_root)
+        caps.extend(full_caps)
+        writes.extend(full_writes)
+        skipped.extend(full_skipped)
     return {
         "status": "ok",
         "project_id": project_id,
         "project_root": str(project_root),
         "mode": "full" if full else "default",
         "dry_run": True,
-        "capabilities": capabilities,
-        "planned_writes": list(dict.fromkeys(planned_writes)),
-        "skipped_existing": skipped_existing,
+        "capabilities": caps,
+        "planned_writes": list(dict.fromkeys(writes)),
+        "skipped_existing": skipped,
     }
 
 
-def _recommended_enable_profile_id(project_root: Path) -> str | None:
-    if detect_applied_profile(project_root):
-        return None
+def _detect_profile_by_structure(project_root: Path) -> str | None:
+    # Map project directory structure to the best-fit profile ID.
     if (project_root / "package.json").exists() and (project_root / "apps").exists():
         return "fullstack-product"
     if (project_root / "package.json").exists() and ((project_root / "src").exists() or (project_root / "app").exists()):
@@ -179,6 +208,13 @@ def _recommended_enable_profile_id(project_root: Path) -> str | None:
     if list(project_root.glob("**/*.py")):
         return "python-service"
     return None
+
+
+def _recommended_enable_profile_id(project_root: Path) -> str | None:
+    # Return the best-fit profile ID, or None if a profile is already applied.
+    if detect_applied_profile(project_root):
+        return None
+    return _detect_profile_by_structure(project_root)
 
 
 def _validate_enable_request(project_root: Path, *, dry_run: bool, json_output: bool) -> int | None:
@@ -380,6 +416,27 @@ def _print_enable_next_steps(*, full: bool) -> None:
         print("- If a refactor bundle was generated, review its spec.md before editing code")
 
 
+def _run_enable_core_steps(
+    ctx: AppContext,
+    project_root: Path,
+    *,
+    project_id: str,
+    full: bool,
+    doctor_command_fn: DoctorCommandFn,
+) -> None:
+    # Execute registration, bridge, MCP, profile, planning repair, and doctor.
+    cmd_bridge_install(ctx, project_id)
+    mcp_changed = write_vscode_mcp_json(ctx, project_root)
+    print(f"- mcp config: {'updated' if mcp_changed else 'ready'}")
+    profile_id = _apply_enable_profile(ctx, project_root, full=full)
+    _sync_enable_profile_standards(ctx, project_root, profile_id)
+    _repair_enable_planning_bundles(ctx, project_root, full=full)
+    if full:
+        print("- copilot activation: applying")
+        cmd_copilot_setup(ctx, str(project_root))
+    doctor_command_fn(ctx, str(project_root))
+
+
 def cmd_enable(
     ctx: AppContext,
     project_id_or_path: str = ".",
@@ -393,6 +450,7 @@ def cmd_enable(
     merge_refactor_state_fn: MergeRefactorStateFn,
     write_state_fn: WriteStateFn,
 ) -> int:
+    # Unified enable workflow: register → bridge → mcp → profile → doctor → bundle.
     project_root = Path(project_id_or_path).expanduser().resolve()
     ctx.logger.info("enable_start | target=%s | full=%s | dry_run=%s | json_output=%s", project_root, full, dry_run, json_output)
     validation_error = _validate_enable_request(project_root, dry_run=dry_run, json_output=json_output)
@@ -401,37 +459,23 @@ def cmd_enable(
     if not json_output:
         _print_enable_header(project_root, full=full, dry_run=dry_run)
 
-    resolved_project_id, _resolved_root, _project = resolve_project_target(ctx, str(project_root))
+    project_id = resolve_project_target(ctx, str(project_root))[0]
     if dry_run:
-        return _run_enable_dry_run(ctx, project_root, project_id=resolved_project_id, full=full, json_output=json_output, doctor_report_fn=doctor_report_fn)
+        return _run_enable_dry_run(ctx, project_root, project_id=project_id, full=full, json_output=json_output, doctor_report_fn=doctor_report_fn)
 
     project_id, registered_now = _ensure_registered_project(ctx, project_root)
     print(f"- registry: {'created' if registered_now else 'ready'} ({project_id})")
 
-    project_id, _, _project = resolve_project_target(ctx, project_id)
-    cmd_bridge_install(ctx, project_id)
-    mcp_changed = write_vscode_mcp_json(ctx, project_root)
-    print(f"- mcp config: {'updated' if mcp_changed else 'ready'}")
-
-    profile_id = _apply_enable_profile(ctx, project_root, full=full)
-    _sync_enable_profile_standards(ctx, project_root, profile_id)
-    _repair_enable_planning_bundles(ctx, project_root, full=full)
-
-    if full:
-        print("- copilot activation: applying")
-        cmd_copilot_setup(ctx, str(project_root))
-
-    doctor_command_fn(ctx, str(project_root))
+    project_id = resolve_project_target(ctx, project_id)[0]
+    _run_enable_core_steps(ctx, project_root, project_id=project_id, full=full, doctor_command_fn=doctor_command_fn)
 
     from agents_memory.services.planning import init_onboarding_bundle
-
     onboarding_result = init_onboarding_bundle(ctx, project_root)
     print(f"- onboarding bundle: {onboarding_result.plan_root.relative_to(project_root).as_posix()}")
 
     if full:
         _run_enable_full_followup(
-            ctx,
-            project_root,
+            ctx, project_root,
             load_state_fn=load_state_fn,
             merge_refactor_state_fn=merge_refactor_state_fn,
             write_state_fn=write_state_fn,

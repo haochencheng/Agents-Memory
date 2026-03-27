@@ -14,6 +14,7 @@ def _normalize_level(raw_level: str | None) -> int:
 
 
 def configure_logger(name: str, *, base_dir: Path) -> logging.Logger:
+    # Build a rotating-file logger writing to <base_dir>/logs/<name>.log.
     """Create a process-safe file logger shared by CLI and MCP server."""
     logs_dir = base_dir / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)

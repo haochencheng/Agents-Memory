@@ -9,31 +9,35 @@ from agents_memory.logging_utils import log_file_update
 from agents_memory.runtime import AppContext
 
 
+def _process_header_line(line: str, current: dict, projects: list[dict]) -> dict:
+    project_id = re.match(r"^## (.+)", line).group(1).strip()
+    if current.get("id"):
+        projects.append(current)
+    if any(char > "\u4e00" for char in project_id):
+        return {}
+    return {"id": project_id}
+
+
+def _apply_field_to_entry(line: str, current: dict) -> None:
+    field_match = re.match(r"\s*-\s+\*\*(\w+)\*\*:\s*(.*)", line)
+    if field_match:
+        current[field_match.group(1).strip()] = field_match.group(2).strip()
+
+
 def parse_projects(ctx: AppContext) -> list[dict]:
+    # Parse project registry markdown into a list of active project dicts.
     if not ctx.projects_file.exists():
         return []
     projects: list[dict] = []
     current: dict = {}
     for line in ctx.projects_file.read_text(encoding="utf-8").splitlines():
-        header_match = re.match(r"^## (.+)", line)
-        if header_match:
-            project_id = header_match.group(1).strip()
-            if current.get("id"):
-                projects.append(current)
-            if any(char > "\u4e00" for char in project_id):
-                current = {}
-            else:
-                current = {"id": project_id}
-            continue
-        if not current:
-            continue
-        field_match = re.match(r"\s*-\s+\*\*(\w+)\*\*:\s*(.*)", line)
-        if field_match:
-            key, value = field_match.group(1).strip(), field_match.group(2).strip()
-            current[key] = value
+        if re.match(r"^## (.+)", line):
+            current = _process_header_line(line, current, projects)
+        elif current:
+            _apply_field_to_entry(line, current)
     if current.get("id"):
         projects.append(current)
-    return [project for project in projects if project.get("active", "true").lower() == "true"]
+    return [p for p in projects if p.get("active", "true").lower() == "true"]
 
 
 def detect_project_id(root: Path) -> str:
@@ -50,6 +54,7 @@ def detect_project_id(root: Path) -> str:
 
 
 def detect_domains(instruction_dir: Path) -> list[str]:
+    # Infer a de-duplicated list of domain names from instruction file names.
     if not instruction_dir.exists():
         return ["python", "docs"]
     found: set[str] = set()
@@ -62,6 +67,7 @@ def detect_domains(instruction_dir: Path) -> list[str]:
 
 
 def detect_instruction_files(instruction_dir: Path, root: Path) -> dict[str, str]:
+    # Map domain names to relative instruction file paths found in instruction_dir.
     mapping: dict[str, str] = {}
     if not instruction_dir.exists():
         return mapping
@@ -79,27 +85,47 @@ def project_already_registered(ctx: AppContext, project_id: str) -> bool:
     return f"## {project_id}" in ctx.projects_file.read_text(encoding="utf-8")
 
 
+def _resolve_root_path(root_value: str) -> Path | None:
+    try:
+        return Path(root_value).expanduser().resolve()
+    except Exception:
+        return None
+
+
+def _lookup_project_by_id(projects: list[dict], project_id_or_path: str) -> tuple[str, Path | None, dict] | None:
+    project = next((item for item in projects if item.get("id") == project_id_or_path), None)
+    if not project:
+        return None
+    root_value = project.get("root", "").strip()
+    if root_value:
+        return project["id"], Path(root_value).expanduser().resolve(), project
+    return project["id"], None, project
+
+
+def _lookup_project_by_candidate_path(projects: list[dict], candidate: Path) -> tuple[str, Path, dict] | None:
+    # Scan registered projects to find one whose root resolves to the given path.
+    for project in projects:
+        root_value = project.get("root", "").strip()
+        if not root_value:
+            continue
+        resolved = _resolve_root_path(root_value)
+        if resolved == candidate:
+            return project.get("id", candidate.name.lower().replace("_", "-")), candidate, project
+    return None
+
+
 def resolve_project_target(ctx: AppContext, project_id_or_path: str = ".") -> tuple[str, Path | None, dict | None]:
+    # Route lookup by explicit project ID match, then by filesystem path.
     projects = parse_projects(ctx)
     if project_id_or_path not in ("", "."):
-        project = next((item for item in projects if item.get("id") == project_id_or_path), None)
-        if project:
-            root_value = project.get("root", "").strip()
-            if root_value:
-                return project["id"], Path(root_value).expanduser().resolve(), project
-            return project["id"], None, project
-
+        result = _lookup_project_by_id(projects, project_id_or_path)
+        if result is not None:
+            return result
     candidate = Path(project_id_or_path).expanduser().resolve()
     if candidate.is_dir():
-        for project in projects:
-            root_value = project.get("root", "").strip()
-            if not root_value:
-                continue
-            try:
-                if Path(root_value).expanduser().resolve() == candidate:
-                    return project.get("id", candidate.name.lower().replace("_", "-")), candidate, project
-            except Exception:
-                continue
+        result = _lookup_project_by_candidate_path(projects, candidate)
+        if result is not None:
+            return result
         return candidate.name.lower().replace("_", "-"), candidate, None
     return project_id_or_path, None, None
 

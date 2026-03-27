@@ -22,26 +22,8 @@ def qdrant_settings() -> tuple[str, int, str]:
 	return host, port, collection
 
 
-def cmd_embed(ctx: AppContext) -> None:
-	try:
-		import lancedb
-	except ImportError:
-		print("请先安装依赖：pip install lancedb openai pyarrow")
-		sys.exit(1)
-
-	all_files = sorted(ctx.errors_dir.glob("*.md"))
-	if ctx.archive_dir.exists():
-		all_files += sorted(ctx.archive_dir.glob("*.md"))
-	if not all_files:
-		print("No error records to embed.")
-		return
-
-	records_raw = [(parse_frontmatter(filepath), filepath) for filepath in all_files if parse_frontmatter(filepath)]
-	print(f"Embedding {len(records_raw)} records using text-embedding-3-small...")
-
-	ctx.vector_dir.mkdir(parents=True, exist_ok=True)
-	db = lancedb.connect(str(ctx.vector_dir))
-
+def _build_embedding_rows(records_raw: list) -> list[dict]:
+	# Build the vector embedding rows for all error records.
 	rows = []
 	for index, (meta, filepath) in enumerate(records_raw, 1):
 		text = build_record_text(meta, filepath)
@@ -60,6 +42,30 @@ def cmd_embed(ctx: AppContext) -> None:
 			}
 		)
 		print(f"  [{index}/{len(records_raw)}] {meta.get('id', filepath.stem)}")
+	return rows
+
+
+def cmd_embed(ctx: AppContext) -> None:
+	# Embed all error records into a LanceDB vector index.
+	try:
+		import lancedb
+	except ImportError:
+		print("请先安装依赖：pip install lancedb openai pyarrow")
+		sys.exit(1)
+
+	all_files = sorted(ctx.errors_dir.glob("*.md"))
+	if ctx.archive_dir.exists():
+		all_files += sorted(ctx.archive_dir.glob("*.md"))
+	if not all_files:
+		print("No error records to embed.")
+		return
+
+	records_raw = [(parse_frontmatter(filepath), filepath) for filepath in all_files if parse_frontmatter(filepath)]
+	print(f"Embedding {len(records_raw)} records using text-embedding-3-small...")
+
+	ctx.vector_dir.mkdir(parents=True, exist_ok=True)
+	db = lancedb.connect(str(ctx.vector_dir))
+	rows = _build_embedding_rows(records_raw)
 
 	if "errors" in db.table_names():
 		db.drop_table("errors")
@@ -67,24 +73,31 @@ def cmd_embed(ctx: AppContext) -> None:
 	print(f"\nVector index built: {len(rows)} records → {ctx.vector_dir}/errors.lance")
 
 
-def cmd_vsearch(ctx: AppContext, query: str, top_k: int = 5) -> None:
+def _connect_lancedb_errors(ctx: AppContext, query: str) -> object | None:
+	# Connect to the local LanceDB errors table, or fall back to keyword search.
 	try:
 		import lancedb
 	except ImportError:
 		print("LanceDB 未安装，回退到关键词搜索。安装：pip install lancedb openai pyarrow")
 		cmd_search(ctx, query)
-		return
-
+		return None
 	if not ctx.vector_dir.exists():
 		print("向量索引不存在。请先运行：python3 scripts/memory.py embed")
 		print("回退到关键词搜索...\n")
 		cmd_search(ctx, query)
-		return
-
+		return None
 	db = lancedb.connect(str(ctx.vector_dir))
 	if "errors" not in db.table_names():
 		print("向量表为空。请先运行：python3 scripts/memory.py embed")
 		cmd_search(ctx, query)
+		return None
+	return db
+
+
+def cmd_vsearch(ctx: AppContext, query: str, top_k: int = 5) -> None:
+	# Semantic search over embedded error records; falls back to keyword search.
+	db = _connect_lancedb_errors(ctx, query)
+	if db is None:
 		return
 
 	count = total_error_count(ctx)
@@ -111,11 +124,35 @@ def cmd_vsearch(ctx: AppContext, query: str, top_k: int = 5) -> None:
 		)
 
 
+def _execute_qdrant_transfer(rows: list, host: str, port: int, collection: str) -> int:
+	# Connect to Qdrant, recreate the collection, and upload all vectors.
+	from qdrant_client import QdrantClient
+	from qdrant_client.models import Distance, PointStruct, VectorParams
+	client = QdrantClient(host=host, port=port)
+	existing = [item.name for item in client.get_collections().collections]
+	if collection in existing:
+		print(f"集合 '{collection}' 已存在，删除并重建...")
+		client.delete_collection(collection)
+	client.create_collection(
+		collection_name=collection,
+		vectors_config=VectorParams(size=EMBED_DIM, distance=Distance.COSINE),
+	)
+	points = [
+		PointStruct(
+			id=index,
+			vector=row["vector"],
+			payload={key: row[key] for key in ("id", "project", "category", "domain", "severity", "status", "filepath")},
+		)
+		for index, row in enumerate(rows)
+	]
+	client.upsert(collection_name=collection, points=points)
+	return len(points)
+
+
 def cmd_to_qdrant(ctx: AppContext) -> None:
+	# Migrate LanceDB error vectors to Qdrant.
 	try:
 		import lancedb
-		from qdrant_client import QdrantClient
-		from qdrant_client.models import Distance, PointStruct, VectorParams
 	except ImportError:
 		print("请先安装：pip install qdrant-client lancedb")
 		sys.exit(1)
@@ -135,26 +172,7 @@ def cmd_to_qdrant(ctx: AppContext) -> None:
 		return
 
 	host, port, collection = qdrant_settings()
-	client = QdrantClient(host=host, port=port)
-	existing = [item.name for item in client.get_collections().collections]
-	if collection in existing:
-		print(f"集合 '{collection}' 已存在，删除并重建...")
-		client.delete_collection(collection)
-
-	client.create_collection(
-		collection_name=collection,
-		vectors_config=VectorParams(size=EMBED_DIM, distance=Distance.COSINE),
-	)
-
-	points = [
-		PointStruct(
-			id=index,
-			vector=row["vector"],
-			payload={key: row[key] for key in ("id", "project", "category", "domain", "severity", "status", "filepath")},
-		)
-		for index, row in enumerate(rows)
-	]
-	client.upsert(collection_name=collection, points=points)
-	print(f"✅ 迁移完成：{len(points)} 条记录 → Qdrant ({host}:{port}/{collection})")
+	count = _execute_qdrant_transfer(rows, host, port, collection)
+	print(f"✅ 迁移完成：{count} 条记录 → Qdrant ({host}:{port}/{collection})")
 	print(f"\nQdrant Dashboard: http://{host}:6333/dashboard")
 

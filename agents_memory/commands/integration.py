@@ -17,34 +17,40 @@ from agents_memory.services.integration import (
 
 
 def _parse_doctor_args(args: list[str]) -> tuple[str, bool, bool]:
+    # Parse --write-state and --write-checklist flags; first positional is target.
     project_id_or_path = "."
     write_state = False
     write_checklist = False
     for arg in args:
         if arg == "--write-state":
             write_state = True
-        elif arg == "--write-checklist":
+            continue
+        if arg == "--write-checklist":
             write_checklist = True
-        elif arg.startswith("--"):
+            continue
+        if arg.startswith("--"):
             print(f"未知参数: {arg}")
-        else:
-            project_id_or_path = arg
+            continue
+        project_id_or_path = arg
     return project_id_or_path, write_state, write_checklist
 
 
 def _parse_onboarding_execute_args(args: list[str]) -> tuple[str, bool, bool]:
+    # Parse --no-verify and --approve-unsafe flags; first positional is target.
     project_id_or_path = "."
     verify = True
     approve_unsafe = False
     for arg in args:
         if arg == "--no-verify":
             verify = False
-        elif arg == "--approve-unsafe":
+            continue
+        if arg == "--approve-unsafe":
             approve_unsafe = True
-        elif arg.startswith("--"):
+            continue
+        if arg.startswith("--"):
             print(f"未知参数: {arg}")
-        else:
-            project_id_or_path = arg
+            continue
+        project_id_or_path = arg
     return project_id_or_path, verify, approve_unsafe
 
 
@@ -54,6 +60,7 @@ def _run_onboarding_execute(ctx, args: list[str]) -> None:
 
 
 def _parse_enable_args(args: list[str]) -> tuple[str, bool, bool, bool]:
+    # Parse --full, --dry-run, --json flags; first positional is target.
     project_id_or_path = "."
     full = False
     dry_run = False
@@ -61,14 +68,17 @@ def _parse_enable_args(args: list[str]) -> tuple[str, bool, bool, bool]:
     for arg in args:
         if arg == "--full":
             full = True
-        elif arg == "--dry-run":
+            continue
+        if arg == "--dry-run":
             dry_run = True
-        elif arg == "--json":
+            continue
+        if arg == "--json":
             json_output = True
-        elif arg.startswith("--"):
+            continue
+        if arg.startswith("--"):
             print(f"未知参数: {arg}")
-        else:
-            project_id_or_path = arg
+            continue
+        project_id_or_path = arg
     return project_id_or_path, full, dry_run, json_output
 
 

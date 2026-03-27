@@ -429,29 +429,37 @@ def _touch_result_path(path: Path, project_root: Path) -> str:
         return str(path)
 
 
+def _update_single_doc_file(
+    path: Path, touch_date: str, dry_run: bool, project_root: Path
+) -> tuple[str, bool]:
+    # Read, normalize metadata, and optionally write back; return (relative_path, was_updated).
+    original = path.read_text(encoding="utf-8")
+    metadata, _issues = _parse_doc_metadata(original)
+    normalized = metadata or _fallback_doc_metadata(original, updated_at=touch_date)
+    if normalized.updated_at != touch_date:
+        normalized = DocumentMetadata(
+            created_at=normalized.created_at,
+            updated_at=touch_date,
+            doc_status=normalized.doc_status,
+        )
+    rendered = _render_doc_with_metadata(original, normalized)
+    relative = _touch_result_path(path, project_root)
+    if rendered == original:
+        return relative, False
+    if not dry_run:
+        path.write_text(rendered, encoding="utf-8")
+    return relative, True
+
+
 def touch_doc_metadata(project_root: Path, target_path: str = ".", *, updated_at: str | None = None, dry_run: bool = False) -> DocsTouchResult:
+    # Update updated_at metadata for all matching documentation files.
     touch_date = updated_at or date.today().isoformat()
     targets = _resolve_docs_touch_targets(project_root, Path(target_path))
     updated_files: list[str] = []
     skipped_files: list[str] = []
     for path in targets:
-        original = path.read_text(encoding="utf-8")
-        metadata, _issues = _parse_doc_metadata(original)
-        normalized = metadata or _fallback_doc_metadata(original, updated_at=touch_date)
-        if normalized.updated_at != touch_date:
-            normalized = DocumentMetadata(
-                created_at=normalized.created_at,
-                updated_at=touch_date,
-                doc_status=normalized.doc_status,
-            )
-        rendered = _render_doc_with_metadata(original, normalized)
-        relative = _touch_result_path(path, project_root)
-        if rendered == original:
-            skipped_files.append(relative)
-            continue
-        updated_files.append(relative)
-        if not dry_run:
-            path.write_text(rendered, encoding="utf-8")
+        relative, was_updated = _update_single_doc_file(path, touch_date, dry_run, project_root)
+        (updated_files if was_updated else skipped_files).append(relative)
     return DocsTouchResult(
         target=target_path,
         updated_at=touch_date,
@@ -573,6 +581,7 @@ def _has_guiding_comment(source_lines: list[str], node: ast.AST) -> bool:
 
 
 def _evaluate_refactor_hits(*, effective_lines: int, branches: int, nesting: int, local_vars: int, has_comment: bool) -> tuple[list[str], list[str]]:
+    # Classify each complexity metric as a hard_hit (FAIL threshold) or soft_hit (WARN zone).
     hard_hits: list[str] = []
     soft_hits: list[str] = []
     metrics = {
@@ -590,20 +599,28 @@ def _evaluate_refactor_hits(*, effective_lines: int, branches: int, nesting: int
             fail_fragment = f"{key}={value}>{fail_limit}"
         if value > fail_limit or (key == "nesting" and value >= fail_limit):
             hard_hits.append(fail_fragment)
-        elif value >= warn_limit:
+            continue
+        if value >= warn_limit:
             soft_hits.append(f"{key}={value}")
     if not has_comment and (hard_hits or len(soft_hits) >= 2):
         soft_hits.append("missing_guiding_comment")
     return hard_hits, soft_hits
 
 
-def _build_refactor_hotspot(relative: str, source_lines: list[str], node: ast.AST, qualified_name: str) -> RefactorHotspot | None:
-    function_name = getattr(node, "name", "<lambda>")
+def _gather_function_metrics(source_lines: list[str], node: ast.AST) -> tuple[int, int, int, int, bool]:
+    # Collect the five raw complexity scalars that drive refactor_watch scoring.
     effective_lines = _count_effective_function_lines(source_lines, node)
     branches = _count_control_nodes(node)
     nesting = _max_control_nesting(node)
     local_vars = len(_collect_local_names(node))
     has_comment = _has_guiding_comment(source_lines, node)
+    return effective_lines, branches, nesting, local_vars, has_comment
+
+
+def _build_refactor_hotspot(relative: str, source_lines: list[str], node: ast.AST, qualified_name: str) -> RefactorHotspot | None:
+    # Evaluate function complexity metrics and build a RefactorHotspot; returns None when below threshold.
+    function_name = getattr(node, "name", "<lambda>")
+    effective_lines, branches, nesting, local_vars, has_comment = _gather_function_metrics(source_lines, node)
     hard_hits, soft_hits = _evaluate_refactor_hits(
         effective_lines=effective_lines,
         branches=branches,
@@ -613,11 +630,8 @@ def _build_refactor_hotspot(relative: str, source_lines: list[str], node: ast.AS
     )
     if not hard_hits and len(soft_hits) < 2:
         return None
-
-    score = len(hard_hits) * 10 + len(soft_hits)
-    status = "WARN" if hard_hits or len(soft_hits) >= 3 else "INFO"
     return RefactorHotspot(
-        status=status,
+        status="WARN" if hard_hits or len(soft_hits) >= 3 else "INFO",
         relative_path=relative,
         function_name=function_name,
         qualified_name=qualified_name,
@@ -628,7 +642,7 @@ def _build_refactor_hotspot(relative: str, source_lines: list[str], node: ast.AS
         local_vars=local_vars,
         has_guiding_comment=has_comment,
         issues=hard_hits + soft_hits,
-        score=score,
+        score=len(hard_hits) * 10 + len(soft_hits),
     )
 
 
@@ -664,23 +678,28 @@ def serialize_refactor_hotspot(hotspot: RefactorHotspot) -> dict[str, object]:
     }
 
 
+def _scan_file_for_hotspots(path: Path, project_root: Path) -> list[RefactorHotspot]:
+    # Parse a Python file and collect functions that exceed refactor thresholds.
+    relative = path.relative_to(project_root).as_posix()
+    try:
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+    except Exception:
+        return []
+    source_lines = source.splitlines()
+    hotspots = []
+    for node, qualified_name in _iter_refactor_watch_candidates(tree):
+        hotspot = _build_refactor_hotspot(relative, source_lines, node, qualified_name)
+        if hotspot is not None:
+            hotspots.append(hotspot)
+    return hotspots
+
+
 def collect_refactor_watch_hotspots(project_root: Path) -> list[RefactorHotspot]:
+    # Scan all watched Python files and return the top hotspots by score.
     candidates: list[RefactorHotspot] = []
-
     for path in _iter_refactor_watch_files(project_root):
-        relative = path.relative_to(project_root).as_posix()
-        try:
-            source = path.read_text(encoding="utf-8")
-            tree = ast.parse(source)
-        except Exception:
-            continue
-
-        source_lines = source.splitlines()
-        for node, qualified_name in _iter_refactor_watch_candidates(tree):
-            hotspot = _build_refactor_hotspot(relative, source_lines, node, qualified_name)
-            if hotspot is not None:
-                candidates.append(hotspot)
-
+        candidates.extend(_scan_file_for_hotspots(path, project_root))
     return sorted(candidates, key=lambda item: (-item.score, item.rank_token))[:REFACTOR_OUTPUT_LIMIT]
 
 
@@ -803,6 +822,7 @@ def _collect_command_coverage_findings(getting_started: Path, llms: Path) -> lis
 
 
 def _collect_hygiene_findings(project_root: Path, paths: list[Path]) -> list[ValidationFinding]:
+    # Check each path has no TODO/FIXME markers or orphaned draft files.
     absolute_path_hits: list[str] = []
     stale_phrase_hits: list[str] = []
     for path in paths:
@@ -848,6 +868,7 @@ def _collect_contract_findings(project_root: Path) -> list[ValidationFinding]:
 
 
 def _collect_ai_os_structure_findings(project_root: Path) -> list[ValidationFinding]:
+    # Validate canonical structure and content of the AI Engineering Operating System doc.
     path = project_root / DOCS_DIR / "ai-engineering-operating-system.md"
     text = _read_if_exists(path)
     if not text:
@@ -1033,6 +1054,29 @@ def collect_plan_check_findings(project_root: Path, target_path: str = ".") -> l
     return findings
 
 
+def _check_profile_standards_and_router(
+    ctx: AppContext, findings: list[ValidationFinding], resolved_profile_id: str, project_root: Path
+) -> None:
+    # Load the profile and verify all expected standards, templates, and agents router.
+    try:
+        profile = load_profile(ctx, resolved_profile_id)
+    except FileNotFoundError:
+        findings.append(ValidationFinding("FAIL", "profile_source", f"profile definition not found: {resolved_profile_id}"))
+        return
+    expected = expected_profile_paths(profile, project_root)
+    findings.extend(_collect_required_path_findings("profile_bootstrap_dirs", project_root, expected["bootstrap_dirs"]))
+    findings.extend(_collect_required_path_findings("profile_standard_files", project_root, expected["standard_files"]))
+    findings.extend(_collect_required_path_findings("profile_template_files", project_root, expected["template_files"]))
+    agents_ok, agents_detail = profile_agents_router_status(ctx, profile, project_root)
+    findings.append(ValidationFinding("OK" if agents_ok else "FAIL", "profile_agents_file", agents_detail))
+    invalid_commands = [command for command in profile.commands.values() if not command.startswith(("amem ", "python3 scripts/memory.py "))]
+    findings.append(ValidationFinding(
+        "OK" if not invalid_commands else "WARN",
+        "profile_commands",
+        "profile commands use supported CLI forms" if not invalid_commands else f"unsupported profile commands: {', '.join(invalid_commands)}",
+    ))
+
+
 def collect_profile_check_findings(ctx: AppContext, project_root: Path, profile_id: str | None = None) -> list[ValidationFinding]:
     findings: list[ValidationFinding] = []
     manifest = read_profile_manifest(project_root)
@@ -1057,26 +1101,7 @@ def collect_profile_check_findings(ctx: AppContext, project_root: Path, profile_
         return findings
 
     findings.append(ValidationFinding("OK", "profile_id", f"resolved profile: {resolved_profile_id}"))
-    try:
-        profile = load_profile(ctx, resolved_profile_id)
-    except FileNotFoundError:
-        return findings + [ValidationFinding("FAIL", "profile_source", f"profile definition not found: {resolved_profile_id}")]
-
-    expected = expected_profile_paths(profile, project_root)
-    findings.extend(_collect_required_path_findings("profile_bootstrap_dirs", project_root, expected["bootstrap_dirs"]))
-    findings.extend(_collect_required_path_findings("profile_standard_files", project_root, expected["standard_files"]))
-    findings.extend(_collect_required_path_findings("profile_template_files", project_root, expected["template_files"]))
-    agents_ok, agents_detail = profile_agents_router_status(ctx, profile, project_root)
-    findings.append(ValidationFinding("OK" if agents_ok else "FAIL", "profile_agents_file", agents_detail))
-
-    invalid_commands = [command for command in profile.commands.values() if not command.startswith(("amem ", "python3 scripts/memory.py "))]
-    findings.append(
-        ValidationFinding(
-            "OK" if not invalid_commands else "WARN",
-            "profile_commands",
-            "profile commands use supported CLI forms" if not invalid_commands else f"unsupported profile commands: {', '.join(invalid_commands)}",
-        )
-    )
+    _check_profile_standards_and_router(ctx, findings, resolved_profile_id, project_root)
     return findings
 
 
@@ -1108,6 +1133,7 @@ _BUNDLE_PLACEHOLDER_FRAGMENTS: frozenset[str] = frozenset([
 
 
 def _parse_checkbox_items(text: str, heading: str) -> list[tuple[bool, str]]:
+    # Return (checked, text) tuples for all checkbox items under the given section heading.
     lines = text.splitlines()
     in_section = False
     results: list[tuple[bool, str]] = []
@@ -1127,50 +1153,45 @@ def _parse_checkbox_items(text: str, heading: str) -> list[tuple[bool, str]]:
     return results
 
 
+def _append_unchecked_findings(findings: list, path: Path, section: str, key: str) -> None:
+    # Append a WARN finding for each unchecked item in the named section of the file.
+    for checked, text in _parse_checkbox_items(path.read_text(encoding="utf-8"), section):
+        if not checked:
+            findings.append(ValidationFinding(status="WARN", key=key, detail=text))
+
+
 def collect_bundle_exit_criteria_findings(plan_root: Path) -> list[ValidationFinding]:
-    """Return WARN findings for any unchecked exit criteria in the bundle."""
+    # Check task-graph and validation bundles for any unchecked exit criteria.
     findings: list[ValidationFinding] = []
     tg_path = plan_root / "task-graph.md"
     if tg_path.exists():
-        for checked, text in _parse_checkbox_items(tg_path.read_text(encoding="utf-8"), "## Exit Criteria"):
-            if not checked:
-                findings.append(ValidationFinding(status="WARN", key="exit_criteria_unchecked", detail=text))
+        _append_unchecked_findings(findings, tg_path, "## Exit Criteria", "exit_criteria_unchecked")
     vr_path = plan_root / "validation.md"
     if vr_path.exists():
-        for checked, text in _parse_checkbox_items(vr_path.read_text(encoding="utf-8"), "## Task-Specific Checks"):
-            if not checked:
-                findings.append(ValidationFinding(status="WARN", key="task_check_unchecked", detail=text))
+        _append_unchecked_findings(findings, vr_path, "## Task-Specific Checks", "task_check_unchecked")
     if not findings:
         findings.append(ValidationFinding(status="OK", key="bundle_gate", detail="no unresolved exit criteria"))
     return findings
 
 
+def _findings_overall(findings: list) -> str:
+    # Return FAIL, PARTIAL, or OK based on the worst finding status.
+    if any(f.status == "FAIL" for f in findings):
+        return "FAIL"
+    if any(f.status == "WARN" for f in findings):
+        return "PARTIAL"
+    return "OK"
+
+
 def cmd_plan_check(ctx: AppContext, project_id_or_path: str = ".", *, strict: bool = False, output_format: str = "text") -> int:
+    # Run all plan-check validations and print or return a structured result.
     project_root = Path(project_id_or_path).expanduser().resolve()
     findings = collect_plan_check_findings(project_root, project_id_or_path)
-    has_fail = any(finding.status == "FAIL" for finding in findings)
-    has_warn = any(finding.status == "WARN" for finding in findings)
-    if has_fail:
-        overall = "FAIL"
-    elif has_warn:
-        overall = "PARTIAL"
-    else:
-        overall = "OK"
+    overall = _findings_overall(findings)
     ctx.logger.info("plan_check | target=%s | overall=%s | strict=%s", project_id_or_path, overall, strict)
 
     if output_format == "json":
-        print(
-            json.dumps(
-                {
-                    "target": project_id_or_path,
-                    "overall": overall,
-                    "strict": strict,
-                    "findings": [asdict(finding) for finding in findings],
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
+        print(json.dumps({"target": project_id_or_path, "overall": overall, "strict": strict, "findings": [asdict(finding) for finding in findings]}, ensure_ascii=False, indent=2))
     else:
         print("\n=== Plan Check ===")
         print(f"Target:  {project_id_or_path}")
@@ -1178,35 +1199,18 @@ def cmd_plan_check(ctx: AppContext, project_id_or_path: str = ".", *, strict: bo
         for finding in findings:
             print(f"[{finding.status:<4}] {finding.key:<28} {finding.detail}")
 
-    return 1 if has_fail or (strict and has_warn) else 0
+    return 1 if overall == "FAIL" or (strict and overall == "PARTIAL") else 0
 
 
 def cmd_docs_check(ctx: AppContext, project_id_or_path: str = ".", *, strict: bool = False, output_format: str = "text") -> int:
+    # Run all docs-check validations and print or return a structured result.
     project_root = Path(project_id_or_path).expanduser().resolve()
     findings = collect_docs_check_findings(project_root)
-    has_fail = any(finding.status == "FAIL" for finding in findings)
-    has_warn = any(finding.status == "WARN" for finding in findings)
-    if has_fail:
-        overall = "FAIL"
-    elif has_warn:
-        overall = "PARTIAL"
-    else:
-        overall = "OK"
+    overall = _findings_overall(findings)
     ctx.logger.info("docs_check | root=%s | overall=%s | strict=%s", project_root, overall, strict)
 
     if output_format == "json":
-        print(
-            json.dumps(
-                {
-                    "project_root": str(project_root),
-                    "overall": overall,
-                    "strict": strict,
-                    "findings": [asdict(finding) for finding in findings],
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
+        print(json.dumps({"project_root": str(project_root), "overall": overall, "strict": strict, "findings": [asdict(finding) for finding in findings]}, ensure_ascii=False, indent=2))
     else:
         print("\n=== Docs Check ===")
         print(f"Root:    {project_root}")
@@ -1214,8 +1218,7 @@ def cmd_docs_check(ctx: AppContext, project_id_or_path: str = ".", *, strict: bo
         for finding in findings:
             print(f"[{finding.status:<4}] {finding.key:<28} {finding.detail}")
 
-    should_fail = has_fail or (strict and has_warn)
-    return 1 if should_fail else 0
+    return 1 if overall == "FAIL" or (strict and overall == "PARTIAL") else 0
 
 
 def cmd_docs_touch(ctx: AppContext, project_id_or_path: str = ".", *, updated_at: str | None = None, dry_run: bool = False, output_format: str = "text") -> int:
@@ -1249,32 +1252,14 @@ def cmd_docs_touch(ctx: AppContext, project_id_or_path: str = ".", *, updated_at
 
 
 def cmd_profile_check(ctx: AppContext, project_id_or_path: str = ".", *, profile_id: str | None = None, strict: bool = False, output_format: str = "text") -> int:
+    # Run all profile-check validations and print or return a structured result.
     project_root = Path(project_id_or_path).expanduser().resolve()
     findings = collect_profile_check_findings(ctx, project_root, profile_id=profile_id)
-    has_fail = any(finding.status == "FAIL" for finding in findings)
-    has_warn = any(finding.status == "WARN" for finding in findings)
-    if has_fail:
-        overall = "FAIL"
-    elif has_warn:
-        overall = "PARTIAL"
-    else:
-        overall = "OK"
+    overall = _findings_overall(findings)
     ctx.logger.info("profile_check | root=%s | profile_id=%s | overall=%s | strict=%s", project_root, profile_id, overall, strict)
 
     if output_format == "json":
-        print(
-            json.dumps(
-                {
-                    "project_root": str(project_root),
-                    "profile_id": profile_id,
-                    "overall": overall,
-                    "strict": strict,
-                    "findings": [asdict(finding) for finding in findings],
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
+        print(json.dumps({"project_root": str(project_root), "profile_id": profile_id, "overall": overall, "strict": strict, "findings": [asdict(finding) for finding in findings]}, ensure_ascii=False, indent=2))
     else:
         print("\n=== Profile Check ===")
         print(f"Root:    {project_root}")
@@ -1283,4 +1268,4 @@ def cmd_profile_check(ctx: AppContext, project_id_or_path: str = ".", *, profile
         for finding in findings:
             print(f"[{finding.status:<4}] {finding.key:<28} {finding.detail}")
 
-    return 1 if has_fail or (strict and has_warn) else 0
+    return 1 if overall == "FAIL" or (strict and overall == "PARTIAL") else 0

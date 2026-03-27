@@ -181,11 +181,10 @@ def _doctor_bridge_check(project_root: Path, bridge_rel: str | None) -> tuple[st
 
 
 def _doctor_mcp_check(ctx: AppContext, project_root: Path) -> tuple[str, str, str]:
+    # Check for a valid agents-memory MCP server config in the .vscode directory.
     mcp_file = project_root / VSCODE_DIRNAME / MCP_CONFIG_NAME
-    mcp_status = "FAIL"
-    mcp_detail = str(mcp_file)
     if not mcp_file.exists():
-        return mcp_status, "mcp_config", mcp_detail
+        return "FAIL", "mcp_config", str(mcp_file)
     try:
         content = json.loads(mcp_file.read_text(encoding="utf-8"))
         server = content.get("servers", {}).get("agents-memory")
@@ -194,9 +193,9 @@ def _doctor_mcp_check(ctx: AppContext, project_root: Path) -> tuple[str, str, st
             if expected_server in server.get("args", []):
                 return "OK", "mcp_config", f"agents-memory server configured -> {mcp_file}"
             return "WARN", "mcp_config", f"agents-memory exists but args do not include {expected_server}"
-        return mcp_status, "mcp_config", f"agents-memory server entry missing in {mcp_file}"
+        return "FAIL", "mcp_config", f"agents-memory server entry missing in {mcp_file}"
     except Exception as exc:
-        return mcp_status, "mcp_config", f"invalid JSON in {mcp_file}: {exc}"
+        return "FAIL", "mcp_config", f"invalid JSON in {mcp_file}: {exc}"
 
 
 def _doctor_agents_router_check(ctx: AppContext, project_root: Path, applied_profile_id: str | None) -> tuple[str, str, str]:
@@ -235,7 +234,19 @@ def _doctor_profile_checks(ctx: AppContext, project_root: Path) -> list[tuple[st
     return checks
 
 
+def _analyze_bundle_findings(bundle_findings: list, bundle_count: int) -> tuple[str, str, str]:
+    # Return a single (status, key, detail) tuple summarising bundle health.
+    if any(f.status == "FAIL" for f in bundle_findings):
+        first = next(f for f in bundle_findings if f.status == "FAIL")
+        return "FAIL", "planning_bundle", first.detail
+    if any(f.status == "WARN" for f in bundle_findings):
+        first = next(f for f in bundle_findings if f.status == "WARN")
+        return "WARN", "planning_bundle", first.detail
+    return "OK", "planning_bundle", f"{bundle_count} planning bundle(s) passed plan-check"
+
+
 def _doctor_planning_checks(project_root: Path) -> list[tuple[str, str, str]]:
+    # Check whether the docs/plans directory exists and all bundles pass plan-check.
     planning_root = project_root / "docs" / "plans"
     applied_profile = detect_applied_profile(project_root)
     if not planning_root.exists():
@@ -244,21 +255,10 @@ def _doctor_planning_checks(project_root: Path) -> list[tuple[str, str, str]]:
         return [("INFO", "planning_root", "no docs/plans directory detected")]
 
     findings = collect_plan_check_findings(project_root, str(project_root))
-    bundle_findings = [finding for finding in findings if finding.key in {"plan_bundle", "plan_files", "plan_semantics"}]
-    has_fail = any(finding.status == "FAIL" for finding in bundle_findings)
-    has_warn = any(finding.status == "WARN" for finding in bundle_findings)
-    bundle_count = sum(1 for finding in findings if finding.key == "plan_bundle")
-
-    checks: list[tuple[str, str, str]] = [("OK", "planning_root", f"present: {planning_root}")]
-    if has_fail:
-        first_fail = next(finding for finding in bundle_findings if finding.status == "FAIL")
-        checks.append(("FAIL", "planning_bundle", first_fail.detail))
-    elif has_warn:
-        first_warn = next(finding for finding in bundle_findings if finding.status == "WARN")
-        checks.append(("WARN", "planning_bundle", first_warn.detail))
-    else:
-        checks.append(("OK", "planning_bundle", f"{bundle_count} planning bundle(s) passed plan-check"))
-    return checks
+    bundle_findings = [f for f in findings if f.key in {"plan_bundle", "plan_files", "plan_semantics"}]
+    bundle_count = sum(1 for f in findings if f.key == "plan_bundle")
+    bundle_check = _analyze_bundle_findings(bundle_findings, bundle_count)
+    return [("OK", "planning_root", f"present: {planning_root}"), bundle_check]
 
 
 def _doctor_refactor_watch_checks(project_root: Path) -> list[tuple[str, str, str]]:
@@ -524,6 +524,17 @@ def _doctor_state_payload(
     return payload
 
 
+def _render_group_health_lines(grouped_checks: list[tuple[str, list[tuple[str, str, str]]]]) -> list[str]:
+    lines = ["## Group Health"]
+    for group_name, group_checks in grouped_checks:
+        lines.append(f"### {group_name}")
+        lines.append(f"- Summary: {_doctor_group_summary(group_name, group_checks)}")
+        for status, key, detail in group_checks:
+            lines.append(f"- [{status}] `{key}` {detail}")
+        lines.append("")
+    return lines
+
+
 def _doctor_checklist_markdown(
     project_id: str,
     project_root: Path,
@@ -533,6 +544,7 @@ def _doctor_checklist_markdown(
     runbook_steps: list[dict[str, object]],
     checklist: list[str],
 ) -> str:
+    # Build bootstrap checklist markdown from doctor results.
     lines = ["# Bootstrap Checklist", "", f"- Project: `{project_id}`", f"- Root: `{project_root}`", f"- Overall: `{overall}`", "", "## Checklist"]
     lines.extend(f"- {item}" for item in checklist)
     if action_sequence:
@@ -555,61 +567,59 @@ def _doctor_checklist_markdown(
                 f"- Done when: {step['done_when']}",
                 "",
             ])
-    lines.extend(["## Group Health"])
-    for group_name, group_checks in grouped_checks:
-        lines.append(f"### {group_name}")
-        lines.append(f"- Summary: {_doctor_group_summary(group_name, group_checks)}")
-        for status, key, detail in group_checks:
-            lines.append(f"- [{status}] `{key}` {detail}")
-        lines.append("")
+    lines.extend(_render_group_health_lines(grouped_checks))
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _extract_refactor_findings(grouped_checks: list[tuple[str, list[tuple[str, str, str]]]]) -> list[tuple[str, str]]:
+    return [
+        (status, detail)
+        for _group_name, group_checks in grouped_checks
+        for status, key, detail in group_checks
+        if key == "refactor_watch"
+    ]
+
+
+def _build_hotspot_lines(hotspots: list, refactor_findings: list) -> list[str]:
+    # Render a numbered list of hotspot entries with token and issue details.
+    if not refactor_findings:
+        return ["", "- No current refactor hotspots detected."]
+    lines: list[str] = [""]
+    for index, hotspot in enumerate(hotspots, start=1):
+        command = f"amem refactor-bundle . --token {hotspot.rank_token}"
+        lines.append(f"{index}. [{hotspot.status}] `{hotspot.identifier}` line={hotspot.line} metrics=(lines={hotspot.effective_lines}, branches={hotspot.branches}, nesting={hotspot.nesting}, locals={hotspot.local_vars})")
+        lines.append(f"   - token: `{hotspot.rank_token}`")
+        lines.append(f"   - issues: `{', '.join(hotspot.issues)}`")
+        lines.append(f"   - bundle command: `{command}`")
+    extra_findings = refactor_findings[len(hotspots):]
+    for index, (status, detail) in enumerate(extra_findings, start=len(hotspots) + 1):
+        lines.append(f"{index}. [{status}] {detail}")
+    return lines
+
+
 def _doctor_refactor_watch_markdown(project_id: str, project_root: Path, grouped_checks: list[tuple[str, list[tuple[str, str, str]]]]) -> str:
-    refactor_findings = [(status, detail) for _group_name, group_checks in grouped_checks for status, key, detail in group_checks if key == "refactor_watch"]
+    # Build the Refactor Watch markdown section for the doctor report.
+    refactor_findings = _extract_refactor_findings(grouped_checks)
     hotspots = collect_refactor_watch_hotspots(project_root)
     lines = [
-        "# Refactor Watch",
-        "",
-        f"- Project: `{project_id}`",
-        f"- Root: `{project_root}`",
-        "",
-        "## Purpose",
-        "",
+        "# Refactor Watch", "",
+        f"- Project: `{project_id}`", f"- Root: `{project_root}`",
+        "", "## Purpose", "",
         "Track Python functions that are already high-complexity or are approaching the configured refactor thresholds.",
-        "",
-        "## Thresholds",
-        "",
+        "", "## Thresholds", "",
         "- Hard gate: more than 40 effective lines, more than 5 control-flow branches, nesting depth >= 4, or more than 8 local variables.",
         "- Watch zone: around 30 effective lines, 4 branches, nesting depth 3, or 6 local variables.",
         "- Complex logic should include a short guiding comment when it cannot be cleanly decomposed yet.",
-        "",
-        "## Workflow Entry",
-        "",
+        "", "## Workflow Entry", "",
         "- Primary command: `amem refactor-bundle .`",
         "- Prefer stable targeting with: `amem refactor-bundle . --token <hotspot-token>`",
         "- Fallback positional targeting: `amem refactor-bundle . --index <n>`",
         "- The command creates or refreshes `docs/plans/refactor-<slug>/` using the first current hotspot as execution context.",
-        "",
-        "## Hotspots",
+        "", "## Hotspots",
     ]
-    if not refactor_findings:
-        lines.extend(["", "- No current refactor hotspots detected."])
-    else:
-        lines.append("")
-        for index, hotspot in enumerate(hotspots, start=1):
-            command = f"amem refactor-bundle . --token {hotspot.rank_token}"
-            lines.append(f"{index}. [{hotspot.status}] `{hotspot.identifier}` line={hotspot.line} metrics=(lines={hotspot.effective_lines}, branches={hotspot.branches}, nesting={hotspot.nesting}, locals={hotspot.local_vars})")
-            lines.append(f"   - token: `{hotspot.rank_token}`")
-            lines.append(f"   - issues: `{', '.join(hotspot.issues)}`")
-            lines.append(f"   - bundle command: `{command}`")
-        extra_findings = refactor_findings[len(hotspots):]
-        for index, (status, detail) in enumerate(extra_findings, start=len(hotspots) + 1):
-            lines.append(f"{index}. [{status}] {detail}")
+    lines.extend(_build_hotspot_lines(hotspots, refactor_findings))
     lines.extend([
-        "",
-        "## Suggested Action",
-        "",
+        "", "## Suggested Action", "",
         "1. Run `amem refactor-bundle .` to materialize the first hotspot into an executable planning bundle.",
         "2. If a hotspot cannot be split yet, add a guiding comment that explains the main decision path and risk boundaries.",
         "3. Re-run `amem doctor .` after the change and confirm `refactor_watch` findings shrink or disappear.",
@@ -697,18 +707,27 @@ def _print_doctor_header(*, project_id: str, project_root: Path, overall: str) -
     print(f"Overall: {overall}\n")
 
 
+def _print_single_doctor_group(
+    group_name: str,
+    group_checks: list[tuple[str, str, str]],
+) -> None:
+    # Print the name, summary, checks, and optional remediation for one doctor group.
+    print(f"{group_name}:")
+    print(f"Summary: {_doctor_group_summary(group_name, group_checks)}")
+    for status, key, detail in group_checks:
+        print(f"[{status:<4}] {key:<18} {detail}")
+    remediations = _doctor_group_remediations(group_name, group_checks)
+    if remediations:
+        print("Remediation:")
+        for item in remediations:
+            print(f"- {item}")
+    print()
+
+
 def _print_doctor_groups(grouped_checks: list[tuple[str, list[tuple[str, str, str]]]]) -> None:
+    # Iterate all check groups and print a formatted summary for each.
     for group_name, group_checks in grouped_checks:
-        print(f"{group_name}:")
-        print(f"Summary: {_doctor_group_summary(group_name, group_checks)}")
-        for status, key, detail in group_checks:
-            print(f"[{status:<4}] {key:<18} {detail}")
-        remediations = _doctor_group_remediations(group_name, group_checks)
-        if remediations:
-            print("Remediation:")
-            for item in remediations:
-                print(f"- {item}")
-        print()
+        _print_single_doctor_group(group_name, group_checks)
 
 
 def _print_doctor_action_sequence(action_sequence: list[str]) -> None:
@@ -877,17 +896,17 @@ def _write_onboarding_state_file(ctx: AppContext, project_root: Path, state: dic
     return state_path
 
 
-def _doctor_report(ctx: AppContext, project_id_or_path: str) -> dict[str, object] | None:
-    project_id, project_root, project = resolve_project_target(ctx, project_id_or_path)
-    ctx.logger.info("doctor_start | target=%s | resolved_project_id=%s | project_root=%s", project_id_or_path, project_id, project_root)
-    if project_root is None:
-        return None
-
-    bridge_rel = resolve_bridge_rel(project)
+def _gather_doctor_checks(
+    ctx: AppContext,
+    project_id: str,
+    project_root: Path,
+    project: dict | None,
+    bridge_rel: str,
+) -> list[tuple[str, str, str]]:
+    # Run all individual checks and return the combined results list.
     checks: list[tuple[str, str, str]] = []
     checks.extend(_doctor_registry_checks(project_id, project_root, project))
     checks.append(_doctor_bridge_check(project_root, bridge_rel))
-
     copilot_adapter = get_agent_adapter(DEFAULT_AGENT)
     if copilot_adapter is not None:
         copilot_check = copilot_adapter.doctor(ctx, project_root, project_id)
@@ -895,7 +914,6 @@ def _doctor_report(ctx: AppContext, project_id_or_path: str) -> dict[str, object
             checks.append(copilot_check)
     checks.append(_doctor_mcp_check(ctx, project_root))
     checks.extend(_doctor_runtime_checks())
-
     if not bridge_rel:
         checks.append(("INFO", "agents_read_order", "bridge not configured; AGENTS read order check skipped"))
     else:
@@ -903,7 +921,16 @@ def _doctor_report(ctx: AppContext, project_id_or_path: str) -> dict[str, object
     checks.extend(_doctor_profile_checks(ctx, project_root))
     checks.extend(_doctor_planning_checks(project_root))
     checks.extend(_doctor_refactor_watch_checks(project_root))
+    return checks
 
+
+def _assemble_doctor_report(
+    project_id: str,
+    project_root: Path,
+    project: dict | None,
+    checks: list[tuple[str, str, str]],
+) -> dict[str, object]:
+    # Build the structured report dict from gathered checks.
     grouped_checks = _doctor_group_checks(checks)
     runbook_steps = _doctor_runbook_steps(grouped_checks)
     action_sequence = _doctor_action_sequence(grouped_checks)
@@ -922,51 +949,41 @@ def _doctor_report(ctx: AppContext, project_id_or_path: str) -> dict[str, object
     }
 
 
-def onboarding_next_action(project_root: Path) -> dict[str, object]:
-    state = load_onboarding_state(project_root)
-    if state is None:
-        return {
-            "status": "missing",
-            "project_root": str(project_root),
-            "message": "No onboarding state found for this project.",
-            "recommended_command": DOCTOR_REBUILD_COMMAND,
-        }
+def _doctor_report(ctx: AppContext, project_id_or_path: str) -> dict[str, object] | None:
+    # Run the full doctor flow and return a structured report or None if target is unknown.
+    project_id, project_root, project = resolve_project_target(ctx, project_id_or_path)
+    ctx.logger.info("doctor_start | target=%s | resolved_project_id=%s | project_root=%s", project_id_or_path, project_id, project_root)
+    if project_root is None:
+        return None
+    checks = _gather_doctor_checks(ctx, project_id, project_root, project, resolve_bridge_rel(project))
+    return _assemble_doctor_report(project_id, project_root, project, checks)
 
-    runbook_steps = state.get("runbook_steps") or []
-    recommended_steps = state.get("recommended_steps") or []
-    if runbook_steps and not isinstance(runbook_steps, list):
-        return {
-            "status": "invalid",
-            "project_root": str(project_root),
-            "message": INVALID_ONBOARDING_MESSAGE,
-            "recommended_command": DOCTOR_REBUILD_COMMAND,
-        }
-    if recommended_steps and not isinstance(recommended_steps, list):
-        return {
-            "status": "invalid",
-            "project_root": str(project_root),
-            "message": INVALID_ONBOARDING_MESSAGE,
-            "recommended_command": DOCTOR_REBUILD_COMMAND,
-        }
-    first_step = _runbook_step_from_state(state)
-    if (isinstance(runbook_steps, list) and runbook_steps and first_step is None) or (isinstance(recommended_steps, list) and recommended_steps and first_step is None):
-        return {
-            "status": "invalid",
-            "project_root": str(project_root),
-            "message": INVALID_ONBOARDING_MESSAGE,
-            "recommended_command": DOCTOR_REBUILD_COMMAND,
-        }
-    if first_step is None:
-        return {
-            "status": "ready",
-            "project_root": str(project_root),
-            "project_bootstrap_ready": bool(state.get("project_bootstrap_ready")),
-            "project_bootstrap_complete": bool(state.get("project_bootstrap_complete")),
-            "message": "No pending onboarding action. Continue with normal implementation flow.",
-            "recommended_command": None,
-            "verify_with": state.get("recommended_verify_command") or DOCTOR_COMMAND,
-        }
 
+def _onboarding_invalid_response(project_root: Path) -> dict[str, object]:
+    # Return a standard "invalid" error dict for malformed onboarding state.
+    return {
+        "status": "invalid",
+        "project_root": str(project_root),
+        "message": INVALID_ONBOARDING_MESSAGE,
+        "recommended_command": DOCTOR_REBUILD_COMMAND,
+    }
+
+
+def _onboarding_ready_response(project_root: Path, state: dict) -> dict[str, object]:
+    # Return the "ready" dict when there are no pending onboarding actions.
+    return {
+        "status": "ready",
+        "project_root": str(project_root),
+        "project_bootstrap_ready": bool(state.get("project_bootstrap_ready")),
+        "project_bootstrap_complete": bool(state.get("project_bootstrap_complete")),
+        "message": "No pending onboarding action. Continue with normal implementation flow.",
+        "recommended_command": None,
+        "verify_with": state.get("recommended_verify_command") or DOCTOR_COMMAND,
+    }
+
+
+def _onboarding_pending_response(project_root: Path, state: dict, first_step: dict) -> dict[str, object]:
+    # Return the "pending" dict with the first runbook/recommended step to execute.
     blocking = not bool(state.get("project_bootstrap_ready", False))
     return {
         "status": "pending",
@@ -989,6 +1006,30 @@ def onboarding_next_action(project_root: Path) -> dict[str, object]:
         "hotspot": first_step.get("hotspot"),
         "message": "Complete this onboarding action before deep work." if blocking else "Recommended onboarding follow-up is available.",
     }
+
+
+def onboarding_next_action(project_root: Path) -> dict[str, object]:
+    # Inspect onboarding state and return the next blocking or recommended action.
+    state = load_onboarding_state(project_root)
+    if state is None:
+        return {
+            "status": "missing",
+            "project_root": str(project_root),
+            "message": "No onboarding state found for this project.",
+            "recommended_command": DOCTOR_REBUILD_COMMAND,
+        }
+    runbook_steps = state.get("runbook_steps") or []
+    recommended_steps = state.get("recommended_steps") or []
+    if runbook_steps and not isinstance(runbook_steps, list):
+        return _onboarding_invalid_response(project_root)
+    if recommended_steps and not isinstance(recommended_steps, list):
+        return _onboarding_invalid_response(project_root)
+    first_step = _runbook_step_from_state(state)
+    if (isinstance(runbook_steps, list) and runbook_steps and first_step is None) or (isinstance(recommended_steps, list) and recommended_steps and first_step is None):
+        return _onboarding_invalid_response(project_root)
+    if first_step is None:
+        return _onboarding_ready_response(project_root, state)
+    return _onboarding_pending_response(project_root, state, first_step)
 
 
 def _write_doctor_artifacts(
@@ -1027,18 +1068,14 @@ def _write_doctor_artifacts(
     return written
 
 
-def cmd_doctor(
+def _render_doctor_output(
     ctx: AppContext,
-    project_id_or_path: str = ".",
-    write_state: bool = False,
-    write_checklist: bool = False,
-) -> None:
-    report = _doctor_report(ctx, project_id_or_path)
-    if report is None:
-        ctx.logger.warning("doctor_failed | target=%s | reason=unknown_project_or_path", project_id_or_path)
-        print(f"项目 '{project_id_or_path}' 未注册，且不是有效目录。")
-        print(REGISTER_HINT)
-        return
+    report: dict,
+    *,
+    write_state: bool,
+    write_checklist: bool,
+) -> tuple[str, object, str]:
+    # Extract fields from the report, print all sections, write optional artifacts.
     project_id = str(report["project_id"])
     project_root = _report_project_root(report)
     overall = str(report["overall"])
@@ -1046,13 +1083,11 @@ def cmd_doctor(
     action_sequence = _result_string_list(report.get("action_sequence"))
     runbook_steps = _report_steps(report, "runbook_steps")
     checklist = _result_string_list(report.get("checklist"))
-
     _print_doctor_header(project_id=project_id, project_root=project_root, overall=overall)
     _print_doctor_groups(grouped_checks)
     _print_doctor_action_sequence(action_sequence)
     _print_doctor_runbook(runbook_steps)
     _print_doctor_checklist(checklist)
-
     written_artifacts = _write_doctor_artifacts(
         ctx,
         project_id,
@@ -1067,4 +1102,23 @@ def cmd_doctor(
     )
     _print_doctor_exported_artifacts(written_artifacts)
     _print_doctor_next_steps(ctx=ctx, overall=overall, project_id=project_id)
+    return project_id, project_root, overall
+
+
+def cmd_doctor(
+    ctx: AppContext,
+    project_id_or_path: str = ".",
+    write_state: bool = False,
+    write_checklist: bool = False,
+) -> None:
+    # Run the doctor pipeline and print a full health summary with optional artifact writes.
+    report = _doctor_report(ctx, project_id_or_path)
+    if report is None:
+        ctx.logger.warning("doctor_failed | target=%s | reason=unknown_project_or_path", project_id_or_path)
+        print(f"项目 '{project_id_or_path}' 未注册，且不是有效目录。")
+        print(REGISTER_HINT)
+        return
+    project_id, project_root, overall = _render_doctor_output(
+        ctx, report, write_state=write_state, write_checklist=write_checklist
+    )
     ctx.logger.info("doctor_complete | project_id=%s | project_root=%s | overall=%s", project_id, project_root, overall)

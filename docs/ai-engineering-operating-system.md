@@ -117,26 +117,27 @@ project event
 ### 系统架构图
 
 ```mermaid
-flowchart TD
-  U[User Or Product Team] --> B[amem bootstrap]
+%%{init: {"theme": "default", "flowchart": {"nodeSpacing": 80, "rankSpacing": 100}} }%%
+flowchart LR
+  U[User / Product Team] --> B[amem bootstrap]
   U --> T[amem start-task]
   A[AI Agent] --> S1[index.md]
-  A --> S2[standards/*]
+  A --> S2[standards]
   A --> S3[profile-managed instructions]
   A --> S4[onboarding-state.json]
   A --> S5[task bundle]
 
   B --> R[Project Registration]
-  B --> P[Profile Install Or Refresh]
-  B --> I[Bridge And MCP Setup]
-  B --> D[Doctor And Onboarding Export]
+  B --> P[Profile Install / Refresh]
+  B --> I[Bridge and MCP Setup]
+  B --> D[Doctor and Onboarding Export]
 
   P --> PM[profile-manifest.json]
   D --> OS[.agents-memory/onboarding-state.json]
   D --> BC[docs/plans/bootstrap-checklist.md]
   D --> RW[docs/plans/refactor-watch.md]
 
-  T --> TB[docs/plans/<task-slug>/]
+  T --> TB[docs/plans/task-slug/]
   TB --> SPEC[spec.md]
   TB --> PLAN[plan.md]
   TB --> GRAPH[task-graph.md]
@@ -154,15 +155,29 @@ flowchart TD
   V --> CG[complexity gate]
 
   A --> C[amem close-task]
-  C --> TB
-  C --> OS
+  C --> BG[bundle exit gate]
+  C --> GG[global validate gate]
+  BG --> TB
+  GG --> OS
 
   A --> L[amem promote-learning]
-  L --> ERR[errors/*.md]
+  L --> ERR[errors]
   L --> RULES[memory/rules.md]
-  L --> STD[standards/*]
+  L --> STD[standards]
   L --> VG[validation rules]
   L --> EVAL[workflow and eval tests]
+
+  classDef user fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+  classDef agent fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+  classDef cmd fill:#d1fae5,stroke:#059669,color:#064e3b
+  classDef file fill:#fef3c7,stroke:#d97706,color:#78350f
+  classDef gate fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+
+  class U user
+  class A agent
+  class B,T,NX,V,C,L cmd
+  class S1,S2,S3,S4,S5,PM,OS,BC,RW,TB,SPEC,PLAN,GRAPH,VAL,ERR,RULES,STD,VG,EVAL file
+  class R,P,I,D,DC,PC,PLC,TG,CG,BG,GG gate
 ```
 
 ### 实施状态矩阵

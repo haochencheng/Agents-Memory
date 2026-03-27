@@ -28,26 +28,26 @@ Track Python functions that are already high-complexity or are approaching the c
 
 ## Hotspots
 
-1. [WARN] `agents_memory/services/integration.py::cmd_sync` line=208 metrics=(lines=57, branches=11, nesting=3, locals=15)
-   - token: `hotspot-b963d3c1470f`
-   - issues: `lines=57>40, branches=11>5, locals=15>8, nesting=3`
-   - bundle command: `amem refactor-bundle . --token hotspot-b963d3c1470f`
-2. [WARN] `agents_memory/services/integration.py::cmd_register` line=1707 metrics=(lines=56, branches=7, nesting=2, locals=14)
-   - token: `hotspot-1c511b0626bb`
-   - issues: `lines=56>40, branches=7>5, locals=14>8`
-   - bundle command: `amem refactor-bundle . --token hotspot-1c511b0626bb`
-3. [WARN] `agents_memory/services/integration.py::execute_onboarding_next_action` line=1397 metrics=(lines=114, branches=7, nesting=2, locals=16)
-   - token: `hotspot-bd33eb374bd5`
-   - issues: `lines=114>40, branches=7>5, locals=16>8`
-   - bundle command: `amem refactor-bundle . --token hotspot-bd33eb374bd5`
-4. [WARN] `agents_memory/services/integration.py::_doctor_runbook_steps` line=586 metrics=(lines=37, branches=7, nesting=3, locals=12)
-   - token: `hotspot-ec7f7678d0f7`
-   - issues: `branches=7>5, locals=12>8, lines=37, nesting=3, missing_guiding_comment`
-   - bundle command: `amem refactor-bundle . --token hotspot-ec7f7678d0f7`
-5. [WARN] `agents_memory/services/integration.py::_doctor_checklist_markdown` line=738 metrics=(lines=49, branches=5, nesting=2, locals=9)
-   - token: `hotspot-124776bc8f37`
-   - issues: `lines=49>40, locals=9>8, branches=5, missing_guiding_comment`
-   - bundle command: `amem refactor-bundle . --token hotspot-124776bc8f37`
+1. [WARN] `agents_memory/mcp_app.py::memory_record_error` line=271 metrics=(lines=45, branches=4, nesting=1, locals=9)
+   - token: `hotspot-27d26ab2550d`
+   - issues: `lines=45>40, locals=9>8, branches=4, missing_guiding_comment`
+   - bundle command: `amem refactor-bundle . --token hotspot-27d26ab2550d`
+2. [WARN] `agents_memory/services/projects.py::parse_projects` line=12 metrics=(lines=25, branches=8, nesting=3, locals=10)
+   - token: `hotspot-37a8abb3045e`
+   - issues: `branches=8>5, locals=10>8, nesting=3, missing_guiding_comment`
+   - bundle command: `amem refactor-bundle . --token hotspot-37a8abb3045e`
+3. [WARN] `agents_memory/services/integration_enable.py::cmd_enable` line=383 metrics=(lines=50, branches=5, nesting=1, locals=11)
+   - token: `hotspot-765a0d5e3560`
+   - issues: `lines=50>40, locals=11>8, branches=5, missing_guiding_comment`
+   - bundle command: `amem refactor-bundle . --token hotspot-765a0d5e3560`
+4. [WARN] `agents_memory/services/integration_enable.py::_preview_enable_actions` line=105 metrics=(lines=52, branches=4, nesting=1, locals=14)
+   - token: `hotspot-95b46d4f7dc4`
+   - issues: `lines=52>40, locals=14>8, branches=4, missing_guiding_comment`
+   - bundle command: `amem refactor-bundle . --token hotspot-95b46d4f7dc4`
+5. [WARN] `agents_memory/services/profiles.py::sync_profile_standards` line=321 metrics=(lines=42, branches=5, nesting=2, locals=15)
+   - token: `hotspot-c57353e7277d`
+   - issues: `lines=42>40, locals=15>8, branches=5, missing_guiding_comment`
+   - bundle command: `amem refactor-bundle . --token hotspot-c57353e7277d`
 
 ## Suggested Action
 

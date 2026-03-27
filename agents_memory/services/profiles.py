@@ -173,21 +173,20 @@ def render_profile_agents_router(profile: ProfileSpec, *, bridge_rel: str) -> st
     return "\n".join(lines) + "\n"
 
 
-def _merge_profile_agents_router(existing_text: str, managed_block: str) -> str:
-    start = existing_text.find(AGENTS_BLOCK_START)
-    end = existing_text.find(AGENTS_BLOCK_END)
-    if start != -1 and end != -1 and end >= start:
-        end += len(AGENTS_BLOCK_END)
-        suffix = existing_text[end:].lstrip("\n")
-        updated = existing_text[:start] + managed_block
-        if suffix:
-            updated += "\n" + suffix
-        return updated if updated.endswith("\n") else updated + "\n"
+def _replace_existing_agents_block(existing_text: str, start: int, end: int, managed_block: str) -> str:
+    end += len(AGENTS_BLOCK_END)
+    suffix = existing_text[end:].lstrip("\n")
+    updated = existing_text[:start] + managed_block
+    if suffix:
+        updated += "\n" + suffix
+    return updated if updated.endswith("\n") else updated + "\n"
 
+
+def _build_fresh_agents_content(existing_text: str, managed_block: str) -> str:
+    # Build AGENTS.md content when no managed block exists yet.
     stripped = existing_text.strip()
     if not stripped:
         return AGENTS_FILE_PREFIX + managed_block
-
     if stripped.startswith("# AGENTS"):
         lines = existing_text.splitlines()
         if not lines:
@@ -198,9 +197,17 @@ def _merge_profile_agents_router(existing_text: str, managed_block: str) -> str:
         if tail:
             merged += "\n" + tail
         return merged if merged.endswith("\n") else merged + "\n"
-
     merged = AGENTS_FILE_PREFIX + managed_block + "\n" + stripped + "\n"
     return merged
+
+
+def _merge_profile_agents_router(existing_text: str, managed_block: str) -> str:
+    # Merge managed block into AGENTS.md, replacing existing block or inserting fresh.
+    start = existing_text.find(AGENTS_BLOCK_START)
+    end = existing_text.find(AGENTS_BLOCK_END)
+    if start != -1 and end != -1 and end >= start:
+        return _replace_existing_agents_block(existing_text, start, end, managed_block)
+    return _build_fresh_agents_content(existing_text, managed_block)
 
 
 def _sync_profile_agents_router(
@@ -318,55 +325,82 @@ def detect_applied_profile(target_root: Path) -> str | None:
     return str(profile_id) if profile_id else None
 
 
-def sync_profile_standards(ctx: AppContext, profile: ProfileSpec, target_root: Path, *, dry_run: bool = False) -> ProfileStandardsSyncResult:
-    synced_standards: list[str] = []
-    unchanged_standards: list[str] = []
-    synced_managed_files: list[str] = []
-    unchanged_managed_files: list[str] = []
-    missing_sources: list[str] = []
-
+def _sync_standards_files(
+    ctx: AppContext, profile: ProfileSpec, target_root: Path, *, dry_run: bool
+) -> tuple[list[str], list[str], list[str]]:
+    # Copy/update each profile standard file and return (synced, unchanged, missing) lists.
+    synced: list[str] = []
+    unchanged: list[str] = []
+    missing: list[str] = []
     for standard_rel in profile.standards:
         source = ctx.base_dir / standard_rel
         destination = resolve_standard_destination(target_root, standard_rel)
         relative = destination.relative_to(target_root).as_posix()
         if not source.exists():
-            missing_sources.append(standard_rel)
+            missing.append(standard_rel)
             continue
         source_text = _read_text(source)
         if destination.exists() and _read_text(destination) == source_text:
-            unchanged_standards.append(relative)
+            unchanged.append(relative)
             continue
-        synced_standards.append(relative)
+        synced.append(relative)
         if dry_run:
             continue
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(source_text, encoding="utf-8")
         log_file_update(ctx.logger, action="profile_sync_standard", path=destination, detail=f"profile_id={profile.id}")
+    return synced, unchanged, missing
 
-    manifest_expected = render_profile_manifest(profile)
+
+def sync_profile_standards(ctx: AppContext, profile: ProfileSpec, target_root: Path, *, dry_run: bool = False) -> ProfileStandardsSyncResult:
+    # Sync profile standard files, manifest, and agents router to target.
+    synced_standards, unchanged_standards, missing_sources = _sync_standards_files(ctx, profile, target_root, dry_run=dry_run)
+
     manifest_path = target_root / PROFILE_MANIFEST_REL
-    manifest_updated = not manifest_path.exists() or _read_text(manifest_path) != manifest_expected
+    manifest_updated = not manifest_path.exists() or _read_text(manifest_path) != render_profile_manifest(profile)
     if manifest_updated and not dry_run:
         write_profile_manifest(ctx, target_root, profile)
 
-    updated_managed_files, current_managed_files = _sync_profile_agents_router(ctx, profile, target_root, dry_run=dry_run)
-    synced_managed_files.extend(updated_managed_files)
-    unchanged_managed_files.extend(current_managed_files)
+    updated_managed, current_managed = _sync_profile_agents_router(ctx, profile, target_root, dry_run=dry_run)
 
     return ProfileStandardsSyncResult(
         profile_id=profile.id,
         target_root=target_root,
         synced_standards=synced_standards,
         unchanged_standards=unchanged_standards,
-        synced_managed_files=synced_managed_files,
-        unchanged_managed_files=unchanged_managed_files,
+        synced_managed_files=list(updated_managed),
+        unchanged_managed_files=list(current_managed),
         missing_sources=missing_sources,
         manifest_updated=manifest_updated,
         dry_run=dry_run,
     )
 
 
+def _apply_profile_files(
+    ctx: AppContext,
+    profile: ProfileSpec,
+    target_root: Path,
+    installed_standards: list[str],
+    wrote_templates: list[str],
+    skipped_paths: list[str],
+    *,
+    dry_run: bool,
+) -> None:
+    # Build (source, dest) pairs for standards and templates then install each.
+    standard_items = [
+        (ctx.base_dir / rel, resolve_standard_destination(target_root, rel))
+        for rel in profile.standards
+    ]
+    template_items = [
+        (ctx.base_dir / rel, resolve_template_destination(target_root, rel))
+        for rel in profile.templates
+    ]
+    _apply_file_items(ctx, profile.id, target_root, standard_items, installed_standards, skipped_paths, "profile_install_standard", dry_run=dry_run)
+    _apply_file_items(ctx, profile.id, target_root, template_items, wrote_templates, skipped_paths, "profile_write_template", dry_run=dry_run)
+
+
 def apply_profile(ctx: AppContext, profile: ProfileSpec, target_root: Path, *, dry_run: bool = False) -> ProfileApplyResult:
+    # Apply all profile components: bootstrap dirs, standards, templates, agents router, manifest.
     created_dirs: list[str] = []
     installed_standards: list[str] = []
     wrote_templates: list[str] = []
@@ -374,18 +408,7 @@ def apply_profile(ctx: AppContext, profile: ProfileSpec, target_root: Path, *, d
     skipped_paths: list[str] = []
 
     _apply_directory_items(ctx, profile.id, target_root, profile.bootstrap_create, created_dirs, skipped_paths, dry_run=dry_run)
-
-    standard_items = [
-        (ctx.base_dir / standard_rel, resolve_standard_destination(target_root, standard_rel))
-        for standard_rel in profile.standards
-    ]
-    template_items = [
-        (ctx.base_dir / template_rel, resolve_template_destination(target_root, template_rel))
-        for template_rel in profile.templates
-    ]
-
-    _apply_file_items(ctx, profile.id, target_root, standard_items, installed_standards, skipped_paths, "profile_install_standard", dry_run=dry_run)
-    _apply_file_items(ctx, profile.id, target_root, template_items, wrote_templates, skipped_paths, "profile_write_template", dry_run=dry_run)
+    _apply_profile_files(ctx, profile, target_root, installed_standards, wrote_templates, skipped_paths, dry_run=dry_run)
 
     updated_managed_files, current_managed_files = _sync_profile_agents_router(ctx, profile, target_root, dry_run=dry_run)
     managed_files.extend(updated_managed_files)

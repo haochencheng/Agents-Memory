@@ -57,26 +57,18 @@ from agents_memory.services.profiles import detect_applied_profile, load_profile
 from agents_memory.services.validation import collect_refactor_watch_hotspots
 
 
-def _merge_refactor_followup_state(
-    state: dict[str, object] | None,
-    *,
-    project_root: Path,
-    plan_root: Path,
-    hotspot_index: int,
+def _build_refactor_followup_step(
+    bundle_rel: str,
+    hotspot_identifier: str,
     hotspot_token: str,
-    hotspot: dict[str, object],
     task_name: str,
     task_slug: str,
+    hotspot_index: int,
+    hotspot: dict,
 ) -> dict[str, object]:
-    payload = dict(state or {})
-    payload.setdefault("project_root", str(project_root))
-    payload.setdefault("project_bootstrap_ready", True)
-    payload.setdefault("project_bootstrap_complete", True)
-    existing_recommended = _state_recommended_steps(payload)
-    bundle_rel = plan_root.relative_to(project_root).as_posix()
-    hotspot_identifier = str(hotspot.get("identifier") or f"index-{hotspot_index}")
+    # Build the recommended-step dict that describes the generated refactor bundle.
     command = f"python3 scripts/memory.py refactor-bundle . --token {hotspot_token}"
-    step = {
+    return {
         "group": "Refactor",
         "priority": "recommended",
         "key": "refactor_bundle",
@@ -97,6 +89,28 @@ def _merge_refactor_followup_state(
         "hotspot_token": hotspot_token,
         "hotspot": hotspot,
     }
+
+
+def _merge_refactor_followup_state(
+    state: dict[str, object] | None,
+    *,
+    project_root: Path,
+    plan_root: Path,
+    hotspot_index: int,
+    hotspot_token: str,
+    hotspot: dict[str, object],
+    task_name: str,
+    task_slug: str,
+) -> dict[str, object]:
+    # Merge a new refactor follow-up recommended step into the current onboarding state.
+    payload = dict(state or {})
+    payload.setdefault("project_root", str(project_root))
+    payload.setdefault("project_bootstrap_ready", True)
+    payload.setdefault("project_bootstrap_complete", True)
+    existing_recommended = _state_recommended_steps(payload)
+    bundle_rel = plan_root.relative_to(project_root).as_posix()
+    hotspot_identifier = str(hotspot.get("identifier") or f"index-{hotspot_index}")
+    step = _build_refactor_followup_step(bundle_rel, hotspot_identifier, hotspot_token, task_name, task_slug, hotspot_index, hotspot)
     filtered = [item for item in existing_recommended if item.get("key") != "refactor_bundle"]
     payload["recommended_steps"] = [step, *filtered]
     payload["recommended_refactor_bundle"] = {

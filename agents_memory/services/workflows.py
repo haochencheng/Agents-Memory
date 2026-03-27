@@ -377,49 +377,45 @@ def _bundle_gate_section(plan_root: Path) -> WorkflowValidationSection:
     return WorkflowValidationSection(name="bundle_gate", overall=_section_overall(findings), findings=findings)
 
 
-def close_task(
-    ctx: AppContext,
-    project_id_or_path: str = ".",
-    *,
-    task_slug: str | None = None,
-    strict: bool = False,
-    skip_global_gate: bool = False,
-) -> CloseTaskResult:
-    project_root = _resolve_target_root(project_id_or_path)
-    validation_error = _validate_target_root(project_root)
-    if validation_error is not None:
-        raise ValueError(f"invalid project root: {project_root}")
-
-    resolved_slug, plan_root = _resolve_close_task_bundle(project_root, task_slug=task_slug)
+def _validate_bundle_files(plan_root: Path) -> None:
     missing_files = [path.name for path in _bundle_required_files(plan_root) if not path.exists()]
     if missing_files:
         raise FileNotFoundError(f"task bundle missing required files: {', '.join(missing_files)}")
 
-    # Stage 1: bundle-scoped gate — always enforced; blocks on any unchecked exit criterion.
-    bundle_section = _bundle_gate_section(plan_root)
-    if bundle_section.overall != "OK":
-        raise RuntimeError(
-            f"bundle exit criteria gate failed ({bundle_section.overall}); "
-            "resolve unchecked items in task-graph.md (## Exit Criteria) or validation.md (## Task-Specific Checks)"
-        )
 
-    # Stage 2: repo-wide gate — skippable via skip_global_gate.
+def _merge_close_task_reports(
+    ctx: AppContext,
+    project_root: Path,
+    *,
+    bundle_section: WorkflowValidationSection,
+    strict: bool,
+    skip_global_gate: bool,
+) -> WorkflowValidationReport:
+    # Run the repo-wide gate and merge with the bundle gate into a combined report.
     report = collect_workflow_validation_report(ctx, str(project_root))
     if not skip_global_gate and _workflow_validation_exit_code(report, strict=strict) != 0:
         raise RuntimeError("validate gate failed; close-task aborted")
-
-    # Merge bundle_gate section into report so it's recorded in state and bundle files.
     merged_sections = [bundle_section, *report.sections]
-    merged_report = WorkflowValidationReport(
+    return WorkflowValidationReport(
         project_root=project_root,
         overall=_overall_from_sections(merged_sections),
         sections=merged_sections,
     )
 
-    task_name = _bundle_task_name(plan_root)
-    closed_at = _iso_now()
+
+def _apply_close_task_changes(
+    ctx: AppContext,
+    project_root: Path,
+    *,
+    resolved_slug: str,
+    plan_root: Path,
+    task_name: str,
+    closed_at: str,
+    merged_report: WorkflowValidationReport,
+) -> tuple[list[str], Path]:
+    # Write bundle files and update onboarding state for the closed task.
     payload = _close_task_payload(merged_report, task_name=task_name, task_slug=resolved_slug, closed_at=closed_at)
-    updated_files, _skipped_files = refresh_managed_bundle_files(
+    updated_files, _ = refresh_managed_bundle_files(
         ctx,
         target_root=project_root,
         plan_root=plan_root,
@@ -434,12 +430,37 @@ def close_task(
     )
     _touch_close_task_files(project_root, updated_files)
     state_path = _update_close_task_state(
-        ctx,
-        project_root,
-        task_name=task_name,
-        task_slug=resolved_slug,
-        closed_at=closed_at,
-        report=merged_report,
+        ctx, project_root, task_name=task_name, task_slug=resolved_slug,
+        closed_at=closed_at, report=merged_report,
+    )
+    return updated_files, state_path
+
+
+def _close_task_core(
+    ctx: AppContext,
+    project_root: Path,
+    *,
+    task_slug: str | None,
+    strict: bool,
+    skip_global_gate: bool,
+) -> CloseTaskResult:
+    # Execute stage-1/2 gates, write bundle files, and record the closing action.
+    resolved_slug, plan_root = _resolve_close_task_bundle(project_root, task_slug=task_slug)
+    _validate_bundle_files(plan_root)
+    bundle_section = _bundle_gate_section(plan_root)
+    if bundle_section.overall != "OK":
+        raise RuntimeError(
+            f"bundle exit criteria gate failed ({bundle_section.overall}); "
+            "resolve unchecked items in task-graph.md (## Exit Criteria) or validation.md (## Task-Specific Checks)"
+        )
+    merged_report = _merge_close_task_reports(
+        ctx, project_root, bundle_section=bundle_section, strict=strict, skip_global_gate=skip_global_gate
+    )
+    task_name = _bundle_task_name(plan_root)
+    closed_at = _iso_now()
+    updated_files, state_path = _apply_close_task_changes(
+        ctx, project_root, resolved_slug=resolved_slug, plan_root=plan_root,
+        task_name=task_name, closed_at=closed_at, merged_report=merged_report,
     )
     return CloseTaskResult(
         task_slug=resolved_slug,
@@ -453,6 +474,22 @@ def close_task(
         updated_files=updated_files,
         state_path=state_path,
     )
+
+
+def close_task(
+    ctx: AppContext,
+    project_id_or_path: str = ".",
+    *,
+    task_slug: str | None = None,
+    strict: bool = False,
+    skip_global_gate: bool = False,
+) -> CloseTaskResult:
+    # Validate project root then delegate to core close-task workflow.
+    project_root = _resolve_target_root(project_id_or_path)
+    validation_error = _validate_target_root(project_root)
+    if validation_error is not None:
+        raise ValueError(f"invalid project root: {project_root}")
+    return _close_task_core(ctx, project_root, task_slug=task_slug, strict=strict, skip_global_gate=skip_global_gate)
 
 
 def _print_close_task_summary(result: CloseTaskResult) -> None:
@@ -505,6 +542,7 @@ def cmd_start_task(
 
 
 def cmd_do_next(ctx: AppContext, project_id_or_path: str = ".", *, output_format: str = "text") -> int:
+    # Resolve the project root and print or return the next recommended action.
     project_root = _resolve_target_root(project_id_or_path)
     action = onboarding_next_action(project_root)
     status = str(action.get("status") or "invalid")

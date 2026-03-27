@@ -13,7 +13,7 @@ except ImportError:
 
 from agents_memory.constants import CATEGORIES, DOMAINS, PROJECTS, VECTOR_THRESHOLD
 from agents_memory.logging_utils import log_file_update
-from agents_memory.runtime import build_context
+from agents_memory.runtime import AppContext, build_context
 from agents_memory.services.integration import _merge_refactor_followup_state, execute_onboarding_next_action, load_onboarding_state, onboarding_next_action, onboarding_state_path
 from agents_memory.services.planning import init_refactor_bundle
 from agents_memory.services.projects import parse_projects
@@ -112,8 +112,63 @@ def memory_get_refactor_hotspots(project_root: str = ".") -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
+def _write_refactor_bundle_state(
+    ctx: AppContext,
+    target_root: Path,
+    result: object,
+    hotspot_payload: dict,
+) -> tuple[str, object]:
+    # Merge follow-up state and persist it; returns (state_path_str, recommended_followup).
+    existing_state = load_onboarding_state(target_root)
+    updated_state = _merge_refactor_followup_state(
+        existing_state,
+        project_root=target_root,
+        plan_root=result.plan_root,
+        hotspot_index=result.hotspot_index,
+        hotspot_token=result.hotspot_token,
+        hotspot=hotspot_payload,
+        task_name=result.task_name,
+        task_slug=result.task_slug,
+    )
+    state_path = onboarding_state_path(target_root)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps(updated_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    log_file_update(ctx.logger, action="write_refactor_followup_state", path=state_path, detail=f"project_root={target_root};task_slug={result.task_slug}")
+    return str(state_path), updated_state.get("recommended_refactor_bundle")
+
+
+def _init_refactor_bundle_payload(
+    ctx: AppContext,
+    target_root: Path,
+    result: object,
+    dry_run: bool,
+) -> dict:
+    # Build the success payload dict and optionally persist refactor follow-up state.
+    payload: dict = {
+        "status": "ok",
+        "project_root": str(result.target_root),
+        "plan_root": str(result.plan_root),
+        "task_name": result.task_name,
+        "task_slug": result.task_slug,
+        "hotspot_index": result.hotspot_index,
+        "hotspot_token": result.hotspot_token,
+        "hotspot": serialize_refactor_hotspot(result.hotspot),
+        "wrote_files": result.wrote_files,
+        "refreshed_files": result.refreshed_files,
+        "skipped_files": result.skipped_files,
+        "dry_run": result.dry_run,
+        "recommended_next_command": "amem doctor .",
+    }
+    if not dry_run:
+        state_path, followup = _write_refactor_bundle_state(ctx, target_root, result, payload["hotspot"])
+        payload["state_path"] = state_path
+        payload["recommended_followup"] = followup
+    return payload
+
+
 @mcp.tool()
 def memory_init_refactor_bundle(project_root: str = ".", hotspot_index: int = 1, hotspot_token: str = "", task_slug: str = "", dry_run: bool = False) -> str:
+    # Initialize a refactor plan bundle for the top-ranked (or specified) hotspot.
     _log_tool_start(
         "memory_init_refactor_bundle",
         project_root=project_root,
@@ -133,58 +188,14 @@ def memory_init_refactor_bundle(project_root: str = ".", hotspot_index: int = 1,
             dry_run=dry_run,
         )
     except FileNotFoundError as exc:
-        payload = {
-            "status": "missing",
-            "project_root": str(target_root),
-            "message": str(exc),
-            "recommended_command": "python3 scripts/memory.py doctor . --write-checklist --write-state",
-        }
+        payload = {"status": "missing", "project_root": str(target_root), "message": str(exc), "recommended_command": "python3 scripts/memory.py doctor . --write-checklist --write-state"}
         _log_tool_end("memory_init_refactor_bundle", status="missing", project_root=target_root, hotspot_index=hotspot_index)
         return json.dumps(payload, ensure_ascii=False, indent=2)
     except (IndexError, ValueError) as exc:
-        payload = {
-            "status": "invalid",
-            "project_root": str(target_root),
-            "message": str(exc),
-            "hotspot_index": hotspot_index,
-            "hotspot_token": hotspot_token or None,
-        }
+        payload = {"status": "invalid", "project_root": str(target_root), "message": str(exc), "hotspot_index": hotspot_index, "hotspot_token": hotspot_token or None}
         _log_tool_end("memory_init_refactor_bundle", status="invalid", project_root=target_root, hotspot_index=hotspot_index, hotspot_token=hotspot_token or None)
         return json.dumps(payload, ensure_ascii=False, indent=2)
-
-    payload = {
-        "status": "ok",
-        "project_root": str(result.target_root),
-        "plan_root": str(result.plan_root),
-        "task_name": result.task_name,
-        "task_slug": result.task_slug,
-        "hotspot_index": result.hotspot_index,
-        "hotspot_token": result.hotspot_token,
-        "hotspot": serialize_refactor_hotspot(result.hotspot),
-        "wrote_files": result.wrote_files,
-        "refreshed_files": result.refreshed_files,
-        "skipped_files": result.skipped_files,
-        "dry_run": result.dry_run,
-        "recommended_next_command": "amem doctor .",
-    }
-    if not dry_run:
-        existing_state = load_onboarding_state(target_root)
-        updated_state = _merge_refactor_followup_state(
-            existing_state,
-            project_root=target_root,
-            plan_root=result.plan_root,
-            hotspot_index=result.hotspot_index,
-            hotspot_token=result.hotspot_token,
-            hotspot=payload["hotspot"],
-            task_name=result.task_name,
-            task_slug=result.task_slug,
-        )
-        state_path = onboarding_state_path(target_root)
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_text(json.dumps(updated_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        log_file_update(ctx.logger, action="write_refactor_followup_state", path=state_path, detail=f"project_root={target_root};task_slug={result.task_slug}")
-        payload["state_path"] = str(state_path)
-        payload["recommended_followup"] = updated_state.get("recommended_refactor_bundle")
+    payload = _init_refactor_bundle_payload(ctx, target_root, result, dry_run)
     _log_tool_end(
         "memory_init_refactor_bundle",
         status="ok",
@@ -197,8 +208,23 @@ def memory_init_refactor_bundle(project_root: str = ".", hotspot_index: int = 1,
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
+def _filter_rules_by_domain(content: str, headers: list[str]) -> str:
+    # Extract lines belonging to the first matching domain section.
+    result_lines: list[str] = []
+    in_section = False
+    for line in content.splitlines():
+        if any(line.startswith(h) for h in headers):
+            in_section = True
+        elif line.startswith("## ") and in_section:
+            break
+        if in_section:
+            result_lines.append(line)
+    return "\n".join(result_lines)
+
+
 @mcp.tool()
 def memory_get_rules(domain: str = "") -> str:
+    # Return rule content filtered by domain, or all rules if no domain specified.
     _log_tool_start("memory_get_rules", domain=domain or "all")
     if not ctx.rules_file.exists():
         _log_tool_end("memory_get_rules", status="missing_rules")
@@ -218,26 +244,15 @@ def memory_get_rules(domain: str = "") -> str:
     if not headers:
         _log_tool_end("memory_get_rules", status="ok", scope="all_unmapped")
         return content
-    result_lines: list[str] = []
-    in_section = False
-    for line in content.splitlines():
-        if any(line.startswith(header) for header in headers):
-            in_section = True
-        elif line.startswith("## ") and in_section:
-            break
-        if in_section:
-            result_lines.append(line)
-    result = "\n".join(result_lines) if result_lines else f"No rules found for domain: {domain}"
+    result = _filter_rules_by_domain(content, headers)
     _log_tool_end("memory_get_rules", status="ok", scope=domain)
-    return result
+    return result or f"No rules found for domain: {domain}"
 
 
-@mcp.tool()
-def memory_search(query: str, limit: int = 5) -> str:
-    _log_tool_start("memory_search", query=query, limit=limit)
-    keyword = query.lower()
-    matches = []
-    for filepath in sorted(ctx.errors_dir.glob("*.md")):
+def _collect_keyword_matches(errors_dir: Path, keyword: str, limit: int) -> list[dict]:
+    # Scan error records for the keyword and return matching metadata dicts.
+    matches: list[dict] = []
+    for filepath in sorted(errors_dir.glob("*.md")):
         content = filepath.read_text(encoding="utf-8").lower()
         if keyword in content:
             meta = parse_frontmatter(filepath)
@@ -245,6 +260,14 @@ def memory_search(query: str, limit: int = 5) -> str:
                 matches.append(meta)
         if len(matches) >= limit:
             break
+    return matches
+
+
+@mcp.tool()
+def memory_search(query: str, limit: int = 5) -> str:
+    # Search error records by keyword and return a summary of matches.
+    _log_tool_start("memory_search", query=query, limit=limit)
+    matches = _collect_keyword_matches(ctx.errors_dir, query.lower(), limit)
     if not matches:
         _log_tool_end("memory_search", status="no_matches", query=query)
         return f"No error records matching '{query}'."
@@ -267,26 +290,20 @@ def memory_get_error(record_id: str) -> str:
     return f"Record '{record_id}' not found."
 
 
-@mcp.tool()
-def memory_record_error(project: str, domain: str, category: str, severity: str, task: str, error_desc: str, root_cause: str, fix: str, rule: str, file_path: str = "", tags: str = "") -> str:
-    _log_tool_start("memory_record_error", project=project, category=category, severity=severity)
-    if project not in PROJECTS:
-        return f"Invalid project: {project}. Must be one of: {', '.join(PROJECTS)}"
-    if domain not in DOMAINS:
-        return f"Invalid domain: {domain}. Must be one of: {', '.join(DOMAINS)}"
-    if category not in CATEGORIES:
-        return f"Invalid category: {category}. Must be one of: {', '.join(CATEGORIES)}"
-    if severity not in {"critical", "warning", "info"}:
-        return "Invalid severity. Must be one of: critical, warning, info"
-
-    today = date.today().isoformat()
+def _build_error_record_id(ctx: AppContext, project: str, today: str) -> tuple[str, Path]:
     existing = list(ctx.errors_dir.glob(f"{today}-{project}-*.md"))
     seq = str(len(existing) + 1).zfill(3)
     record_id = f"{today}-{project}-{seq}"
-    filename = ctx.errors_dir / f"{record_id}.md"
+    return record_id, ctx.errors_dir / f"{record_id}.md"
+
+
+def _build_error_content(
+    record_id: str, today: str, *, project: str, domain: str, category: str, severity: str,
+    task: str, error_desc: str, root_cause: str, fix: str, rule: str, file_path: str, tags: str,
+) -> str:
     tag_items = [item.strip() for item in tags.split(",") if item.strip()]
     file_section = file_path if file_path else "<!-- 填写文件路径 -->"
-    content = f"""---
+    return f"""---
 id: {record_id}
 date: {today}
 project: {project}
@@ -327,6 +344,24 @@ tags: [{', '.join(tag_items)}]
 
 <!-- 关联记录 ID 或 instruction 文件 -->
 """
+
+
+@mcp.tool()
+def memory_record_error(project: str, domain: str, category: str, severity: str, task: str, error_desc: str, root_cause: str, fix: str, rule: str, file_path: str = "", tags: str = "") -> str:
+    # Validate params, build error record, write to disk, and update index.
+    _log_tool_start("memory_record_error", project=project, category=category, severity=severity)
+    if project not in PROJECTS:
+        return f"Invalid project: {project}. Must be one of: {', '.join(PROJECTS)}"
+    if domain not in DOMAINS:
+        return f"Invalid domain: {domain}. Must be one of: {', '.join(DOMAINS)}"
+    if category not in CATEGORIES:
+        return f"Invalid category: {category}. Must be one of: {', '.join(CATEGORIES)}"
+    if severity not in {"critical", "warning", "info"}:
+        return "Invalid severity. Must be one of: critical, warning, info"
+
+    today = date.today().isoformat()
+    record_id, filename = _build_error_record_id(ctx, project, today)
+    content = _build_error_content(record_id, today, project=project, domain=domain, category=category, severity=severity, task=task, error_desc=error_desc, root_cause=root_cause, fix=fix, rule=rule, file_path=file_path, tags=tags)
     ctx.ensure_storage_dirs()
     filename.write_text(content, encoding="utf-8")
     log_file_update(ctx.logger, action="create_error_record", path=filename, detail=f"record_id={record_id}")

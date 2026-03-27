@@ -71,6 +71,7 @@ def _render_template(source: Path, *, task_name: str, task_slug: str) -> str:
 
 
 def _merge_managed_section(existing_content: str, rendered_content: str, heading: str) -> str:
+    # Merge the rendered section into existing content, replacing the section if present.
     existing = existing_content.rstrip()
     rendered = rendered_content.rstrip()
     marker = f"\n{heading}\n"
@@ -118,6 +119,31 @@ def json_block(value: object, *, target_root: Path | None = None) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
+def _apply_bundle_file_update(
+    ctx: AppContext,
+    destination: Path,
+    relative: str,
+    existing: str,
+    merged: str,
+    created_now: set[str],
+    refreshed_files: list[str],
+    skipped_files: list[str],
+    create_action: str,
+    refresh_action: str,
+    log_detail: str,
+) -> None:
+    if merged == existing:
+        if relative not in created_now:
+            skipped_files.append(relative)
+        return
+    destination.write_text(merged, encoding="utf-8")
+    if relative in created_now:
+        log_file_update(ctx.logger, action=create_action, path=destination, detail=log_detail)
+        return
+    refreshed_files.append(relative)
+    log_file_update(ctx.logger, action=refresh_action, path=destination, detail=log_detail)
+
+
 def refresh_managed_bundle_files(
     ctx: AppContext,
     *,
@@ -132,6 +158,7 @@ def refresh_managed_bundle_files(
     refresh_action: str,
     log_detail: str,
 ) -> tuple[list[str], list[str]]:
+    # Merge rendered content into each managed bundle file, tracking refreshed vs skipped.
     refreshed_files: list[str] = []
     skipped_files: list[str] = []
     if dry_run:
@@ -144,16 +171,10 @@ def refresh_managed_bundle_files(
         relative = destination.relative_to(target_root).as_posix()
         existing = destination.read_text(encoding="utf-8")
         merged = _merge_managed_section(existing, render_content(filename), resolve_heading(filename))
-        if merged == existing:
-            if relative not in created_now:
-                skipped_files.append(relative)
-            continue
-        destination.write_text(merged, encoding="utf-8")
-        if relative in created_now:
-            log_file_update(ctx.logger, action=create_action, path=destination, detail=log_detail)
-            continue
-        refreshed_files.append(relative)
-        log_file_update(ctx.logger, action=refresh_action, path=destination, detail=log_detail)
+        _apply_bundle_file_update(
+            ctx, destination, relative, existing, merged, created_now,
+            refreshed_files, skipped_files, create_action, refresh_action, log_detail,
+        )
 
     return refreshed_files, skipped_files
 
@@ -224,6 +245,7 @@ def init_plan_bundle(
     task_slug: str | None = None,
     dry_run: bool = False,
 ) -> PlanInitResult:
+    # Create a new plan bundle directory with all standard template files.
     resolved_slug = task_slug or slugify_task_name(task_name)
     templates_dir = _planning_templates_dir(ctx)
     if not templates_dir.exists():
@@ -259,12 +281,36 @@ def init_plan_bundle(
     )
 
 
+def _repair_single_bundle(
+    ctx: AppContext,
+    templates_dir: Path,
+    bundle: Path,
+    root: Path,
+    *,
+    dry_run: bool,
+) -> list[str]:
+    # Write missing template files for one bundle and return the list of written paths.
+    task_slug = bundle.name
+    task_name = _task_name_from_plan_slug(task_slug)
+    wrote_files, _ = _write_plan_template_files(
+        ctx,
+        templates_dir=templates_dir,
+        plan_root=bundle,
+        target_root=root,
+        task_name=task_name,
+        task_slug=task_slug,
+        dry_run=dry_run,
+    )
+    return wrote_files
+
+
 def repair_plan_bundles(
     ctx: AppContext,
     target_root: Path,
     *,
     dry_run: bool = False,
 ) -> PlanRepairResult:
+    # Walk all plan bundles under target_root and repair any missing template files.
     templates_dir = _planning_templates_dir(ctx)
     if not templates_dir.exists():
         raise FileNotFoundError(f"planning templates directory not found: {templates_dir}")
@@ -274,17 +320,7 @@ def repair_plan_bundles(
     skipped_bundles: list[str] = []
 
     for bundle in bundles:
-        task_slug = bundle.name
-        task_name = _task_name_from_plan_slug(task_slug)
-        wrote_files, _skipped_files = _write_plan_template_files(
-            ctx,
-            templates_dir=templates_dir,
-            plan_root=bundle,
-            target_root=root,
-            task_name=task_name,
-            task_slug=task_slug,
-            dry_run=dry_run,
-        )
+        wrote_files = _repair_single_bundle(ctx, templates_dir, bundle, root, dry_run=dry_run)
         if wrote_files:
             repaired_files.extend(wrote_files)
             continue

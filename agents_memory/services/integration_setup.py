@@ -23,6 +23,7 @@ def render_bridge_instruction(ctx: AppContext, project_id: str) -> str:
 
 
 def extract_rule_text(filepath: Path) -> str:
+    # Extract the text under the '## 提炼规则' section heading from a record file.
     lines = filepath.read_text(encoding="utf-8").splitlines()
     in_rule = False
     rule_lines: list[str] = []
@@ -57,6 +58,7 @@ def _append_gotcha_entry(target_content: str, record_id: str, rule_text: str) ->
 
 
 def _sync_record(ctx: AppContext, projects: list[dict], record: dict) -> bool:
+    # Attempt to sync one promoted rule record into its target project file.
     raw_path = record.get("promoted_to", "").strip('"').strip("'")
     if not raw_path:
         return False
@@ -116,6 +118,7 @@ def cmd_sync(ctx: AppContext) -> None:
 
 
 def cmd_bridge_install(ctx: AppContext, project_id: str) -> None:
+    # Copy the agents-memory bridge instruction file into the target project.
     projects = parse_projects(ctx)
     project = next((item for item in projects if item["id"] == project_id), None)
     if project is None:

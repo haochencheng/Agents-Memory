@@ -332,6 +332,40 @@ def _successful_execution_result(
     }
 
 
+def _run_approved_onboarding_step(
+    ctx: AppContext,
+    project_root: Path,
+    step: dict[str, object],
+    state: dict[str, object] | None,
+    *,
+    approve_unsafe: bool,
+    approval_required: bool,
+    safe_to_auto_execute: bool,
+    verify: bool,
+    refresh_artifacts: bool,
+) -> dict[str, object]:
+    # Execute the approved onboarding command and verify or report the outcome.
+    command_payload = _run_onboarding_command(ctx, project_root, str(step.get("command") or ""))
+    event = _start_execution_event(
+        step,
+        command_payload,
+        approve_unsafe=approve_unsafe,
+        approval_required=approval_required,
+        safe_to_auto_execute=safe_to_auto_execute,
+    )
+    if not command_payload["success"]:
+        return _execution_failure_result(
+            ctx, project_root, state, step, command_payload, event,
+            approve_unsafe=approve_unsafe, approval_required=approval_required,
+        )
+    verify_payload = _verify_onboarding_step(ctx, project_root, step, event, verify=verify)
+    return _successful_execution_result(
+        ctx, project_root, state, step, command_payload, verify_payload, event,
+        approve_unsafe=approve_unsafe, approval_required=approval_required,
+        refresh_artifacts=refresh_artifacts,
+    )
+
+
 def execute_onboarding_next_action(
     ctx: AppContext,
     project_root: Path,
@@ -340,6 +374,7 @@ def execute_onboarding_next_action(
     approve_unsafe: bool = False,
     refresh_artifacts: bool = True,
 ) -> dict[str, object]:
+    # Resolve the next pending onboarding step and execute or gate it.
     state = load_onboarding_state(project_root)
     action = onboarding_next_action(project_root)
     if action["status"] != "pending":
@@ -354,37 +389,12 @@ def execute_onboarding_next_action(
     if approval_required and not approve_unsafe:
         return _approval_required_result(project_root, step)
 
-    command_payload = _run_onboarding_command(ctx, project_root, str(step.get("command") or ""))
-    event = _start_execution_event(
-        step,
-        command_payload,
+    return _run_approved_onboarding_step(
+        ctx, project_root, step, state,
         approve_unsafe=approve_unsafe,
         approval_required=approval_required,
         safe_to_auto_execute=safe_to_auto_execute,
-    )
-    if not command_payload["success"]:
-        return _execution_failure_result(
-            ctx,
-            project_root,
-            state,
-            step,
-            command_payload,
-            event,
-            approve_unsafe=approve_unsafe,
-            approval_required=approval_required,
-        )
-
-    verify_payload = _verify_onboarding_step(ctx, project_root, step, event, verify=verify)
-    return _successful_execution_result(
-        ctx,
-        project_root,
-        state,
-        step,
-        command_payload,
-        verify_payload,
-        event,
-        approve_unsafe=approve_unsafe,
-        approval_required=approval_required,
+        verify=verify,
         refresh_artifacts=refresh_artifacts,
     )
 
@@ -396,6 +406,7 @@ def cmd_onboarding_execute(
     verify: bool = True,
     approve_unsafe: bool = False,
 ) -> None:
+    # Execute the next pending onboarding action and print the outcome.
     _project_id, project_root, _project = resolve_project_target(ctx, project_id_or_path)
     if project_root is None:
         ctx.logger.warning("onboarding_execute_skip | target=%s | reason=unknown_project_or_path", project_id_or_path)

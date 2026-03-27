@@ -48,18 +48,26 @@ class AppContext:
             target.write_text(template_path.read_text(encoding="utf-8"), encoding="utf-8")
 
 
+def _detect_base_dir_from_ref(reference_file: str | Path) -> Path | None:
+    # Walk up from a .py reference file to find the agents_memory root directory.
+    ref = Path(reference_file).resolve()
+    if not ref.name.endswith(".py"):
+        return None
+    for candidate in (ref.parent.parent, ref.parent.parent.parent):
+        if (candidate / "scripts" / "memory.py").exists() or (candidate / "agents_memory").exists():
+            return candidate
+    return None
+
+
 def detect_base_dir(reference_file: str | Path | None = None) -> Path:
+    # Resolve the agents_memory root from env var, reference file, or package location.
     env_root = os.environ.get("AGENTS_MEMORY_ROOT")
     if env_root:
         return Path(env_root).expanduser().resolve()
-
     if reference_file is not None:
-        ref = Path(reference_file).resolve()
-        if ref.name.endswith(".py"):
-            for candidate in (ref.parent.parent, ref.parent.parent.parent):
-                if (candidate / "scripts" / "memory.py").exists() or (candidate / "agents_memory").exists():
-                    return candidate
-
+        base = _detect_base_dir_from_ref(reference_file)
+        if base is not None:
+            return base
     return Path(__file__).resolve().parent.parent
 
 

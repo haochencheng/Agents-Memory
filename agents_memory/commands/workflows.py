@@ -6,6 +6,7 @@ from agents_memory.services.workflows import cmd_bootstrap, cmd_close_task, cmd_
 
 
 def _parse_bootstrap_args(args: list[str]) -> tuple[str, bool, bool, bool]:
+    # Parse --full, --dry-run, --json flags; first positional is target.
     project_id_or_path = "."
     full = False
     dry_run = False
@@ -13,14 +14,17 @@ def _parse_bootstrap_args(args: list[str]) -> tuple[str, bool, bool, bool]:
     for arg in args:
         if arg == "--full":
             full = True
-        elif arg == "--dry-run":
+            continue
+        if arg == "--dry-run":
             dry_run = True
-        elif arg == "--json":
+            continue
+        if arg == "--json":
             json_output = True
-        elif arg.startswith("--"):
+            continue
+        if arg.startswith("--"):
             print(f"未知参数: {arg}")
-        else:
-            project_id_or_path = arg
+            continue
+        project_id_or_path = arg
     return project_id_or_path, full, dry_run, json_output
 
 
@@ -30,20 +34,21 @@ def _handle_bootstrap(ctx, args: list[str]) -> None:
 
 
 def _handle_start_task(ctx, args: list[str]) -> None:
+    # Parse CLI args and dispatch to cmd_start_task.
     dry_run = False
     task_slug: str | None = None
     positionals: list[str] = []
     index = 0
     while index < len(args):
         arg = args[index]
+        index += 1
         if arg == "--dry-run":
             dry_run = True
-        elif arg == "--slug" and index + 1 < len(args):
-            task_slug = args[index + 1]
-            index += 1
-        else:
-            positionals.append(arg)
-        index += 1
+            continue
+        if arg == "--slug" and index < len(args):
+            task_slug = args[index]; index += 1
+            continue
+        positionals.append(arg)
 
     if not positionals:
         print('用法: python3 memory.py start-task <task-name> [path] [--slug <task-slug>] [--dry-run]')
@@ -55,22 +60,21 @@ def _handle_start_task(ctx, args: list[str]) -> None:
 
 
 def _parse_format_args(args: list[str]) -> tuple[str, str, bool]:
+    # Parse --format, --strict flags; first positional is target.
     target = "."
     output_format = "text"
     strict = False
     index = 0
     while index < len(args):
         arg = args[index]
-        if arg == "--format" and index + 1 < len(args):
-            output_format = args[index + 1]
-            index += 1
-        elif arg == "--strict":
-            strict = True
-        elif arg.startswith("--"):
-            print(f"未知参数: {arg}")
-        else:
-            target = arg
         index += 1
+        if arg == "--format" and index < len(args):
+            output_format = args[index]; index += 1; continue
+        if arg == "--strict":
+            strict = True; continue
+        if arg.startswith("--"):
+            print(f"未知参数: {arg}"); continue
+        target = arg
     return target, output_format, strict
 
 
@@ -85,6 +89,7 @@ def _handle_validate(ctx, args: list[str]) -> None:
 
 
 def _handle_close_task(ctx, args: list[str]) -> None:
+    # Parse CLI args and dispatch to cmd_close_task.
     target = "."
     task_slug: str | None = None
     output_format = "text"
@@ -92,19 +97,16 @@ def _handle_close_task(ctx, args: list[str]) -> None:
     index = 0
     while index < len(args):
         arg = args[index]
-        if arg == "--slug" and index + 1 < len(args):
-            task_slug = args[index + 1]
-            index += 1
-        elif arg == "--format" and index + 1 < len(args):
-            output_format = args[index + 1]
-            index += 1
-        elif arg in {"--strict", "--skip-global-gate"}:
-            bool_flags.add(arg)
-        elif arg.startswith("--"):
-            print(f"未知参数: {arg}")
-        else:
-            target = arg
         index += 1
+        if arg == "--slug" and index < len(args):
+            task_slug = args[index]; index += 1; continue
+        if arg == "--format" and index < len(args):
+            output_format = args[index]; index += 1; continue
+        if arg in {"--strict", "--skip-global-gate"}:
+            bool_flags.add(arg); continue
+        if arg.startswith("--"):
+            print(f"未知参数: {arg}"); continue
+        target = arg
     raise SystemExit(cmd_close_task(
         ctx,
         target,

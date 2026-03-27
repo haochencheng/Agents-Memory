@@ -180,6 +180,19 @@ def cmd_onboarding_bundle(
     return 0
 
 
+def _log_refactor_bundle_complete(ctx: AppContext, result: object, hotspot_index: int) -> None:
+    ctx.logger.info(
+        "refactor_bundle_complete | task_slug=%s | hotspot_index=%s | hotspot_token=%s | target_root=%s | dry_run=%s | files=%s | skipped=%s",
+        result.task_slug,
+        hotspot_index,
+        result.hotspot_token,
+        result.target_root,
+        result.dry_run,
+        len(result.wrote_files) + len(result.refreshed_files),
+        len(result.skipped_files),
+    )
+
+
 def cmd_refactor_bundle(
     ctx: AppContext,
     project_id_or_path: str = ".",
@@ -189,6 +202,7 @@ def cmd_refactor_bundle(
     task_slug: str | None = None,
     dry_run: bool = False,
 ) -> int:
+    # Initialize or refresh a refactor plan bundle for the hotspot at hotspot_index.
     target_root = Path(project_id_or_path).expanduser().resolve()
     if not target_root.exists():
         print(f"路径不存在: {target_root}")
@@ -218,14 +232,5 @@ def cmd_refactor_bundle(
         print(str(exc))
         return 1
     _print_refactor_bundle_summary(result)
-    ctx.logger.info(
-        "refactor_bundle_complete | task_slug=%s | hotspot_index=%s | hotspot_token=%s | target_root=%s | dry_run=%s | files=%s | skipped=%s",
-        result.task_slug,
-        hotspot_index,
-        result.hotspot_token,
-        result.target_root,
-        result.dry_run,
-        len(result.wrote_files) + len(result.refreshed_files),
-        len(result.skipped_files),
-    )
+    _log_refactor_bundle_complete(ctx, result, hotspot_index)
     return 0
