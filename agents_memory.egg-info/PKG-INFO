@@ -1,0 +1,212 @@
+Metadata-Version: 2.4
+Name: agents-memory
+Version: 0.1.0
+Summary: Shared memory system for AI Agents — structured error recording + rule promotion + cross-project sync
+License: MIT
+Project-URL: Repository, https://github.com/haochencheng/Agents-Memory
+Project-URL: Documentation, https://github.com/haochencheng/Agents-Memory/tree/main/docs
+Project-URL: Issues, https://github.com/haochencheng/Agents-Memory/issues
+Keywords: agents,memory,mcp,ai
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: mcp>=1.0.0
+Provides-Extra: vector
+Requires-Dist: lancedb>=0.6.0; extra == "vector"
+Requires-Dist: openai>=1.0.0; extra == "vector"
+Requires-Dist: pyarrow>=14.0.0; extra == "vector"
+Provides-Extra: qdrant
+Requires-Dist: qdrant-client>=1.8.0; extra == "qdrant"
+Provides-Extra: all
+Requires-Dist: agents-memory[qdrant,vector]; extra == "all"
+Dynamic: license-file
+
+---
+created_at: 2026-03-26
+updated_at: 2026-03-28
+doc_status: active
+---
+
+# Agents-Memory
+
+<a id="top"></a>
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+![MCP](https://img.shields.io/badge/MCP-enabled-black)
+![Docs Check](https://img.shields.io/badge/docs--check-governed-orange)
+
+[![Release](https://img.shields.io/github/v/release/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/releases)
+[![CI](https://github.com/haochencheng/Agents-Memory/actions/workflows/ci.yml/badge.svg)](https://github.com/haochencheng/Agents-Memory/actions/workflows/ci.yml)
+[![Changelog](https://img.shields.io/badge/changelog-managed-0A7EA4)](CHANGELOG.md)
+[![Release Checklist](https://img.shields.io/badge/release-checklist-reviewed-2F855A)](docs/release-checklist.md)
+[![Contributors](https://img.shields.io/github/contributors/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/graphs/contributors)
+[![Last Commit](https://img.shields.io/github/last-commit/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/commits/main)
+[![Repo Size](https://img.shields.io/github/repo-size/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory)
+
+Read in: [English](#en) | [简体中文](#zh)
+
+<a id="en"></a>
+
+## English
+
+Agents-Memory is a Shared Engineering Brain for AI coding agents. It gives teams a reusable runtime for engineering memory, standards, planning bundles, and validation gates across real repositories.
+
+### Why Teams Install Agents-Memory
+
+| Operational Memory | Workflow Discipline | Safer Delivery |
+| --- | --- | --- |
+| Capture repeated failures, promote rules, and carry engineering context across repos. | Turn freeform requests into bootstrap, planning bundles, and validation-first execution. | Gate changes with docs-check, profile-check, plan-check, CI, and release discipline. |
+
+### Workflow
+
+```text
+connect project
+	-> bootstrap engineering context with amem bootstrap
+	-> refresh project-local overlays with amem profile-render when repo facts change
+	-> create task bundle
+	-> implement with shared standards
+	-> run delivery gates with amem validate
+	-> close the task with amem close-task
+	-> promote lessons back into shared defaults
+```
+
+### Quick Start
+
+```bash
+git clone https://github.com/haochencheng/Agents-Memory.git
+cd Agents-Memory
+python3 -m pip install -e .
+amem bootstrap . --dry-run
+amem start-task "demo task" . --dry-run
+amem validate .
+amem close-task . --slug demo-task
+python3.12 -m unittest discover -s tests -p 'test_*.py'
+```
+
+### Trust Signals
+
+1. [CI](https://github.com/haochencheng/Agents-Memory/actions/workflows/ci.yml) is public and mirrors the local install, compile, test, and docs-check path.
+2. CI is split into `tests` and `docs` jobs for clearer branch protection.
+3. [CHANGELOG.md](CHANGELOG.md) and [docs/release-checklist.md](docs/release-checklist.md) govern public release execution.
+4. [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and [CONTRIBUTING.md](CONTRIBUTING.md) define collaboration paths up front.
+
+### Documentation
+
+1. [docs/getting-started.md](docs/getting-started.md): local install, startup, and baseline verification.
+2. [docs/integration.md](docs/integration.md): how another repo integrates Agents-Memory.
+3. [docs/commands.md](docs/commands.md): CLI command map and parameter reference.
+4. [docs/ops.md](docs/ops.md): operations, recovery, and troubleshooting.
+
+Full documentation map: [docs/README.md](docs/README.md)
+
+The latest product baseline is in [docs/ai-engineering-operating-system.md](docs/ai-engineering-operating-system.md).
+
+### Open-Source Boundary
+
+Public repository content is limited to code, templates, standards, profiles, and docs. The following are local runtime artifacts and should normally stay uncommitted:
+
+```text
+index.md
+memory/projects.md
+memory/rules.md
+errors/*.md
+.vscode/mcp.json
+logs/
+vectors/
+```
+
+The repository uses public examples under `templates/` so real project context, private paths, and runtime data do not leak into the open-source tree.
+
+### Contributing
+
+Before shipping behavior changes, update code, matching docs, and matching tests or validation scripts together.
+
+Contribution guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md). Pull requests should follow [PULL_REQUEST_TEMPLATE.md](PULL_REQUEST_TEMPLATE.md). Community expectations live in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Security issues should follow [SECURITY.md](SECURITY.md). Support paths are listed in [SUPPORT.md](SUPPORT.md). Releases should update [CHANGELOG.md](CHANGELOG.md) and [docs/release-checklist.md](docs/release-checklist.md).
+
+[Back to top](#top)
+
+<a id="zh"></a>
+
+## 简体中文
+
+Agents-Memory 是面向 AI coding agents 的 Shared Engineering Brain。它把工程记忆、工程标准、planning bundle 和 validation gate 收敛成可复用的共享运行层，服务真实仓库而不是零散 prompt 片段。
+
+### 为什么团队会安装 Agents-Memory
+
+| 团队记忆沉淀 | 工作流约束 | 更稳的交付 |
+| --- | --- | --- |
+| 记录重复错误、升级规则，把工程上下文跨仓库复用。 | 把自由需求收敛成 bootstrap、planning bundle 和 validation-first 执行路径。 | 用 docs-check、profile-check、plan-check、CI 和 release discipline 约束交付。 |
+
+### 工作流
+
+```text
+连接项目
+	-> 建立工程上下文
+	-> 项目结构变化后刷新 project-local overlay
+	-> 创建任务工件
+	-> 按共享标准实现
+	-> 运行交付门禁
+	-> 把经验回流到共享默认约束
+```
+
+### 快速开始
+
+```bash
+git clone https://github.com/haochencheng/Agents-Memory.git
+cd Agents-Memory
+python3 -m pip install -e .
+amem list
+python3 scripts/memory.py docs-check .
+python3.12 -m unittest discover -s tests -p 'test_*.py'
+```
+
+### 可信信号
+
+1. [CI](https://github.com/haochencheng/Agents-Memory/actions/workflows/ci.yml) 是公开的，而且执行的就是本地会跑的安装、编译、测试和 `docs-check`。
+2. CI 已拆成独立的 `tests` 和 `docs` jobs，便于 branch protection 单独要求通过。
+3. [CHANGELOG.md](CHANGELOG.md) 和 [docs/release-checklist.md](docs/release-checklist.md) 共同约束公开发版流程。
+4. [SECURITY.md](SECURITY.md)、[SUPPORT.md](SUPPORT.md) 和 [CONTRIBUTING.md](CONTRIBUTING.md) 让协作路径在首页即可追溯。
+
+### 文档入口
+
+1. [docs/getting-started.md](docs/getting-started.md): 本仓库首次安装、启动、基础验证。
+2. [docs/integration.md](docs/integration.md): 目标项目如何接入 Agents-Memory。
+3. [docs/commands.md](docs/commands.md): CLI 命令总表与参数参考。
+4. [docs/ops.md](docs/ops.md): 日常运维、恢复与排障。
+
+完整文档地图见 [docs/README.md](docs/README.md)。
+
+最新架构设计见 docs/ai-engineering-operating-system.md。
+安装与启动细节见 docs/getting-started.md。
+接入其他项目见 docs/integration.md。
+
+### 开源边界
+
+公开仓库只包含代码、模板、标准、profiles 和文档。以下内容属于本地运行数据，默认不应提交：
+
+```text
+index.md
+memory/projects.md
+memory/rules.md
+errors/*.md
+.vscode/mcp.json
+logs/
+vectors/
+```
+
+仓库使用 `templates/` 下的公开样例初始化本地文件，以避免把真实项目上下文、私有路径或运行时数据带进开源仓库。
+
+### 贡献
+
+提交行为变更前，请同步更新代码、对应文档以及对应测试或验证脚本。
+
+贡献说明见 [CONTRIBUTING.md](CONTRIBUTING.md)。提交合并请求时请按 [PULL_REQUEST_TEMPLATE.md](PULL_REQUEST_TEMPLATE.md) 补齐验证信息；协作行为遵循 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)；安全问题请按 [SECURITY.md](SECURITY.md) 私下报告；支持入口见 [SUPPORT.md](SUPPORT.md)；发布时同步维护 [CHANGELOG.md](CHANGELOG.md) 和 [docs/release-checklist.md](docs/release-checklist.md)。
+
+[返回顶部](#top)
+
+## License / 许可证
+
+This project is released under the MIT License.
+
+本项目采用 MIT License。

@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-03-28
+updated_at: 2026-04-06
 doc_status: active
 ---
 
@@ -116,9 +116,11 @@ getting-started.md  = 本仓库本地启动与运维
 
 按用户意图组织的一键 bootstrap 入口。当前委托给 `enable` 实现，参数语义保持一致。
 
-### `amem start-task <task-name> [path] [--slug <task-slug>] [--dry-run]`
+### `amem start-task <task-name> [path] [--slug <task-slug>] [--wiki-context] [--dry-run]`
 
 按用户意图组织的 task 启动入口。当前委托给 `plan-init` 实现，生成 `spec / plan / task-graph / validation`。
+
+加 `--wiki-context` 会在初始化 bundle 前自动查询 Wiki，把相关知识片段打印到终端，可直接作为 prompt 前缀注入。
 
 ### `amem do-next [path] [--format text|json]`
 
@@ -131,6 +133,38 @@ getting-started.md  = 本仓库本地启动与运维
 ### `amem close-task [path] [--slug <task-slug>] [--strict] [--format text|json]`
 
 任务关闭入口。会先跑统一 gate，再原子化回写 task bundle 的完成标记和 onboarding state 中的任务闭环状态。
+
+完成后会提示运行 `amem wiki-sync <topic>` 把任务经验写回 Wiki。JSON 输出里含 `wiki_sync_hint` 字段。
+
+---
+
+## Wiki
+
+Agents-Memory Wiki 是一套持续进化的知识库，把 `memory/rules.md`、`errors/*.md` 和项目文档从「静态文件」升级为「LLM 可查询的结构化知识」。每次 agent 调用前可从中取得上下文，调用结束后可把经验回写，让记忆持续积累。
+
+Wiki 页面存储在 `memory/wiki/` 目录（本地运行时数据，不纳入版本控制）。每个页面是一个带 frontmatter 的 Markdown 文件，frontmatter 包含 `topic / created_at / updated_at / confidence / sources`。
+
+### `amem wiki-list`
+
+列出所有已有的 Wiki 主题名称。
+
+### `amem wiki-query <keyword> [--limit <n>]`
+
+关键词搜索 Wiki，输出最多 `limit`（默认 5）个相关页面的摘要。
+
+推荐在 `amem start-task` 前调用，或在 agent 开始实现前注入上下文。
+
+### `amem wiki-ingest <path> [--topic <topic-name>]`
+
+将本地 Markdown 文档导入 Wiki。`--topic` 指定主题名，默认使用文件名（小写、连字符分隔）。
+
+适合批量把 `docs/`、`standards/` 等现有文档一次性编译进 Wiki。
+
+### `amem wiki-sync <topic> [--content <text>] [--from-file <path>]`
+
+写入或更新一个 Wiki 主题页。内容可通过 `--content` 直传、`--from-file` 读取，或通过 stdin 传入。
+
+推荐在 `amem close-task` 后调用，把本次任务的经验（新错误模式、优化规则、学到的教训）写入对应主题页，让下一次 agent 调用自动受益。
 
 ---
 

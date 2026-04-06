@@ -9,6 +9,7 @@ from agents_memory.commands import profiles as profile_commands
 from agents_memory.commands import records as record_commands
 from agents_memory.commands import validation as validation_commands
 from agents_memory.commands import vector as vector_commands
+from agents_memory.commands import wiki as wiki_commands
 from agents_memory.commands import workflows as workflow_commands
 from agents_memory.runtime import build_context
 
@@ -62,6 +63,13 @@ USAGE = """Agents-Memory CLI — 错误记录管理工具
   python3 memory.py archive                    # 归档 90 天以上且无重复的记录
   python3 memory.py update-index               # 重新生成 index.md 统计数字
   python3 memory.py to-qdrant                  # 迁移向量索引到 Qdrant（多 Agent 共享）
+  python3 memory.py wiki-list                  # 列出所有 Wiki 主题
+  python3 memory.py wiki-query <keyword>       # 关键词搜索 Wiki，输出相关摘要（可作为 prompt 前缀注入）
+  python3 memory.py wiki-ingest <path>         # 将本地 Markdown 文档导入 Wiki
+    [--topic <name>]                           # 指定主题名（默认使用文件名）
+  python3 memory.py wiki-sync <topic>          # 写入或更新一个 Wiki 主题页
+    [--content <text>]                         # 直接传入内容
+    [--from-file <path>]                       # 从文件读取内容（或通过 stdin 传入）
 """
 
 
@@ -74,6 +82,7 @@ def command_registry() -> dict[str, Callable]:
     registry.update(profile_commands.register())
     registry.update(validation_commands.register())
     registry.update(workflow_commands.register())
+    registry.update(wiki_commands.register())
     return registry
 
 
