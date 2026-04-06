@@ -51,7 +51,7 @@ def _refresh_updated_at(content: str, today: str) -> str:
 
 
 def _excerpt_around(content: str, keyword: str, context_lines: int = 3) -> str:
-    """Return a short excerpt centred on the first line that contains *keyword*."""
+    """Return a short excerpt centered on the first line that contains *keyword*."""
     lines = content.splitlines()
     for i, line in enumerate(lines):
         if keyword in line.lower():

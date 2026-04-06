@@ -642,7 +642,7 @@ def cmd_close_task(ctx: AppContext, project_id_or_path: str = ".", *, task_slug:
                     "overall": result.validation_report.overall,
                     "updated_files": result.updated_files,
                     "state_path": str(result.state_path),
-                    "wiki_sync_hint": f"amem wiki-sync {result.task_slug} --content '<learnings>'",
+                    "wiki_sync_hint": f"amem wiki-sync {result.task_slug} --content 'task learnings here'",
                 },
                 ensure_ascii=False,
                 indent=2,
