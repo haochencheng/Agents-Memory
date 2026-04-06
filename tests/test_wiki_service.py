@@ -11,7 +11,10 @@ from agents_memory.runtime import build_context
 from agents_memory.services.wiki import (
     _excerpt_around,
     _frontmatter_end,
+    _parse_limit_arg,
+    _parse_topic_arg,
     _refresh_updated_at,
+    _resolve_content_input,
     cmd_wiki_ingest,
     cmd_wiki_list,
     cmd_wiki_query,
@@ -42,6 +45,47 @@ def _build_context(root: Path):
             os.environ.pop("AGENTS_MEMORY_ROOT", None)
         else:
             os.environ["AGENTS_MEMORY_ROOT"] = previous
+
+
+class WikiArgParserTests(unittest.TestCase):
+    def test_parse_limit_arg_extracts_limit(self) -> None:
+        limit, remaining = _parse_limit_arg(["--limit", "10", "extra"])
+        self.assertEqual(limit, 10)
+        self.assertEqual(remaining, ["extra"])
+
+    def test_parse_limit_arg_uses_default_when_absent(self) -> None:
+        limit, remaining = _parse_limit_arg(["query"])
+        self.assertEqual(limit, 5)
+        self.assertEqual(remaining, ["query"])
+
+    def test_parse_topic_arg_extracts_topic(self) -> None:
+        topic, remaining = _parse_topic_arg(["--topic", "my-topic", "extra"])
+        self.assertEqual(topic, "my-topic")
+        self.assertEqual(remaining, ["extra"])
+
+    def test_parse_topic_arg_returns_none_when_absent(self) -> None:
+        topic, remaining = _parse_topic_arg(["extra"])
+        self.assertIsNone(topic)
+        self.assertEqual(remaining, ["extra"])
+
+    def test_resolve_content_input_from_content_flag(self) -> None:
+        content, _, err = _resolve_content_input(["--content", "hello world"])
+        self.assertEqual(content, "hello world")
+        self.assertIsNone(err)
+
+    def test_resolve_content_input_from_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            f = Path(tmpdir) / "c.md"
+            f.write_text("file content\n", encoding="utf-8")
+            content, _, err = _resolve_content_input(["--from-file", str(f)])
+            self.assertEqual(content, "file content\n")
+            self.assertIsNone(err)
+
+    def test_resolve_content_input_error_on_missing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            content, _, err = _resolve_content_input(["--from-file", str(Path(tmpdir) / "nope.md")])
+            self.assertIsNone(content)
+            self.assertEqual(err, 1)
 
 
 class WikiHelpersTests(unittest.TestCase):

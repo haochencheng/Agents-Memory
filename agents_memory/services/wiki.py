@@ -39,21 +39,15 @@ def _frontmatter_end(content: str) -> int:
 
 def _refresh_updated_at(content: str, today: str) -> str:
     """Replace the updated_at value inside the frontmatter block."""
-    lines = content.splitlines(keepends=True)
-    in_front = False
-    fence_count = 0
-    result: list[str] = []
-    for line in lines:
-        if line.strip() == "---":
-            fence_count += 1
-            in_front = fence_count == 1
-            result.append(line)
-            continue
-        if in_front and fence_count < 2 and line.startswith("updated_at:"):
-            result.append(f"updated_at: {today}\n")
-        else:
-            result.append(line)
-    return "".join(result)
+    fm_end = _frontmatter_end(content)
+    if not fm_end:
+        return content
+    fm_lines = content[:fm_end].splitlines(keepends=True)
+    updated_fm = "".join(
+        f"updated_at: {today}\n" if line.startswith("updated_at:") else line
+        for line in fm_lines
+    )
+    return updated_fm + content[fm_end:]
 
 
 def _excerpt_around(content: str, keyword: str, context_lines: int = 3) -> str:
@@ -188,6 +182,49 @@ def _parse_limit_arg(args: list[str], default: int = 5) -> tuple[int, list[str]]
     return limit, remaining
 
 
+def _parse_topic_arg(args: list[str]) -> tuple[str | None, list[str]]:
+    """Extract --topic <name> from args; return (topic, remaining_args)."""
+    topic: str | None = None
+    remaining: list[str] = []
+    i = 0
+    while i < len(args):
+        if args[i] == "--topic" and i + 1 < len(args):
+            topic = args[i + 1]
+            i += 2
+        else:
+            remaining.append(args[i])
+            i += 1
+    return topic, remaining
+
+
+def _resolve_content_input(args: list[str]) -> tuple[str | None, list[str], int | None]:
+    """Extract --content <text> or --from-file <path> from args.
+
+    Returns (content_str, remaining_args, error_code).
+    *error_code* is non-None when a --from-file path was given but not found.
+    """
+    content: str | None = None
+    error_code: int | None = None
+    remaining: list[str] = []
+    i = 0
+    while i < len(args):
+        if args[i] == "--content" and i + 1 < len(args):
+            content = args[i + 1]
+            i += 2
+        elif args[i] == "--from-file" and i + 1 < len(args):
+            file_path = Path(args[i + 1]).expanduser().resolve()
+            if not file_path.exists():
+                print(f"错误: 文件不存在: {file_path}")
+                error_code = 1
+            else:
+                content = file_path.read_text(encoding="utf-8")
+            i += 2
+        else:
+            remaining.append(args[i])
+            i += 1
+    return content, remaining, error_code
+
+
 def cmd_wiki_query(ctx: AppContext, args: list[str]) -> int:
     """Search wiki pages by keyword and print matching excerpts."""
     if not args or args[0].startswith("--"):
@@ -215,14 +252,7 @@ def cmd_wiki_ingest(ctx: AppContext, args: list[str]) -> int:
         print("用法: amem wiki-ingest <path> [--topic <topic-name>]")
         return 1
     source = args[0]
-    topic: str | None = None
-    i = 1
-    while i < len(args):
-        if args[i] == "--topic" and i + 1 < len(args):
-            topic = args[i + 1]
-            i += 2
-        else:
-            i += 1
+    topic, _ = _parse_topic_arg(args[1:])
     source_path = Path(source).expanduser().resolve()
     try:
         path = ingest_file(ctx.wiki_dir, source_path, topic)
@@ -239,21 +269,9 @@ def cmd_wiki_sync(ctx: AppContext, args: list[str]) -> int:
         print("用法: amem wiki-sync <topic> [--content <text>] [--from-file <path>]")
         return 1
     topic = args[0]
-    content: str | None = None
-    i = 1
-    while i < len(args):
-        if args[i] == "--content" and i + 1 < len(args):
-            content = args[i + 1]
-            i += 2
-        elif args[i] == "--from-file" and i + 1 < len(args):
-            file_path = Path(args[i + 1]).expanduser().resolve()
-            if not file_path.exists():
-                print(f"错误: 文件不存在: {file_path}")
-                return 1
-            content = file_path.read_text(encoding="utf-8")
-            i += 2
-        else:
-            i += 1
+    content, _, error_code = _resolve_content_input(args[1:])
+    if error_code is not None:
+        return error_code
     if content is None:
         if not sys.stdin.isatty():
             content = sys.stdin.read()
