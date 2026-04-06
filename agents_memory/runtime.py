@@ -20,6 +20,7 @@ class AppContext:
     errors_dir: Path
     archive_dir: Path
     memory_dir: Path
+    wiki_dir: Path
     vector_dir: Path
     index_file: Path
     projects_file: Path
@@ -35,6 +36,7 @@ class AppContext:
         self.errors_dir.mkdir(parents=True, exist_ok=True)
         self.archive_dir.mkdir(parents=True, exist_ok=True)
         self.memory_dir.mkdir(parents=True, exist_ok=True)
+        self.wiki_dir.mkdir(parents=True, exist_ok=True)
 
     def bootstrap_runtime_files(self) -> None:
         for attr_name, template_name in BOOTSTRAP_TEMPLATES.items():
@@ -78,6 +80,7 @@ def build_context(*, logger_name: str = "agents_memory.cli", reference_file: str
         errors_dir=base_dir / "errors",
         archive_dir=base_dir / "errors" / "archive",
         memory_dir=base_dir / "memory",
+        wiki_dir=base_dir / "memory" / "wiki",
         vector_dir=base_dir / "vectors",
         index_file=base_dir / "index.md",
         projects_file=base_dir / "memory" / "projects.md",

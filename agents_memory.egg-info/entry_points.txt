@@ -1,0 +1,2 @@
+[console_scripts]
+amem = agents_memory.cli:main

@@ -12,6 +12,7 @@ from agents_memory.services.integration_doctor import _doctor_report, _recommend
 from agents_memory.services.planning import cmd_plan_init
 from agents_memory.services.planning_core import DEFAULT_PLAN_ROOT, README_PLAN_FILE, TASK_GRAPH_PLAN_FILE, VALIDATION_PLAN_FILE, json_block, refresh_managed_bundle_files, slugify_task_name
 from agents_memory.services.validation import ValidationFinding, collect_bundle_exit_criteria_findings, collect_docs_check_findings, collect_plan_check_findings, collect_profile_check_findings, touch_doc_metadata
+from agents_memory.services.wiki import search_wiki
 
 
 TASK_STATUS_HEADING = "## Task Status"
@@ -510,6 +511,7 @@ def _print_close_task_summary(result: CloseTaskResult) -> None:
             print(f"- {item}")
     print("\nNext:")
     print("- Run amem do-next . to inspect the next recommended action")
+    print("- Run amem wiki-sync <topic> --content '<learnings>' to capture task knowledge in the wiki")
 
 
 def cmd_bootstrap(
@@ -523,6 +525,19 @@ def cmd_bootstrap(
     return cmd_enable(ctx, project_id_or_path, full=full, dry_run=dry_run, json_output=json_output)
 
 
+def _print_wiki_context(ctx: AppContext, task_name: str) -> None:
+    """Print relevant wiki pages for the task as context before the bundle."""
+    matches = search_wiki(ctx.wiki_dir, task_name, limit=3)
+    if not matches:
+        return
+    print("\n=== Wiki Context ===")
+    print(f"Relevant wiki pages for: '{task_name}'\n")
+    for match in matches:
+        print(f"─── [{match['topic']}] ───")
+        print(match["excerpt"])
+        print()
+
+
 def cmd_start_task(
     ctx: AppContext,
     task_name: str,
@@ -530,7 +545,10 @@ def cmd_start_task(
     *,
     task_slug: str | None = None,
     dry_run: bool = False,
+    wiki_context: bool = False,
 ) -> int:
+    if wiki_context and not dry_run:
+        _print_wiki_context(ctx, task_name)
     exit_code = cmd_plan_init(ctx, task_name, project_id_or_path, task_slug=task_slug, dry_run=dry_run)
     if exit_code != 0 or dry_run:
         return exit_code
@@ -624,6 +642,7 @@ def cmd_close_task(ctx: AppContext, project_id_or_path: str = ".", *, task_slug:
                     "overall": result.validation_report.overall,
                     "updated_files": result.updated_files,
                     "state_path": str(result.state_path),
+                    "wiki_sync_hint": f"amem wiki-sync {result.task_slug} --content 'task learnings here'",
                 },
                 ensure_ascii=False,
                 indent=2,

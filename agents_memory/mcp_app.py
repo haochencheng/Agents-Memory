@@ -19,6 +19,7 @@ from agents_memory.services.planning import init_refactor_bundle
 from agents_memory.services.projects import parse_projects
 from agents_memory.services.records import cmd_update_index, parse_frontmatter
 from agents_memory.services.validation import collect_refactor_watch_hotspots, serialize_refactor_hotspot
+from agents_memory.services.wiki import list_wiki_topics, search_wiki, write_wiki_page
 
 ctx = build_context(logger_name="agents_memory.mcp", reference_file=__file__)
 
@@ -44,7 +45,9 @@ mcp = FastMCP(
         "Call memory_get_refactor_hotspots() when you need a structured hotspot list without relying on doctor artifacts. "
         "Call memory_init_refactor_bundle() when doctor/refactor_watch identifies a hotspot and you want the system to materialize a refactor plan bundle automatically. "
         "Call memory_record_error() whenever you find and fix a bug or make an error during coding. "
-        "Call memory_get_rules(domain) before working on finance, frontend, or python code."
+        "Call memory_get_rules(domain) before working on finance, frontend, or python code. "
+        "Call memory_wiki_query(query) before starting a task to retrieve synthesized rules and context from the wiki. "
+        "Call memory_wiki_update(topic, content) after completing a task to capture learnings, refined rules, or error patterns."
     ),
 )
 
@@ -411,6 +414,58 @@ def memory_sync_stats() -> str:
     backend = "local markdown + optional LanceDB/Qdrant"
     _log_tool_end("memory_sync_stats", status="ok", count=count)
     return f"Records: {count}\nRecommended search: {recommendation}\nStorage backend: {backend}"
+
+
+@mcp.tool()
+def memory_wiki_list() -> str:
+    """List all wiki topic names stored in memory/wiki/."""
+    _log_tool_start("memory_wiki_list")
+    topics = list_wiki_topics(ctx.wiki_dir)
+    if not topics:
+        _log_tool_end("memory_wiki_list", status="empty")
+        return "Wiki is empty. Run amem wiki-ingest <path> to import documents."
+    _log_tool_end("memory_wiki_list", status="ok", count=len(topics))
+    return f"Wiki topics ({len(topics)}):\n" + "\n".join(f"• {t}" for t in topics)
+
+
+@mcp.tool()
+def memory_wiki_query(query: str, limit: int = 5) -> str:
+    """Search wiki pages by keyword and return matching excerpts.
+
+    Call this before starting a task to retrieve relevant rules and context.
+    The output can be injected directly as a system-prompt prefix.
+    """
+    _log_tool_start("memory_wiki_query", query=query, limit=limit)
+    matches = search_wiki(ctx.wiki_dir, query, limit=limit)
+    if not matches:
+        _log_tool_end("memory_wiki_query", status="no_matches", query=query)
+        return f"No wiki pages matching '{query}'. Use memory_wiki_update to add knowledge."
+    lines = [f"Wiki results for '{query}' ({len(matches)} page(s)):\n"]
+    for match in matches:
+        lines.append(f"=== [{match['topic']}] ===")
+        lines.append(match["excerpt"])
+        lines.append("")
+    _log_tool_end("memory_wiki_query", status="ok", query=query, matches=len(matches))
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def memory_wiki_update(topic: str, content: str, source: str = "") -> str:
+    """Create or update a wiki page for *topic* with *content*.
+
+    Call this after completing a task to capture learnings, refined rules,
+    or error patterns so they are available for future queries.
+
+    Args:
+        topic:   Short hyphen-separated identifier (e.g. 'python', 'error-patterns').
+        content: Markdown body (or full page with frontmatter).
+        source:  Optional description of where this knowledge came from.
+    """
+    _log_tool_start("memory_wiki_update", topic=topic, source=source or "")
+    path = write_wiki_page(ctx.wiki_dir, topic, content, source=source)
+    log_file_update(ctx.logger, action="wiki_update", path=path, detail=f"topic={topic}")
+    _log_tool_end("memory_wiki_update", status="ok", topic=topic)
+    return f"✅ Wiki page updated: {path}\nTopic: {topic}"
 
 
 def main() -> None:

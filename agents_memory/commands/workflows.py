@@ -36,6 +36,7 @@ def _handle_bootstrap(ctx, args: list[str]) -> None:
 def _handle_start_task(ctx, args: list[str]) -> None:
     # Parse CLI args and dispatch to cmd_start_task.
     dry_run = False
+    wiki_context = False
     task_slug: str | None = None
     positionals: list[str] = []
     index = 0
@@ -45,18 +46,21 @@ def _handle_start_task(ctx, args: list[str]) -> None:
         if arg == "--dry-run":
             dry_run = True
             continue
+        if arg == "--wiki-context":
+            wiki_context = True
+            continue
         if arg == "--slug" and index < len(args):
             task_slug = args[index]; index += 1
             continue
         positionals.append(arg)
 
     if not positionals:
-        print('用法: python3 memory.py start-task <task-name> [path] [--slug <task-slug>] [--dry-run]')
+        print('用法: python3 memory.py start-task <task-name> [path] [--slug <task-slug>] [--wiki-context] [--dry-run]')
         raise SystemExit(1)
 
     task_name = positionals[0]
     target = positionals[1] if len(positionals) > 1 else "."
-    raise SystemExit(cmd_start_task(ctx, task_name, target, task_slug=task_slug, dry_run=dry_run))
+    raise SystemExit(cmd_start_task(ctx, task_name, target, task_slug=task_slug, dry_run=dry_run, wiki_context=wiki_context))
 
 
 def _parse_format_args(args: list[str]) -> tuple[str, str, bool]:
