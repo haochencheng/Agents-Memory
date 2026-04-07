@@ -20,6 +20,9 @@ errors/archive/
 # Runtime logs
 logs/
 
+# Runtime PID files
+*.pid
+
 # 本地环境变量（含 API Key）
 docker/.env
 .env
@@ -31,6 +34,8 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+*.egg-info/
+.pytest_cache/
 
 # MacOS
 .DS_Store
