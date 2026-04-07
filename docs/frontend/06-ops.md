@@ -10,7 +10,7 @@ updated_at: 2026-04-07
 | 服务 | 端口 | 进程 | 作用 |
 |------|------|------|------|
 | FastAPI | 8000 | uvicorn | REST API，供 UI + 外部调用 |
-| Streamlit | 8501 | streamlit | MVP Web UI，5 页面 |
+| Streamlit | 10000 | streamlit | MVP Web UI，5 页面 |
 
 ## 一键启动
 
@@ -41,7 +41,7 @@ bash scripts/web-start.sh health
 
 | 入口 | URL |
 |------|-----|
-| Streamlit UI | http://localhost:8501 |
+| Streamlit UI | http://localhost:10000 |
 | FastAPI REST | http://localhost:8000 |
 | API Swagger UI | http://localhost:8000/docs |
 | API ReDoc | http://localhost:8000/redoc |
@@ -52,7 +52,7 @@ bash scripts/web-start.sh health
 |------|--------|------|
 | `AGENTS_MEMORY_ROOT` | 自动检测（项目根目录） | 数据目录根路径 |
 | `AGENTS_MEMORY_API_PORT` | `8000` | FastAPI 监听端口 |
-| `AGENTS_MEMORY_UI_PORT` | `8501` | Streamlit 监听端口 |
+| `AGENTS_MEMORY_UI_PORT` | `10000` | Streamlit 监听端口 |
 | `AGENTS_MEMORY_API` | `http://localhost:8000` | Streamlit 调用 API 的地址 |
 
 ## 前提依赖
@@ -76,7 +76,7 @@ python3.12 scripts/web-health.py
 python3.12 scripts/web-health.py --json
 
 # 指定服务地址
-python3.12 scripts/web-health.py --api http://localhost:8000 --ui http://localhost:8501
+python3.12 scripts/web-health.py --api http://localhost:8000 --ui http://localhost:10000
 
 # 只检查 API（跳过 UI）
 python3.12 scripts/web-health.py --skip-ui
@@ -146,7 +146,7 @@ kill $(cat .web_api.pid)
 kill $(cat .web_ui.pid)
 # 或按端口强制停止
 lsof -ti tcp:8000 | xargs kill -9
-lsof -ti tcp:8501 | xargs kill -9
+lsof -ti tcp:10000 | xargs kill -9
 ```
 
 ## 故障排查
@@ -168,7 +168,7 @@ cat logs/web-api.log
 
 ```bash
 # 检查端口
-lsof -i tcp:8501
+lsof -i tcp:10000
 
 # 检查 API 是否先启动
 curl http://localhost:8000/api/stats

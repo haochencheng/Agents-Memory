@@ -10,7 +10,7 @@ updated_at: 2026-04-07
 ```
 ┌─────────────────────────────────────────────────────┐
 │              浏览器 / Streamlit UI                   │
-│         http://localhost:8501 (Streamlit)            │
+│         http://localhost:10000 (Streamlit)           │
 │         http://localhost:5173 (React, 未来)          │
 └──────────────────────┬──────────────────────────────┘
                        │ HTTP JSON
@@ -113,7 +113,7 @@ GET /api/tasks/:task_id
 uvicorn agents_memory.web.api:app --reload --port 8000
 
 # Streamlit（独立进程，调用 services 直接读文件）
-streamlit run agents_memory/ui/streamlit_app.py --server.port 8501
+streamlit run agents_memory/ui/streamlit_app.py --server.port 10000
 
 # 两者共享同一份磁盘数据，无冲突（read-heavy，write 追加）
 ```
@@ -123,6 +123,6 @@ streamlit run agents_memory/ui/streamlit_app.py --server.port 8501
 仅允许 localhost（v1 本地工具，不对外）：
 
 ```python
-origins = ["http://localhost:5173", "http://localhost:8501", "http://127.0.0.1:5173"]
+origins = ["http://localhost:5173", "http://localhost:10000", "http://127.0.0.1:5173"]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["*"])
 ```

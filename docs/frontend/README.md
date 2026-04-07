@@ -20,7 +20,7 @@ cd /Users/cliff/workspace/agent/Agents-Memory
 python3.12 -m uvicorn agents_memory.web.api:app --reload --port 8000
 
 # 启动 Streamlit MVP UI（另一个终端）
-python3.12 -m streamlit run agents_memory/ui/streamlit_app.py --server.port 8501
+python3.12 -m streamlit run agents_memory/ui/streamlit_app.py --server.port 10000
 
 # 运行后端 API 测试
 python3.12 -m pytest tests/test_web_api.py -v
