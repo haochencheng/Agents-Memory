@@ -126,18 +126,18 @@ flowchart TD
   end
 
   subgraph Ingest["Ingest Pipeline"]
-    ING[amem ingest --type pr-review|decision|meeting]
+    ING["amem ingest --type pr-review / decision / meeting"]
     WC[amem wiki-compile --topic X --scope errors]
   end
 
-  subgraph Wiki["memory/wiki/*.md  —  Knowledge Graph"]
-    WP["Wiki Page\n---\ntopic: finance-safety\ncompiled_at: 2026-04-07\nconfidence: high\nsources: [AME-001]\nlinks:\n  - topic: smart-contract-errors\n---\n## Compiled Truth  ← LLM rewrites\n## Known Patterns\n---\n## Timeline  ← append-only"]
+  subgraph Wiki["memory/wiki/*.md — Knowledge Graph"]
+    WP["Wiki Page: topic / compiled_truth / timeline"]
   end
 
   subgraph Search["Hybrid Search"]
     FTS[FTS index]
     VEC[vector index / LanceDB]
-    HS[amem hybrid-search\ncombined_score = fts×0.4 + vec×0.6]
+    HS["amem hybrid-search: fts x0.4 + vec x0.6"]
   end
 
   subgraph Lint["Wiki Lint"]
@@ -150,7 +150,7 @@ flowchart TD
   PR --> ING
   DEC --> ING
   ING --> WC
-  WC -->|LLM synthesises| WP
+  WC -- LLM synthesises --> WP
   WP --> FTS
   WP --> VEC
   FTS --> HS
@@ -393,18 +393,18 @@ flowchart TD
   end
 
   subgraph Ingest["Ingest 流水线"]
-    ING[amem ingest --type pr-review|decision|meeting]
+    ING["amem ingest --type pr-review / decision / meeting"]
     WC[amem wiki-compile --topic X --scope errors]
   end
 
-  subgraph Wiki["memory/wiki/*.md  —  知识图谱"]
-    WP["Wiki 页面\n---\ntopic: finance-safety\ncompiled_at: 2026-04-07\nconfidence: high\nsources: [AME-001]\nlinks:\n  - topic: smart-contract-errors\n---\n## 结论（Compiled Truth）← LLM 重写\n## 已知 Pattern\n---\n## 时间线 ← 只追加，不改写"]
+  subgraph Wiki["memory/wiki/*.md — 知识图谱"]
+    WP["Wiki 页面: topic / compiled_truth / timeline"]
   end
 
   subgraph Search["混合搜索"]
     FTS[FTS 全文索引]
     VEC[向量索引 / LanceDB]
-    HS[amem hybrid-search\ncombined_score = fts×0.4 + vec×0.6]
+    HS["amem hybrid-search: fts x0.4 + vec x0.6"]
   end
 
   subgraph Lint["Wiki 健康检查"]
@@ -417,7 +417,7 @@ flowchart TD
   PR --> ING
   DEC --> ING
   ING --> WC
-  WC -->|LLM 合成| WP
+  WC -- LLM合成 --> WP
   WP --> FTS
   WP --> VEC
   FTS --> HS
