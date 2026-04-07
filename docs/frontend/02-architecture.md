@@ -15,7 +15,7 @@ updated_at: 2026-04-07
 └──────────────────────┬──────────────────────────────┘
                        │ HTTP JSON
 ┌──────────────────────▼──────────────────────────────┐
-│         FastAPI REST API  :8000                      │
+│         FastAPI REST API  :10100                     │
 │         agents_memory/web/api.py                     │
 │                                                      │
 │  GET /api/wiki           POST /api/ingest            │
@@ -110,7 +110,7 @@ GET /api/tasks/:task_id
 
 ```
 # 开发环境
-uvicorn agents_memory.web.api:app --reload --port 8000
+uvicorn agents_memory.web.api:app --reload --port 10100
 
 # Streamlit（独立进程，调用 services 直接读文件）
 streamlit run agents_memory/ui/streamlit_app.py --server.port 10000

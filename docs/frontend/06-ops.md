@@ -9,7 +9,7 @@ updated_at: 2026-04-07
 
 | 服务 | 端口 | 进程 | 作用 |
 |------|------|------|------|
-| FastAPI | 8000 | uvicorn | REST API，供 UI + 外部调用 |
+| FastAPI | 10100 | uvicorn | REST API，供 UI + 外部调用 |
 | Streamlit | 10000 | streamlit | MVP Web UI，5 页面 |
 
 ## 一键启动
@@ -42,18 +42,18 @@ bash scripts/web-start.sh health
 | 入口 | URL |
 |------|-----|
 | Streamlit UI | http://localhost:10000 |
-| FastAPI REST | http://localhost:8000 |
-| API Swagger UI | http://localhost:8000/docs |
-| API ReDoc | http://localhost:8000/redoc |
+| FastAPI REST | http://localhost:10100 |
+| API Swagger UI | http://localhost:10100/docs |
+| API ReDoc | http://localhost:10100/redoc |
 
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `AGENTS_MEMORY_ROOT` | 自动检测（项目根目录） | 数据目录根路径 |
-| `AGENTS_MEMORY_API_PORT` | `8000` | FastAPI 监听端口 |
+| `AGENTS_MEMORY_API_PORT` | `10100` | FastAPI 监听端口 |
 | `AGENTS_MEMORY_UI_PORT` | `10000` | Streamlit 监听端口 |
-| `AGENTS_MEMORY_API` | `http://localhost:8000` | Streamlit 调用 API 的地址 |
+| `AGENTS_MEMORY_API` | `http://localhost:10100` | Streamlit 调用 API 的地址 |
 
 ## 前提依赖
 
@@ -76,7 +76,7 @@ python3.12 scripts/web-health.py
 python3.12 scripts/web-health.py --json
 
 # 指定服务地址
-python3.12 scripts/web-health.py --api http://localhost:8000 --ui http://localhost:10000
+python3.12 scripts/web-health.py --api http://localhost:10100 --ui http://localhost:10000
 
 # 只检查 API（跳过 UI）
 python3.12 scripts/web-health.py --skip-ui
@@ -145,7 +145,7 @@ grep -i error logs/web-api.log | tail -50
 kill $(cat .web_api.pid)
 kill $(cat .web_ui.pid)
 # 或按端口强制停止
-lsof -ti tcp:8000 | xargs kill -9
+lsof -ti tcp:10100 | xargs kill -9
 lsof -ti tcp:10000 | xargs kill -9
 ```
 
@@ -155,7 +155,7 @@ lsof -ti tcp:10000 | xargs kill -9
 
 ```bash
 # 检查端口占用
-lsof -i tcp:8000
+lsof -i tcp:10100
 
 # 检查依赖
 python3.12 -c "import fastapi, uvicorn; print('OK')"
@@ -171,7 +171,7 @@ cat logs/web-api.log
 lsof -i tcp:10000
 
 # 检查 API 是否先启动
-curl http://localhost:8000/api/stats
+curl http://localhost:10100/api/stats
 
 # 查看 UI 日志
 cat logs/web-ui.log

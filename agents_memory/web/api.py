@@ -1,7 +1,7 @@
 """agents_memory/web/api.py — FastAPI REST API for Agents-Memory Web UI.
 
 Start:
-    uvicorn agents_memory.web.api:app --reload --port 8000
+    uvicorn agents_memory.web.api:app --reload --port 10100
 """
 
 from __future__ import annotations

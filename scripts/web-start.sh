@@ -21,7 +21,7 @@ API_PID_FILE="$REPO_ROOT/.web_api.pid"
 UI_PID_FILE="$REPO_ROOT/.web_ui.pid"
 API_LOG="$REPO_ROOT/logs/web-api.log"
 UI_LOG="$REPO_ROOT/logs/web-ui.log"
-API_PORT="${AGENTS_MEMORY_API_PORT:-8000}"
+API_PORT="${AGENTS_MEMORY_API_PORT:-10100}"
 UI_PORT="${AGENTS_MEMORY_UI_PORT:-10000}"
 API_BASE="http://localhost:$API_PORT"
 

@@ -83,7 +83,7 @@ FastAPI 提供 `/openapi.json`，可直接生成 TypeScript 客户端：
 
 ```bash
 npx @hey-api/openapi-ts \
-  -i http://localhost:8000/openapi.json \
+  -i http://localhost:10100/openapi.json \
   -o frontend/src/api \
   -c @hey-api/client-fetch
 ```

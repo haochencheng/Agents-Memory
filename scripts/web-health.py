@@ -5,8 +5,8 @@
 退出码：0 = 全部通过，1 = 有失败项。
 
 用法:
-    python3.12 scripts/web-health.py                  # 默认检查 localhost:8000
-    python3.12 scripts/web-health.py --api http://localhost:8000
+    python3.12 scripts/web-health.py                  # 默认检查 localhost:10100
+    python3.12 scripts/web-health.py --api http://localhost:10100
     python3.12 scripts/web-health.py --ui  http://localhost:8501
     python3.12 scripts/web-health.py --json            # JSON 格式输出（CI 友好）
 """
@@ -271,7 +271,7 @@ def _print_results(results: list[CheckResult], suite_name: str, json_mode: bool)
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Agents-Memory Web 健康检查")
-    parser.add_argument("--api", default="http://localhost:8000", help="FastAPI base URL")
+    parser.add_argument("--api", default="http://localhost:10100", help="FastAPI base URL")
     parser.add_argument("--ui", default="http://localhost:8501", help="Streamlit UI URL")
     parser.add_argument("--skip-ui", action="store_true", help="跳过 Streamlit UI 检查")
     parser.add_argument("--json", action="store_true", dest="json_mode", help="JSON 格式输出")

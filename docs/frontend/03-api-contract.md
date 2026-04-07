@@ -5,7 +5,7 @@ updated_at: 2026-04-07
 
 # REST API Contract
 
-Base URL: `http://localhost:8000`
+Base URL: `http://localhost:10100`
 
 ---
 

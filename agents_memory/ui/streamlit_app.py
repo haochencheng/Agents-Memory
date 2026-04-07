@@ -3,7 +3,7 @@
 Start:
     streamlit run agents_memory/ui/streamlit_app.py --server.port 8501
 
-Requires FastAPI backend running at http://localhost:8000.
+Requires FastAPI backend running at http://localhost:10100.
 Falls back to direct service calls when API is unreachable.
 """
 
@@ -27,7 +27,7 @@ except ImportError:
 # Config
 # ---------------------------------------------------------------------------
 
-API_BASE = os.environ.get("AGENTS_MEMORY_API", "http://localhost:8000")
+API_BASE = os.environ.get("AGENTS_MEMORY_API", "http://localhost:10100")
 
 st.set_page_config(
     page_title="Agents-Memory",
