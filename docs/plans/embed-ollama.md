@@ -1,10 +1,7 @@
 ---
-title: "Embed Ollama: 本地向量嵌入支持"
-status: completed
 created_at: 2026-04-07
 updated_at: 2026-04-07
-scope: agents_memory/services/records.py, agents_memory/constants.py, docker/docker-compose.yml
-tests: tests/test_ollama_embedding.py
+doc_status: active
 ---
 
 # Embed — Ollama 本地向量嵌入

@@ -1,3 +1,16 @@
+---
+created_at: 2026-04-07
+updated_at: 2026-04-07
+doc_status: active
+---
+
+---
+title: Frontend Docs Index
+created_at: 2026-04-07
+updated_at: 2026-04-07
+doc_status: active
+---
+
 # Agents-Memory 前端文档中心
 
 本目录包含 Agents-Memory Web UI 的全部规划、架构、API 约定和测试文档。

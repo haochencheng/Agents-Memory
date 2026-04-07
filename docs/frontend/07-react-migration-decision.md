@@ -1,6 +1,7 @@
 ---
-title: "前后端分离决策：是否引入 React/npm"
+created_at: 2026-04-07
 updated_at: 2026-04-07
+doc_status: active
 ---
 
 # 前后端分离决策

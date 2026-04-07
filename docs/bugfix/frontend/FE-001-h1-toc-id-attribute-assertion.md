@@ -1,3 +1,15 @@
+---
+created_at: 2026-04-07
+updated_at: 2026-04-07
+doc_status: active
+---
+
+---
+created_at: 2026-04-07
+updated_at: 2026-04-07
+doc_status: active
+---
+
 # FE-001: `<h1>` assertion fails — toc extension adds id attributes
 
 **发现时间:** 2026-04-07  

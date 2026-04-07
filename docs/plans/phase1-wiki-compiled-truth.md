@@ -1,10 +1,7 @@
 ---
-title: "Phase 1: Wiki Compiled Truth / Timeline + wiki-compile"
-status: completed
 created_at: 2026-04-07
 updated_at: 2026-04-07
-scope: agents_memory/services/wiki.py, agents_memory/services/wiki_compile.py, agents_memory/commands/wiki.py, agents_memory/mcp_app.py
-tests: tests/test_wiki_service.py, tests/test_wiki_compile.py
+doc_status: active
 ---
 
 # Phase 1 — Wiki Compiled Truth / Timeline 格式升级 + wiki-compile

@@ -335,74 +335,74 @@ def error_detail(error_id: str) -> ErrorDetailResponse:
 # ---------------------------------------------------------------------------
 
 
+def _extract_snippet(filepath: str, q: str) -> str:
+    """Return the first line matching q from filepath, or first 200 chars."""
+    if not filepath or not Path(filepath).exists():
+        return ""
+    try:
+        body = read_body(Path(filepath))
+        matched = next((l.strip()[:200] for l in body.splitlines() if q.lower() in l.lower()), "")
+        return matched or body[:200]
+    except Exception:
+        return ""
+
+
+def _search_errors(ctx, q: str, mode: str, limit: int) -> list[SearchResult]:
+    """Run FTS or hybrid search over error records and return SearchResult list.
+
+    # Guard mode → import search → map raw rows to SearchResult via _extract_snippet.
+    """
+    if mode not in ("hybrid", "keyword"):
+        return []
+    try:
+        from agents_memory.services.search import hybrid_search, search_fts  # noqa: PLC0415
+        raw = hybrid_search(ctx, q, limit=limit) if mode == "hybrid" else search_fts(ctx, q, limit=limit)
+        return [
+            SearchResult(
+                type="error",
+                id=r.get("id", ""),
+                title=r.get("id", r.get("category", "")),
+                snippet=_extract_snippet(r.get("filepath", ""), q),
+                score=r.get("combined_score", r.get("fts_score", 0.0)),
+            )
+            for r in raw
+        ]
+    except Exception:
+        return []
+
+
+def _search_wiki(ctx, q: str, mode: str) -> list[SearchResult]:
+    """Simple text-match search over wiki pages; available in all modes."""
+    results: list[SearchResult] = []
+    if mode not in ("hybrid", "keyword", "semantic"):
+        return results
+    for topic in list_wiki_topics(ctx.wiki_dir):
+        raw = read_wiki_page(ctx.wiki_dir, topic)
+        if raw is None or q.lower() not in raw.lower():
+            continue
+        fm = _parse_frontmatter_str(raw)
+        title = fm.get("topic", topic).replace("-", " ").title()
+        snippet = next(
+            (line.strip()[:200] for line in raw.splitlines() if q.lower() in line.lower()),
+            "",
+        )
+        results.append(SearchResult(type="wiki", id=topic, title=title, snippet=snippet, score=0.5))
+    return results
+
+
 @app.get("/api/search", response_model=SearchResponse)
 def search(
     q: str = Query(..., min_length=1),
     mode: str = Query("hybrid"),
     limit: int = Query(10, ge=1, le=100),
 ) -> SearchResponse:
+    """Unified search endpoint: merges error-record (FTS/hybrid) + wiki results.
+
+    # Two sub-searches run in sequence: _search_errors (FTS/hybrid) then _search_wiki (text-match).
+    """
     ctx = _get_ctx()
-    results: list[SearchResult] = []
-
-    if mode in ("hybrid", "keyword"):
-        try:
-            from agents_memory.services.search import hybrid_search, search_fts  # noqa: PLC0415
-            if mode == "hybrid":
-                raw_results = hybrid_search(ctx, q, limit=limit)
-            else:
-                raw_results = search_fts(ctx, q, limit=limit)
-            for r in raw_results:
-                filepath = r.get("filepath", "")
-                snippet = ""
-                if filepath and Path(filepath).exists():
-                    try:
-                        body = read_body(Path(filepath))
-                        # Find first matching line
-                        for line in body.splitlines():
-                            if q.lower() in line.lower():
-                                snippet = line.strip()[:200]
-                                break
-                        if not snippet:
-                            snippet = body[:200]
-                    except Exception:
-                        pass
-                results.append(
-                    SearchResult(
-                        type="error",
-                        id=r.get("id", ""),
-                        title=r.get("id", r.get("category", "")),
-                        snippet=snippet,
-                        score=r.get("combined_score", r.get("fts_score", 0.0)),
-                    )
-                )
-        except Exception:
-            pass
-
-    # Also search wiki pages (simple text match)
-    if mode in ("hybrid", "keyword", "semantic"):
-        for topic in list_wiki_topics(ctx.wiki_dir):
-            raw = read_wiki_page(ctx.wiki_dir, topic)
-            if raw is None:
-                continue
-            if q.lower() in raw.lower():
-                fm = _parse_frontmatter_str(raw)
-                title = fm.get("topic", topic).replace("-", " ").title()
-                snippet = ""
-                for line in raw.splitlines():
-                    if q.lower() in line.lower():
-                        snippet = line.strip()[:200]
-                        break
-                results.append(
-                    SearchResult(
-                        type="wiki",
-                        id=topic,
-                        title=title,
-                        snippet=snippet,
-                        score=0.5,
-                    )
-                )
-
-    # Sort by score descending, cap at limit
+    results: list[SearchResult] = _search_errors(ctx, q, mode, limit)
+    results += _search_wiki(ctx, q, mode)
     results.sort(key=lambda x: x.score, reverse=True)
     results = results[:limit]
     return SearchResponse(query=q, mode=mode, results=results, total=len(results))

@@ -141,6 +141,49 @@ def _parse_llm_json(raw: str) -> dict[str, Any]:
         return {}
 
 
+def _apply_wiki_updates(
+    ctx: AppContext,
+    topics: list[str],
+    ingest_type: str,
+    timeline_entry_text: str,
+    compiled_truth_update: str,
+) -> tuple[list[str], int]:
+    """Write timeline entries and compiled_truth update; return (topics_updated, timeline_count)."""
+    timeline_count = 0
+    for topic in topics:
+        if timeline_entry_text:
+            timestamp = datetime.now().strftime("%Y-%m-%d")
+            entry = f"{timestamp} [{ingest_type}] {timeline_entry_text}"
+            append_timeline_entry(ctx.wiki_dir, topic, entry)
+            timeline_count += 1
+    topics_updated: list[str] = []
+    if topics and compiled_truth_update:
+        update_compiled_truth(ctx.wiki_dir, topics[0], compiled_truth_update)
+        topics_updated.append(topics[0])
+    return topics_updated, timeline_count
+
+
+def _run_ingest_llm(
+    source_path: str,
+    ingest_type: str,
+    project: str,
+    prov: str,
+    mdl: str,
+    known_topics: list[str],
+) -> dict:
+    """Read source file, call LLM, and return the parsed JSON dict.
+
+    Returns an empty dict on file-read or JSON-parse failure.
+    Raises OSError when the source file cannot be opened (caller converts to IngestResult error).
+    """
+    content = Path(source_path).read_text(encoding="utf-8")
+    system_prompt, user_prompt = build_ingest_prompt(
+        ingest_type, source_path, content, project, known_topics
+    )
+    raw_response = _call_llm(f"{system_prompt}\n\n---\n\n{user_prompt}", provider=prov, model=mdl)
+    return _parse_llm_json(raw_response)
+
+
 def ingest_document(
     ctx: AppContext,
     source_path: str,
@@ -149,7 +192,7 @@ def ingest_document(
     provider: str | None = None,
     model: str | None = None,
     dry_run: bool = False,
-) -> IngestResult:
+) -> "IngestResult":
     """Ingest a document and update wiki + ingest_log.
 
     Parameters
@@ -165,6 +208,8 @@ def ingest_document(
     Returns
     -------
     IngestResult with populated fields.
+
+    # Pipeline: validate type → _run_ingest_llm → _apply_wiki_updates → log.
     """
     if ingest_type not in INGEST_TYPES:
         raise ValueError(f"Unsupported ingest type '{ingest_type}'. Valid: {INGEST_TYPES}")
@@ -172,81 +217,32 @@ def ingest_document(
     prov = provider or DEFAULT_PROVIDER
     mdl = model or DEFAULT_MODEL_BY_PROVIDER.get(prov, "")
 
-    # Read source content
     try:
-        content = Path(source_path).read_text(encoding="utf-8")
+        parsed = _run_ingest_llm(source_path, ingest_type, project, prov, mdl, list_wiki_topics(ctx.wiki_dir))
     except OSError as exc:
-        return IngestResult(
-            ingest_type=ingest_type,
-            source_path=source_path,
-            project=project,
-            summary="",
-            error=str(exc),
-        )
-
-    known_topics = list_wiki_topics(ctx.wiki_dir)
-    system_prompt, user_prompt = build_ingest_prompt(
-        ingest_type, source_path, content, project, known_topics
-    )
-    combined_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
-
-    raw_response = _call_llm(combined_prompt, provider=prov, model=mdl)
-    parsed = _parse_llm_json(raw_response)
+        return IngestResult(ingest_type=ingest_type, source_path=source_path, project=project, summary="", error=str(exc))
 
     summary = parsed.get("summary", "")
-    topics = [t for t in parsed.get("topics", []) if t in known_topics]
-    timeline_entry_text = parsed.get("timeline_entry", "")
-    compiled_truth_update = parsed.get("compiled_truth_update", "")
-
-    topics_updated: list[str] = []
-    timeline_count = 0
+    topics = [t for t in parsed.get("topics", []) if t in list_wiki_topics(ctx.wiki_dir)]
+    log_entry = _build_log_entry(
+        ingest_type=ingest_type, source_path=source_path, project=project,
+        summary=summary, topics=topics, provider=prov, model=mdl,
+    )
 
     if not dry_run:
-        # Update wiki pages
-        for topic in topics:
-            if timeline_entry_text:
-                timestamp = datetime.now().strftime("%Y-%m-%d")
-                entry = f"{timestamp} [{ingest_type}] {timeline_entry_text}"
-                append_timeline_entry(ctx.wiki_dir, topic, entry)
-                timeline_count += 1
-
-        if topics and compiled_truth_update:
-            first_topic = topics[0]
-            update_compiled_truth(ctx.wiki_dir, first_topic, compiled_truth_update)
-            topics_updated.append(first_topic)
-
-        # Write ingest log
-        log_entry = _build_log_entry(
-            ingest_type=ingest_type,
-            source_path=source_path,
-            project=project,
-            summary=summary,
-            topics=topics,
-            provider=prov,
-            model=mdl,
+        topics_updated, timeline_count = _apply_wiki_updates(
+            ctx, topics, ingest_type, parsed.get("timeline_entry", ""), parsed.get("compiled_truth_update", "")
         )
         _append_ingest_log(ctx, log_entry)
     else:
-        log_entry = _build_log_entry(
-            ingest_type=ingest_type,
-            source_path=source_path,
-            project=project,
-            summary=summary,
-            topics=topics,
-            provider=prov,
-            model=mdl,
-        )
+        topics_updated = topics
+        timeline_count = 0
         log_entry["dry_run"] = True
 
     return IngestResult(
-        ingest_type=ingest_type,
-        source_path=source_path,
-        project=project,
-        summary=summary,
-        topics_updated=topics_updated if not dry_run else topics,
-        timeline_entries_added=timeline_count,
-        log_entry=log_entry,
-        dry_run=dry_run,
+        ingest_type=ingest_type, source_path=source_path, project=project,
+        summary=summary, topics_updated=topics_updated,
+        timeline_entries_added=timeline_count, log_entry=log_entry, dry_run=dry_run,
     )
 
 
@@ -309,81 +305,38 @@ def read_ingest_log(ctx: AppContext) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def cmd_ingest(ctx: AppContext, args: list[str]) -> int:
-    """Ingest a document into the memory system.
-
-    Usage: amem ingest <file> --type <type> [--project <id>] [--provider anthropic|openai|ollama]
-                              [--model <name>] [--dry-run] [--log]
-
-    Types: pr-review, meeting, decision, code-review
-    """
-    if not args or args[0].startswith("--"):
-        _print_ingest_usage()
-        return 1
-
-    source_path = args[0]
-    ingest_type = ""
-    project = ""
-    provider: str | None = None
-    model: str | None = None
-    dry_run = False
-    show_log = False
-
+def _parse_ingest_args(args: list[str]) -> dict:
+    """Parse CLI flags for cmd_ingest into a flat dict of options."""
+    parsed = {
+        "source_path": args[0],
+        "ingest_type": "",
+        "project": "",
+        "provider": None,
+        "model": None,
+        "dry_run": False,
+        "show_log": False,
+    }
     i = 1
+    _flag_with_value = {"--type": "ingest_type", "--project": "project",
+                        "--provider": "provider", "--model": "model"}
     while i < len(args):
-        arg = args[i]
-        if arg == "--type" and i + 1 < len(args):
-            ingest_type = args[i + 1]
+        flag = args[i]
+        if flag in _flag_with_value and i + 1 < len(args):
+            parsed[_flag_with_value[flag]] = args[i + 1]
             i += 2
-        elif arg == "--project" and i + 1 < len(args):
-            project = args[i + 1]
-            i += 2
-        elif arg == "--provider" and i + 1 < len(args):
-            provider = args[i + 1]
-            i += 2
-        elif arg == "--model" and i + 1 < len(args):
-            model = args[i + 1]
-            i += 2
-        elif arg == "--dry-run":
-            dry_run = True
+        elif flag == "--dry-run":
+            parsed["dry_run"] = True
             i += 1
-        elif arg == "--log":
-            show_log = True
+        elif flag == "--log":
+            parsed["show_log"] = True
             i += 1
         else:
             i += 1
+    return parsed
 
-    if show_log:
-        _cmd_show_log(ctx)
-        return 0
 
-    if not ingest_type:
-        print("错误: 必须指定 --type 参数")
-        _print_ingest_usage()
-        return 1
-
-    if ingest_type not in INGEST_TYPES:
-        print(f"错误: 不支持的类型 '{ingest_type}'。支持: {', '.join(INGEST_TYPES)}")
-        return 1
-
-    try:
-        result = ingest_document(
-            ctx,
-            source_path=source_path,
-            ingest_type=ingest_type,
-            project=project,
-            provider=provider,
-            model=model,
-            dry_run=dry_run,
-        )
-    except Exception as exc:  # noqa: BLE001
-        print(f"❌ 摄取失败: {exc}")
-        return 1
-
-    if result.error:
-        print(f"❌ 错误: {result.error}")
-        return 1
-
+def _print_ingest_result(result: "IngestResult", dry_run: bool, ctx: AppContext) -> None:
+    """Print ingest outcome to stdout."""
     prefix = "🔍 [DRY-RUN] " if dry_run else "✅ "
     print(f"{prefix}文档摄取完成")
     print(f"   类型: {result.ingest_type}")
@@ -397,6 +350,56 @@ def cmd_ingest(ctx: AppContext, args: list[str]) -> int:
         print("   Wiki: 未匹配到已有 Topic")
     if not dry_run:
         print(f"   日志: {_ingest_log_path(ctx)}")
+
+
+def cmd_ingest(ctx: AppContext, args: list[str]) -> int:
+    """Ingest a document into the memory system.
+
+    Usage: amem ingest <file> --type <type> [--project <id>] [--provider anthropic|openai|ollama]
+                              [--model <name>] [--dry-run] [--log]
+
+    Types: pr-review, meeting, decision, code-review
+
+    # Dispatch: --log → show log; else parse type + call ingest_document + print result.
+    """
+    if not args or args[0].startswith("--"):
+        _print_ingest_usage()
+        return 1
+
+    opts = _parse_ingest_args(args)
+
+    if opts["show_log"]:
+        _cmd_show_log(ctx)
+        return 0
+
+    if not opts["ingest_type"]:
+        print("错误: 必须指定 --type 参数")
+        _print_ingest_usage()
+        return 1
+
+    if opts["ingest_type"] not in INGEST_TYPES:
+        print(f"错误: 不支持的类型 '{opts['ingest_type']}'。支持: {', '.join(INGEST_TYPES)}")
+        return 1
+
+    try:
+        result = ingest_document(
+            ctx,
+            source_path=opts["source_path"],
+            ingest_type=opts["ingest_type"],
+            project=opts["project"],
+            provider=opts["provider"],
+            model=opts["model"],
+            dry_run=opts["dry_run"],
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"❌ 摄取失败: {exc}")
+        return 1
+
+    if result.error:
+        print(f"❌ 错误: {result.error}")
+        return 1
+
+    _print_ingest_result(result, opts["dry_run"], ctx)
     return 0
 
 

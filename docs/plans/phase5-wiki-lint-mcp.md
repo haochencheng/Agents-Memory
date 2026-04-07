@@ -1,10 +1,7 @@
 ---
-title: "Phase 5: Wiki Lint + MCP 工具完整化"
-status: completed
 created_at: 2026-04-07
 updated_at: 2026-04-07
-scope: agents_memory/services/wiki.py, agents_memory/mcp_app.py
-tests: tests/test_wiki_compile.py (TestWikiLint)
+doc_status: active
 ---
 
 # Phase 5 — Wiki Lint + MCP 工具完整化

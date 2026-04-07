@@ -1,8 +1,7 @@
 ---
-title: "Agents-Memory 前端 Web UI 设计方案"
-status: proposal
 created_at: 2026-04-07
-scope: frontend, web-ui, REST API
+updated_at: 2026-04-07
+doc_status: active
 ---
 
 # Agents-Memory 前端 Web UI 设计方案

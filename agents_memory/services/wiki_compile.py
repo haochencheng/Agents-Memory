@@ -177,6 +177,35 @@ def build_compile_prompt(topic: str, current_truth: str, error_summaries: str) -
 # ---------------------------------------------------------------------------
 
 
+def _gather_relevant_errors(ctx: AppContext, topic: str, scope: str, recent_n: int) -> list[dict]:
+    """Return up to *recent_n* error records relevant to *topic*.
+
+    Falls back to the most-recent *recent_n* records when no matches are found.
+    """
+    all_errors = collect_errors(ctx)
+    if scope not in ("errors", "all"):
+        return []
+    keyword = topic.lower().replace("-", " ")
+    relevant = [
+        r for r in all_errors
+        if keyword in " ".join(str(v) for v in r.values()).lower()
+        or any(part in " ".join(str(v) for v in r.values()).lower() for part in keyword.split())
+    ]
+    return (relevant or all_errors)[:recent_n]
+
+
+def _write_wiki_compile_result(ctx: AppContext, topic: str, new_truth: str, error_count: int) -> tuple[str, str]:
+    """Append timeline entry and write compiled_truth. Returns (timeline_entry, path_str)."""
+    error_ids_summary = f"(errors: {error_count} records)"
+    timeline_entry = (
+        f"- **{date.today().isoformat()}** | wiki-compile "
+        f"\u2014 \u4ece {error_count} \u6761\u9519\u8bef\u8bb0\u5f55\u5408\u6210 compiled_truth {error_ids_summary}"
+    )
+    path_obj = update_compiled_truth(ctx.wiki_dir, topic, new_truth)
+    append_timeline_entry(ctx.wiki_dir, topic, timeline_entry)
+    return timeline_entry, str(path_obj)
+
+
 def compile_wiki_topic(
     ctx: AppContext,
     topic: str,
@@ -189,90 +218,42 @@ def compile_wiki_topic(
 ) -> dict[str, Any]:
     """Synthesise a wiki page's compiled_truth from recent error records.
 
-    Returns a result dict:
-    {
-        "topic": str,
-        "status": "ok" | "skipped" | "dry_run",
-        "new_compiled_truth": str,
-        "timeline_entry": str,
-        "error_count": int,
-        "dry_run": bool,
-        "path": str | None,
-    }
+    Returns a result dict with keys: topic, status, new_compiled_truth,
+    timeline_entry, error_count, dry_run, path.
+
+    # Pipeline: gather errors → read current wiki → build prompt → call LLM → write results.
     """
     resolved_provider = provider or DEFAULT_PROVIDER
     resolved_model = model or DEFAULT_MODEL_BY_PROVIDER.get(resolved_provider, "gpt-4o-mini")
 
-    # 1. Gather source errors relevant to this topic
-    all_errors = collect_errors(ctx)
-    relevant_errors: list[dict] = []
-    if scope == "errors" or scope == "all":
-        keyword = topic.lower().replace("-", " ")
-        for rec in all_errors:
-            rec_text = " ".join(str(v) for v in rec.values()).lower()
-            if keyword in rec_text or any(
-                part in rec_text for part in keyword.split()
-            ):
-                relevant_errors.append(rec)
-        if not relevant_errors:
-            # Fall back to most recent N regardless of topic match
-            relevant_errors = all_errors[:recent_n]
-
+    relevant_errors = _gather_relevant_errors(ctx, topic, scope, recent_n)
     if not relevant_errors:
         return {
-            "topic": topic,
-            "status": "skipped",
-            "reason": "no error records found",
-            "new_compiled_truth": "",
-            "timeline_entry": "",
-            "error_count": 0,
-            "dry_run": dry_run,
-            "path": None,
+            "topic": topic, "status": "skipped", "reason": "no error records found",
+            "new_compiled_truth": "", "timeline_entry": "", "error_count": 0,
+            "dry_run": dry_run, "path": None,
         }
 
-    relevant_errors = relevant_errors[:recent_n]
-
-    # 2. Read current wiki page
     current_page = read_wiki_page(ctx.wiki_dir, topic)
-    current_sections = parse_wiki_sections(current_page) if current_page else {
-        "frontmatter_str": "",
-        "compiled_truth": "",
-        "timeline": "",
-    }
-    current_truth = current_sections["compiled_truth"]
+    current_truth = (parse_wiki_sections(current_page) if current_page else {}).get("compiled_truth", "")
 
-    # 3. Build prompt + call LLM
     error_summaries = _build_error_summaries(relevant_errors, ctx, len(relevant_errors))
     prompt = build_compile_prompt(topic, current_truth, error_summaries)
 
     if dry_run:
-        new_truth = f"[dry-run] Would synthesise from {len(relevant_errors)} errors for topic '{topic}'."
-        timeline_entry = ""
-        path = None
-    else:
-        new_truth = _call_llm(prompt, provider=resolved_provider, model=resolved_model)
+        return {
+            "topic": topic, "status": "dry_run",
+            "new_compiled_truth": f"[dry-run] Would synthesise from {len(relevant_errors)} errors for topic '{topic}'.",
+            "timeline_entry": "", "error_count": len(relevant_errors), "dry_run": True, "path": None,
+        }
 
-        # 4. Append timeline entry
-        error_ids = [r.get("id", "?") for r in relevant_errors]
-        timeline_entry = (
-            f"- **{date.today().isoformat()}** | wiki-compile "
-            f"— 从 {len(relevant_errors)} 条错误记录合成 compiled_truth "
-            f"(errors: {', '.join(error_ids[:5])}{'...' if len(error_ids) > 5 else ''})"
-        )
-
-        # 5. Write back
-        path_obj = update_compiled_truth(ctx.wiki_dir, topic, new_truth)
-        append_timeline_entry(ctx.wiki_dir, topic, timeline_entry)
-        path = str(path_obj)
+    new_truth = _call_llm(prompt, provider=resolved_provider, model=resolved_model)
+    timeline_entry, path = _write_wiki_compile_result(ctx, topic, new_truth, len(relevant_errors))
 
     return {
-        "topic": topic,
-        "status": "dry_run" if dry_run else "ok",
-        "new_compiled_truth": new_truth,
-        "timeline_entry": timeline_entry if not dry_run else "",
-        "error_count": len(relevant_errors),
-        "dry_run": dry_run,
-        "path": path,
+        "topic": topic, "status": "ok", "new_compiled_truth": new_truth,
+        "timeline_entry": timeline_entry, "error_count": len(relevant_errors),
+        "dry_run": False, "path": path,
     }
 
 
@@ -291,27 +272,28 @@ def _parse_compile_args(args: list[str]) -> dict[str, Any]:
         "model": None,
         "dry_run": False,
     }
+    # Map --flag → key for flags-with-values; bool flags handled separately.
+    _value_flags: dict[str, str] = {
+        "--topic": "topic", "--scope": "scope",
+        "--provider": "provider", "--model": "model",
+    }
     i = 0
     while i < len(args):
-        if args[i] == "--topic" and i + 1 < len(args):
-            parsed["topic"] = args[i + 1]; i += 2
-        elif args[i] == "--scope" and i + 1 < len(args):
-            parsed["scope"] = args[i + 1]; i += 2
-        elif args[i] == "--recent-n" and i + 1 < len(args):
+        flag = args[i]
+        if flag in _value_flags and i + 1 < len(args):
+            parsed[_value_flags[flag]] = args[i + 1]
+            i += 2
+        elif flag == "--recent-n" and i + 1 < len(args):
             try:
                 parsed["recent_n"] = int(args[i + 1])
             except ValueError:
                 pass
             i += 2
-        elif args[i] == "--provider" and i + 1 < len(args):
-            parsed["provider"] = args[i + 1]; i += 2
-        elif args[i] == "--model" and i + 1 < len(args):
-            parsed["model"] = args[i + 1]; i += 2
-        elif args[i] == "--dry-run":
-            parsed["dry_run"] = True; i += 1
-        elif not args[i].startswith("--"):
-            if parsed["topic"] is None:
-                parsed["topic"] = args[i]
+        elif flag == "--dry-run":
+            parsed["dry_run"] = True
+            i += 1
+        elif not flag.startswith("--") and parsed["topic"] is None:
+            parsed["topic"] = flag
             i += 1
         else:
             i += 1

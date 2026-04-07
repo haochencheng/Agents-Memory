@@ -1,10 +1,7 @@
 ---
-title: "Phase 4: Ingest 结构化摄取流水线"
-status: completed
 created_at: 2026-03-28
 updated_at: 2026-04-07
-scope: agents_memory/services/ingest.py, agents_memory/commands/ingest.py, agents_memory/mcp_app.py
-tests: tests/test_ingest_service.py
+doc_status: active
 ---
 
 # Phase 4 — Ingest 结构化摄取流水线

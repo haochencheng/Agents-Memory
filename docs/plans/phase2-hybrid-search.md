@@ -1,10 +1,7 @@
 ---
-title: "Phase 2: 混合搜索 FTS + 向量"
-status: completed
 created_at: 2026-03-28
 updated_at: 2026-04-07
-scope: agents_memory/services/search.py, agents_memory/commands/search.py, agents_memory/mcp_app.py
-tests: tests/test_search_service.py
+doc_status: active
 ---
 
 # Phase 2 — 混合搜索 FTS + 向量

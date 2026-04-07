@@ -54,7 +54,21 @@
       }
     }
   ],
-  "overlays": [],
+  "overlays": [
+    {
+      "target": ".github/instructions/agents-memory/project-local.instructions.md",
+      "template": "templates/profile/agent-runtime/project-local.instructions.example.md",
+      "variables": [
+        "python_bin",
+        "runtime_dir"
+      ],
+      "detectors": [
+        "python_project",
+        "runtime_shape"
+      ],
+      "managed_by": "profile-render"
+    }
+  ],
   "commands": {
     "standards_sync": "amem standards-sync .",
     "plan_check": "amem plan-check .",

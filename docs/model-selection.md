@@ -1,7 +1,7 @@
 ---
-title: "本地模型选型指南"
+created_at: 2026-04-07
 updated_at: 2026-04-07
-scope: embedding, LLM synthesis, wiki-compile, ingest
+doc_status: active
 ---
 
 # 本地模型选型指南

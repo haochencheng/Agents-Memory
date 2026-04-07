@@ -222,6 +222,33 @@ def update_compiled_truth(wiki_dir: Path, topic: str, new_truth: str) -> Path:
     return path
 
 
+def _parse_fm_links_block(fm_lines: list[str]) -> list[dict[str, str]]:
+    """Extract link entries from the raw lines of a frontmatter block.
+
+    Processes the block after the ``links:`` key has been encountered.
+    # State machine: "- topic:" starts a new entry; "context:" fills current; other top-level key ends block.
+    """
+    links: list[dict[str, str]] = []
+    current: dict[str, str] = {}
+    for line in fm_lines:
+        stripped = line.strip()
+        if stripped.startswith("- topic:"):
+            if current:
+                links.append(current)
+            current = {"topic": stripped[len("- topic:"):].strip()}
+        elif stripped.startswith("context:") and current:
+            current["context"] = stripped[len("context:"):].strip().strip('"').strip("'")
+        elif stripped and not stripped.startswith("-") and ":" in stripped:
+            # different top-level key — block is over
+            if current:
+                links.append(current)
+                current = {}
+            break
+    if current:
+        links.append(current)
+    return links
+
+
 def get_wiki_links(content: str) -> list[dict[str, str]]:
     """Parse the ``links:`` list from frontmatter and return it as a list of dicts.
 
@@ -231,31 +258,39 @@ def get_wiki_links(content: str) -> list[dict[str, str]]:
     fm_end = _frontmatter_end(content)
     if not fm_end:
         return []
-    fm_text = content[:fm_end]
+    fm_lines = content[:fm_end].splitlines()
+    try:
+        links_start = next(i for i, l in enumerate(fm_lines) if l.strip().startswith("links:"))
+    except StopIteration:
+        return []
+    return _parse_fm_links_block(fm_lines[links_start + 1:])
+
+
+def _strip_links_from_fm(fm_lines: list[str]) -> list[str]:
+    """Remove any existing ``links:`` block from raw frontmatter lines."""
+    result: list[str] = []
     in_links = False
-    links: list[dict[str, str]] = []
-    current: dict[str, str] = {}
-    for line in fm_text.splitlines():
+    for line in fm_lines:
         stripped = line.strip()
         if stripped.startswith("links:"):
             in_links = True
             continue
         if in_links:
-            if stripped.startswith("- topic:"):
-                if current:
-                    links.append(current)
-                current = {"topic": stripped[len("- topic:"):].strip()}
-            elif stripped.startswith("context:") and current:
-                current["context"] = stripped[len("context:"):].strip().strip('"').strip("'")
-            elif stripped and not stripped.startswith("-") and ":" in stripped and not stripped.startswith("topic") and not stripped.startswith("context"):
-                # A new top-level frontmatter key — links block is over
-                if current:
-                    links.append(current)
-                    current = {}
-                in_links = False
-    if current:
-        links.append(current)
-    return links
+            if stripped.startswith("- ") or stripped == "":
+                continue
+            in_links = False
+        result.append(line)
+    return result
+
+
+def _build_links_yaml(links: list[dict[str, str]]) -> list[str]:
+    """Return YAML lines for a links block suitable for frontmatter insertion."""
+    lines = ["links:\n"]
+    for link in links:
+        lines.append(f"  - topic: {link['topic']}\n")
+        if link.get("context"):
+            lines.append(f"    context: \"{link['context']}\"\n")
+    return lines
 
 
 def set_wiki_links(wiki_dir: Path, topic: str, links: list[dict[str, str]]) -> Path:
@@ -271,42 +306,14 @@ def set_wiki_links(wiki_dir: Path, topic: str, links: list[dict[str, str]]) -> P
     if not fm_end:
         return path  # no frontmatter, skip
 
-    fm_text = content[:fm_end]
-    body = content[fm_end:]
-
-    # Remove existing links block from frontmatter
-    new_fm_lines: list[str] = []
-    in_links = False
-    for line in fm_text.splitlines(keepends=True):
-        stripped = line.strip()
-        if stripped.startswith("links:"):
-            in_links = True
-            continue
-        if in_links:
-            if stripped.startswith("- ") or stripped == "":
-                continue
-            else:
-                in_links = False
-        new_fm_lines.append(line)
-
-    # Rebuild links YAML fragment
-    links_yaml_lines = ["links:\n"]
-    for link in links:
-        links_yaml_lines.append(f"  - topic: {link['topic']}\n")
-        if link.get("context"):
-            links_yaml_lines.append(f"    context: \"{link['context']}\"\n")
-
-    # Insert links before the closing ---
-    closing_idx = len(new_fm_lines) - 1
-    for i in range(len(new_fm_lines) - 1, -1, -1):
-        if new_fm_lines[i].strip() == "---":
-            closing_idx = i
-            break
-
-    final_fm_lines = new_fm_lines[:closing_idx] + links_yaml_lines + [new_fm_lines[closing_idx]]
-    new_content = "".join(final_fm_lines) + body
-    today = date.today().isoformat()
-    new_content = _refresh_updated_at(new_content, today)
+    fm_lines = _strip_links_from_fm(content[:fm_end].splitlines(keepends=True))
+    closing_idx = next(
+        (i for i in range(len(fm_lines) - 1, -1, -1) if fm_lines[i].strip() == "---"),
+        len(fm_lines) - 1,
+    )
+    final_fm = fm_lines[:closing_idx] + _build_links_yaml(links) + [fm_lines[closing_idx]]
+    new_content = "".join(final_fm) + content[fm_end:]
+    new_content = _refresh_updated_at(new_content, date.today().isoformat())
     path.write_text(new_content, encoding="utf-8")
     return path
 
@@ -538,17 +545,32 @@ def cmd_wiki_sync(ctx: AppContext, args: list[str]) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _upsert_link_entry(links: list[dict[str, str]], to_topic: str, context: str) -> list[dict[str, str]]:
+    """Add or update a link to *to_topic* in *links*; returns updated list."""
+    for lnk in links:
+        if lnk["topic"] == to_topic:
+            if context:
+                lnk["context"] = context
+            return links
+    entry: dict[str, str] = {"topic": to_topic}
+    if context:
+        entry["context"] = context
+    links.append(entry)
+    return links
+
+
 def cmd_wiki_link(ctx: AppContext, args: list[str]) -> int:
     """Create a directional link between two wiki topics.
 
     Usage: amem wiki-link <from-topic> <to-topic> [--context "..."]
+
+    # Validate both topics exist → read existing links → _upsert_link_entry → save.
     """
     if len(args) < 2:
         print("用法: amem wiki-link <from-topic> <to-topic> [--context \"...\"]")
         return 1
 
-    from_topic = args[0]
-    to_topic = args[1]
+    from_topic, to_topic = args[0], args[1]
     context_text = ""
     i = 2
     while i < len(args):
@@ -558,29 +580,13 @@ def cmd_wiki_link(ctx: AppContext, args: list[str]) -> int:
         else:
             i += 1
 
-    from_path = ctx.wiki_dir / f"{from_topic}.md"
-    if not from_path.exists():
-        print(f"错误: Wiki 页面不存在: {from_topic}")
-        return 1
-    to_path = ctx.wiki_dir / f"{to_topic}.md"
-    if not to_path.exists():
-        print(f"错误: Wiki 页面不存在: {to_topic}")
-        return 1
+    for topic_name in (from_topic, to_topic):
+        if not (ctx.wiki_dir / f"{topic_name}.md").exists():
+            print(f"错误: Wiki 页面不存在: {topic_name}")
+            return 1
 
-    content = from_path.read_text(encoding="utf-8")
-    links = get_wiki_links(content)
-    # Deduplicate — update context if already linked
-    existing_topics = [lnk["topic"] for lnk in links]
-    if to_topic in existing_topics:
-        for lnk in links:
-            if lnk["topic"] == to_topic and context_text:
-                lnk["context"] = context_text
-    else:
-        entry: dict[str, str] = {"topic": to_topic}
-        if context_text:
-            entry["context"] = context_text
-        links.append(entry)
-
+    content = (ctx.wiki_dir / f"{from_topic}.md").read_text(encoding="utf-8")
+    links = _upsert_link_entry(get_wiki_links(content), to_topic, context_text)
     set_wiki_links(ctx.wiki_dir, from_topic, links)
     print(f"✅ 链接已创建: {from_topic} → {to_topic}")
     return 0
@@ -590,6 +596,8 @@ def cmd_wiki_backlinks(ctx: AppContext, args: list[str]) -> int:
     """Show all wiki topics that link TO the given topic.
 
     Usage: amem wiki-backlinks <topic>
+
+    # Scan every wiki page's links block for references to target; collect and print.
     """
     if not args:
         print("用法: amem wiki-backlinks <topic>")
@@ -616,11 +624,60 @@ def cmd_wiki_backlinks(ctx: AppContext, args: list[str]) -> int:
     return 0
 
 
+def _lint_orphans(ctx: AppContext, topics: list[str]) -> list[str]:
+    """Return issue strings for wiki pages with no inbound links."""
+    inbound: dict[str, int] = {t: 0 for t in topics}
+    for topic in topics:
+        content = (ctx.wiki_dir / f"{topic}.md").read_text(encoding="utf-8")
+        for lnk in get_wiki_links(content):
+            if lnk["topic"] in inbound:
+                inbound[lnk["topic"]] += 1
+    return [f"[orphan] '{t}' 无入链（无其他页面引用它）" for t, c in inbound.items() if c == 0]
+
+
+def _lint_stale(ctx: AppContext, topics: list[str]) -> list[str]:
+    """Return issue strings for compiled_truth older than 30 days."""
+    from datetime import date as _date  # noqa: PLC0415
+    issues: list[str] = []
+    for topic in topics:
+        content = (ctx.wiki_dir / f"{topic}.md").read_text(encoding="utf-8")
+        compiled_at = next(
+            (line.split(":", 1)[1].strip() for line in content.splitlines() if line.startswith("compiled_at:")),
+            "",
+        )
+        if not compiled_at:
+            continue
+        try:
+            if (_date.today() - _date.fromisoformat(compiled_at)).days > 30:
+                issues.append(f"[stale] '{topic}' compiled_truth 已超过 30 天未更新 (compiled_at={compiled_at})")
+        except ValueError:
+            pass
+    return issues
+
+
+def _lint_missing_links(ctx: AppContext, topics: list[str]) -> list[str]:
+    """Return issue strings for topics mentioned in body but not linked."""
+    issues: list[str] = []
+    for topic in topics:
+        content = (ctx.wiki_dir / f"{topic}.md").read_text(encoding="utf-8")
+        sections = parse_wiki_sections(content)
+        body_text = (sections["compiled_truth"] + " " + sections["timeline"]).lower()
+        linked = {lnk["topic"] for lnk in get_wiki_links(content)}
+        for other in topics:
+            if other == topic or other in linked:
+                continue
+            if other.replace("-", " ") in body_text or other in body_text:
+                issues.append(f"[missing-link] '{topic}' 提及了 '{other}' 但未建立链接")
+    return issues
+
+
 def cmd_wiki_lint(ctx: AppContext, args: list[str]) -> int:
     """Health-check the wiki: detect orphan pages, stale compiled_truth, missing links.
 
     Usage: amem wiki-lint [--check orphans|stale|missing-links|all]
     Exits 0 even when issues are found; issues are printed to stdout.
+
+    # Dispatch: parse --check flag → call lint sub-functions → aggregate + print.
     """
     check_mode = "all"
     i = 0
@@ -641,54 +698,12 @@ def cmd_wiki_lint(ctx: AppContext, args: list[str]) -> int:
         return 0
 
     issues: list[str] = []
-
-    # --- Orphan check (no inbound links) ---
     if check_mode in ("orphans", "all"):
-        inbound: dict[str, int] = {t: 0 for t in topics}
-        for topic in topics:
-            content = (ctx.wiki_dir / f"{topic}.md").read_text(encoding="utf-8")
-            for lnk in get_wiki_links(content):
-                if lnk["topic"] in inbound:
-                    inbound[lnk["topic"]] += 1
-        for topic, count in inbound.items():
-            if count == 0:
-                issues.append(f"[orphan] '{topic}' 无入链（无其他页面引用它）")
-
-    # --- Stale compiled_truth check ---
+        issues += _lint_orphans(ctx, topics)
     if check_mode in ("stale", "all"):
-        today = date.today().isoformat()
-        for topic in topics:
-            content = (ctx.wiki_dir / f"{topic}.md").read_text(encoding="utf-8")
-            # Find compiled_at in frontmatter
-            compiled_at = ""
-            for line in content.splitlines():
-                if line.startswith("compiled_at:"):
-                    compiled_at = line.split(":", 1)[1].strip()
-                    break
-            if not compiled_at:
-                continue  # legacy page, skip
-            try:
-                from datetime import date as _date, timedelta
-                ca = _date.fromisoformat(compiled_at)
-                if (_date.today() - ca).days > 30:
-                    issues.append(f"[stale] '{topic}' 的 compiled_truth 已超过 30 天未更新 (compiled_at={compiled_at})")
-            except ValueError:
-                pass
-
-    # --- Missing links check ---
+        issues += _lint_stale(ctx, topics)
     if check_mode in ("missing-links", "all"):
-        for topic in topics:
-            content = (ctx.wiki_dir / f"{topic}.md").read_text(encoding="utf-8")
-            sections = parse_wiki_sections(content)
-            body_text = sections["compiled_truth"] + " " + sections["timeline"]
-            for other_topic in topics:
-                if other_topic == topic:
-                    continue
-                # If another topic is mentioned by name in the body but not linked
-                if other_topic.replace("-", " ") in body_text.lower() or other_topic in body_text.lower():
-                    existing_link_topics = [lnk["topic"] for lnk in get_wiki_links(content)]
-                    if other_topic not in existing_link_topics:
-                        issues.append(f"[missing-link] '{topic}' 提及了 '{other_topic}' 但未建立链接")
+        issues += _lint_missing_links(ctx, topics)
 
     if not issues:
         print(f"✅ Wiki 健康检查通过（{len(topics)} 个页面，无问题）")

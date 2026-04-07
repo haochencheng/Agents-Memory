@@ -1,6 +1,7 @@
 ---
-title: "前端技术选型"
+created_at: 2026-04-07
 updated_at: 2026-04-07
+doc_status: active
 ---
 
 # 技术选型

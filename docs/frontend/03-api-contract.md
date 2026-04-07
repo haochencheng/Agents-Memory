@@ -1,6 +1,7 @@
 ---
-title: "API 接口约定"
+created_at: 2026-04-07
 updated_at: 2026-04-07
+doc_status: active
 ---
 
 # REST API Contract

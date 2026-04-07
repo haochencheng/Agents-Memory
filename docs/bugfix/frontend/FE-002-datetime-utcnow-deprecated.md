@@ -1,3 +1,15 @@
+---
+created_at: 2026-04-07
+updated_at: 2026-04-07
+doc_status: active
+---
+
+---
+created_at: 2026-04-07
+updated_at: 2026-04-07
+doc_status: active
+---
+
 # FE-002: `datetime.utcnow()` deprecated in Python 3.12
 
 **发现时间:** 2026-04-07  

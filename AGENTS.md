@@ -5,7 +5,7 @@
 
 Generated for the `agent-runtime` profile. Treat the files below as the source of truth.
 
-1. ``
+1. `.github/instructions/agents-memory-bridge.instructions.md`
 2. `.github/instructions/agents-memory/standards/docs/docs-sync.instructions.md`
 3. `.github/instructions/agents-memory/standards/python/base.instructions.md`
 4. `.github/instructions/agents-memory/standards/planning/harness-engineering.md`

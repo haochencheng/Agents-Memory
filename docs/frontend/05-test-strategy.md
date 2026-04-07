@@ -1,6 +1,7 @@
 ---
-title: "自动化测试策略"
+created_at: 2026-04-07
 updated_at: 2026-04-07
+doc_status: active
 ---
 
 # 自动化测试策略

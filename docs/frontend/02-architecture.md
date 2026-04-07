@@ -1,6 +1,7 @@
 ---
-title: "前后端架构设计"
+created_at: 2026-04-07
 updated_at: 2026-04-07
+doc_status: active
 ---
 
 # 系统架构设计
