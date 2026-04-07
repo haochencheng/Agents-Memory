@@ -79,6 +79,31 @@ doc_status: active
 
 ---
 
+## Phase 6 — React 前端实现（✅ 已完成）
+
+> 根据 `08-product-frontend-design.md` 设计文档实现，替代 Phase 4 的 Streamlit MVP。
+
+| # | 任务 | 产出 | 状态 |
+|---|------|------|------|
+| 6.1 | 搭建 Vite + React 18 + TypeScript 项目 | `frontend/` 目录 | ✅ |
+| 6.2 | 配置 TailwindCSS + React Router v6 + Zustand + TanStack Query | `frontend/src/` 配置文件 | ✅ |
+| 6.3 | 实现 API hooks（stats / wiki / projects / memory / scheduler） | `frontend/src/api/` | ✅ |
+| 6.4 | 实现共享组件（StatCard / HealthBadge / WorkflowStepper / WikiCard 等） | `frontend/src/components/` | ✅ |
+| 6.5 | 实现 RootLayout 含侧边栏导航 | `frontend/src/layouts/` | ✅ |
+| 6.6 | 实现 Dashboard 页面（Overview / ProjectList / ProjectDetail / MemoryRecords / Workflow / Checks / Scheduler）| `frontend/src/pages/dashboard/` | ✅ |
+| 6.7 | 实现 Wiki 页面（WikiHome / TopicDetail / TopicEdit / KnowledgeGraph / LintReport / Ingest） | `frontend/src/pages/wiki/` | ✅ |
+| 6.8 | 编写单元测试（28 个测试全部通过） | `frontend/src/test/` | ✅ |
+| 6.9 | 构建验证（`npm run build` 无错误） | `frontend/dist/` | ✅ |
+| 6.10 | 启动 Dev Server 验证（http://localhost:3002） | vite dev | ✅ |
+
+**验收结果:** 
+- TypeScript: 0 编译错误
+- 构建: `vite build` 成功，输出 281KB JS
+- 测试: 28/28 通过（5 个测试文件）
+- Dev Server: http://localhost:3002 返回正常 HTML
+
+---
+
 ## 风险与依赖
 
 | 风险 | 缓解 |
