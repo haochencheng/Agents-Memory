@@ -175,6 +175,10 @@ def page_wiki() -> None:
 
 
 def page_search() -> None:
+    """Hybrid search page: query input + mode selector → call /api/search → render results.
+
+    # Input widgets → API call on submit → loop results into expanders with snippet.
+    """
     st.header("🔍 混合搜索")
 
     col1, col2 = st.columns([3, 1])

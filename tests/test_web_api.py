@@ -486,5 +486,87 @@ class TestRenderer(unittest.TestCase):
         self.assertIn("https://github.com", html)
 
 
+# ---------------------------------------------------------------------------
+# TestExtractSnippet — extracted helper from web/api.py
+# ---------------------------------------------------------------------------
+
+
+class TestExtractSnippet(unittest.TestCase):
+    def setUp(self) -> None:
+        import tempfile
+        self._tmp = tempfile.TemporaryDirectory()
+        self._root = Path(self._tmp.name)
+        import importlib
+        import agents_memory.web.api as api_mod
+        importlib.reload(api_mod)
+        from agents_memory.web.api import _extract_snippet
+        self._extract_snippet = _extract_snippet
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _write_file(self, name: str, content: str) -> str:
+        p = self._root / name
+        p.write_text(content, encoding="utf-8")
+        return str(p)
+
+    def test_returns_empty_for_missing_file(self):
+        self.assertEqual(self._extract_snippet("/nonexistent/path.md", "query"), "")
+
+    def test_returns_empty_for_empty_filepath(self):
+        self.assertEqual(self._extract_snippet("", "query"), "")
+
+    def test_returns_matching_line(self):
+        # read_body strips frontmatter — wrap content in --- fences
+        path = self._write_file(
+            "test.md",
+            "---\nid: test\n---\nline one\nauth token fix here\nline three",
+        )
+        result = self._extract_snippet(path, "auth token")
+        self.assertIn("auth token", result)
+
+    def test_returns_first_200_chars_when_no_match(self):
+        body = "b" * 300
+        path = self._write_file("test.md", f"---\nid: test\n---\n{body}")
+        result = self._extract_snippet(path, "completely-absent")
+        self.assertEqual(len(result), 200)
+
+
+# ---------------------------------------------------------------------------
+# TestSearchWiki — extracted helper from web/api.py
+# ---------------------------------------------------------------------------
+
+
+class TestSearchWiki(unittest.TestCase):
+    def setUp(self) -> None:
+        import tempfile
+        self._tmp = tempfile.TemporaryDirectory()
+        self._root = Path(self._tmp.name)
+        os.environ["AGENTS_MEMORY_ROOT"] = str(self._root)
+        _build_env(self._root)
+        import importlib
+        import agents_memory.web.api as api_mod
+        importlib.reload(api_mod)
+        from agents_memory.web.api import _search_wiki, _get_ctx
+        self._search_wiki = _search_wiki
+        self._ctx = _get_ctx()
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_returns_empty_for_unsupported_mode(self):
+        results = self._search_wiki(self._ctx, "auth", "vector-only-unsupported")
+        self.assertEqual(results, [])
+
+    def test_finds_wiki_page_by_keyword(self):
+        results = self._search_wiki(self._ctx, "jwt", "keyword")
+        titles = [r.id for r in results]
+        self.assertIn("auth-design", titles)
+
+    def test_no_results_for_absent_keyword(self):
+        results = self._search_wiki(self._ctx, "zzz-no-such-keyword-xyz", "keyword")
+        self.assertEqual(results, [])
+
+
 if __name__ == "__main__":
     unittest.main()

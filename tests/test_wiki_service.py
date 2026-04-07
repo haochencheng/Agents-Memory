@@ -11,18 +11,26 @@ from agents_memory.runtime import build_context
 from agents_memory.services.wiki import (
     _excerpt_around,
     _frontmatter_end,
+    _lint_missing_links,
+    _lint_orphans,
+    _lint_stale,
+    _parse_fm_links_block,
     _parse_limit_arg,
     _parse_topic_arg,
     _refresh_updated_at,
     _resolve_content_input,
+    _strip_links_from_fm,
+    _upsert_link_entry,
     cmd_wiki_ingest,
     cmd_wiki_list,
     cmd_wiki_query,
     cmd_wiki_sync,
+    get_wiki_links,
     ingest_file,
     list_wiki_topics,
     read_wiki_page,
     search_wiki,
+    set_wiki_links,
     write_wiki_page,
 )
 
@@ -374,6 +382,182 @@ class WikiCLITests(unittest.TestCase):
             ctx = _build_context(root)
             code = cmd_wiki_sync(ctx, ["topic", "--from-file", str(root / "ghost.md")])
             self.assertEqual(code, 1)
+
+
+# ---------------------------------------------------------------------------
+# TestParseFmLinksBlock — extracted from get_wiki_links
+# ---------------------------------------------------------------------------
+
+
+class TestParseFmLinksBlock(unittest.TestCase):
+    def test_parses_single_entry(self):
+        lines = ["  - topic: alpha", "    context: \"some context\"", "other_key: value"]
+        result = _parse_fm_links_block(lines)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["topic"], "alpha")
+        self.assertEqual(result[0]["context"], "some context")
+
+    def test_parses_multiple_entries(self):
+        lines = ["  - topic: alpha", "  - topic: beta", "  - topic: gamma"]
+        result = _parse_fm_links_block(lines)
+        self.assertEqual([r["topic"] for r in result], ["alpha", "beta", "gamma"])
+
+    def test_stops_at_new_top_level_key(self):
+        lines = ["  - topic: alpha", "other_key: value", "  - topic: beta"]
+        result = _parse_fm_links_block(lines)
+        self.assertEqual(len(result), 1)
+
+    def test_empty_lines_list(self):
+        self.assertEqual(_parse_fm_links_block([]), [])
+
+
+# ---------------------------------------------------------------------------
+# TestGetWikiLinks — uses _parse_fm_links_block indirectly
+# ---------------------------------------------------------------------------
+
+
+class TestGetWikiLinks(unittest.TestCase):
+    def _page_with_links(self, *topics: str) -> str:
+        link_lines = "\n".join(f"  - topic: {t}" for t in topics)
+        return f"---\ntopic: src\nlinks:\n{link_lines}\n---\n\n# Body"
+
+    def test_returns_empty_for_no_frontmatter(self):
+        self.assertEqual(get_wiki_links("# Just a body"), [])
+
+    def test_returns_empty_when_no_links_key(self):
+        page = "---\ntopic: src\n---\n# Body"
+        self.assertEqual(get_wiki_links(page), [])
+
+    def test_parses_links(self):
+        page = self._page_with_links("alpha", "beta")
+        links = get_wiki_links(page)
+        self.assertEqual([l["topic"] for l in links], ["alpha", "beta"])
+
+
+# ---------------------------------------------------------------------------
+# TestStripLinksFromFm — extracted fm helper
+# ---------------------------------------------------------------------------
+
+
+class TestStripLinksFromFm(unittest.TestCase):
+    def test_removes_links_block(self):
+        lines = ["topic: src\n", "links:\n", "  - topic: alpha\n", "  - topic: beta\n", "other: val\n"]
+        result = _strip_links_from_fm(lines)
+        topics_in_result = "".join(result)
+        self.assertNotIn("alpha", topics_in_result)
+        self.assertNotIn("beta", topics_in_result)
+        self.assertIn("other: val", topics_in_result)
+
+    def test_leaves_non_links_lines_intact(self):
+        lines = ["topic: src\n", "created_at: 2026-01-01\n"]
+        result = _strip_links_from_fm(lines)
+        self.assertEqual(result, lines)
+
+
+# ---------------------------------------------------------------------------
+# TestUpsertLinkEntry — extracted from cmd_wiki_link
+# ---------------------------------------------------------------------------
+
+
+class TestUpsertLinkEntry(unittest.TestCase):
+    def test_adds_new_link(self):
+        links = _upsert_link_entry([], "alpha", "")
+        self.assertEqual(links[0]["topic"], "alpha")
+
+    def test_adds_context_when_provided(self):
+        links = _upsert_link_entry([], "alpha", "ctx text")
+        self.assertEqual(links[0]["context"], "ctx text")
+
+    def test_updates_context_on_existing_link(self):
+        existing = [{"topic": "alpha", "context": "old"}]
+        result = _upsert_link_entry(existing, "alpha", "new context")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["context"], "new context")
+
+    def test_does_not_duplicate_existing_link(self):
+        existing = [{"topic": "alpha"}]
+        result = _upsert_link_entry(existing, "alpha", "")
+        self.assertEqual(len(result), 1)
+
+
+# ---------------------------------------------------------------------------
+# TestLintOrphans — extracted from cmd_wiki_lint
+# ---------------------------------------------------------------------------
+
+
+class TestLintOrphans(unittest.TestCase):
+    def _make_wiki_root(self, tmpdir: str) -> tuple:
+        root = Path(tmpdir)
+        ctx = _build_context(root)
+        return root, ctx
+
+    def _wiki_page(self, root: Path, topic: str, content: str = "") -> None:
+        p = root / "memory" / "wiki" / f"{topic}.md"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(f"---\ntopic: {topic}\n---\n{content}", encoding="utf-8")
+
+    def test_detects_orphan_page(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root, ctx = self._make_wiki_root(tmpdir)
+            self._wiki_page(root, "alpha")
+            self._wiki_page(root, "beta")
+            issues = _lint_orphans(ctx, ["alpha", "beta"])
+            # Both are orphans — neither links to the other
+            self.assertEqual(len(issues), 2)
+
+    def test_linked_page_not_orphan(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root, ctx = self._make_wiki_root(tmpdir)
+            self._wiki_page(root, "alpha", "")
+            self._wiki_page(root, "beta", "checks alpha")
+            # Give beta a link to alpha in frontmatter
+            (root / "memory" / "wiki" / "beta.md").write_text(
+                "---\ntopic: beta\nlinks:\n  - topic: alpha\n---\n# Beta page",
+                encoding="utf-8"
+            )
+            issues = _lint_orphans(ctx, ["alpha", "beta"])
+            orphan_topics = [i for i in issues if "alpha" in i]
+            self.assertEqual(len(orphan_topics), 0)  # alpha is referenced → not orphan
+
+
+# ---------------------------------------------------------------------------
+# TestLintStale — extracted from cmd_wiki_lint
+# ---------------------------------------------------------------------------
+
+
+class TestLintStale(unittest.TestCase):
+    def test_stale_page_detected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_context(root)
+            p = root / "memory" / "wiki" / "stale-topic.md"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("---\ntopic: stale-topic\ncompiled_at: 2020-01-01\n---\n# Stale", encoding="utf-8")
+            issues = _lint_stale(ctx, ["stale-topic"])
+            self.assertEqual(len(issues), 1)
+            self.assertIn("stale-topic", issues[0])
+
+    def test_recent_page_not_stale(self):
+        from datetime import date
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_context(root)
+            today = date.today().isoformat()
+            p = root / "memory" / "wiki" / "fresh-topic.md"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(f"---\ntopic: fresh-topic\ncompiled_at: {today}\n---\n# Fresh", encoding="utf-8")
+            issues = _lint_stale(ctx, ["fresh-topic"])
+            self.assertEqual(len(issues), 0)
+
+    def test_page_without_compiled_at_skipped(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_context(root)
+            p = root / "memory" / "wiki" / "no-date.md"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("---\ntopic: no-date\n---\n# No date", encoding="utf-8")
+            issues = _lint_stale(ctx, ["no-date"])
+            self.assertEqual(len(issues), 0)
 
 
 if __name__ == "__main__":

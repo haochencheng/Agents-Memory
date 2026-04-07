@@ -19,9 +19,13 @@ from agents_memory.services.ingest import (
     INGEST_TYPES,
     IngestResult,
     _append_ingest_log,
+    _apply_wiki_updates,
     _build_log_entry,
     _ingest_log_path,
+    _parse_ingest_args,
     _parse_llm_json,
+    _print_ingest_result,
+    _run_ingest_llm,
     build_ingest_prompt,
     cmd_ingest,
     ingest_document,
@@ -421,6 +425,140 @@ class TestCmdIngest(unittest.TestCase):
             with patch("agents_memory.services.ingest._call_llm", return_value=mock_response):
                 exit_code = cmd_ingest(ctx, [str(src), "--type", "meeting", "--project", "team-alpha"])
             self.assertEqual(exit_code, 0)
+
+
+# ---------------------------------------------------------------------------
+# TestParseIngestArgs — new helper extracted from cmd_ingest
+# ---------------------------------------------------------------------------
+
+
+class TestParseIngestArgs(unittest.TestCase):
+    def test_basic_type_flag(self):
+        opts = _parse_ingest_args(["file.md", "--type", "meeting"])
+        self.assertEqual(opts["source_path"], "file.md")
+        self.assertEqual(opts["ingest_type"], "meeting")
+        self.assertFalse(opts["dry_run"])
+        self.assertFalse(opts["show_log"])
+
+    def test_dry_run_flag(self):
+        opts = _parse_ingest_args(["file.md", "--type", "meeting", "--dry-run"])
+        self.assertTrue(opts["dry_run"])
+
+    def test_log_flag(self):
+        opts = _parse_ingest_args(["dummy", "--log"])
+        self.assertTrue(opts["show_log"])
+
+    def test_project_flag(self):
+        opts = _parse_ingest_args(["f.md", "--type", "decision", "--project", "test-proj"])
+        self.assertEqual(opts["project"], "test-proj")
+
+    def test_provider_and_model_flags(self):
+        opts = _parse_ingest_args(["f.md", "--type", "pr-review", "--provider", "openai", "--model", "gpt-4o"])
+        self.assertEqual(opts["provider"], "openai")
+        self.assertEqual(opts["model"], "gpt-4o")
+
+    def test_unknown_flag_ignored(self):
+        # Should not raise — unknown flags are silently skipped
+        opts = _parse_ingest_args(["f.md", "--type", "meeting", "--unknown-flag"])
+        self.assertEqual(opts["ingest_type"], "meeting")
+
+
+# ---------------------------------------------------------------------------
+# TestApplyWikiUpdates — extracted from ingest_document
+# ---------------------------------------------------------------------------
+
+
+class TestApplyWikiUpdates(unittest.TestCase):
+    def test_empty_topics_returns_empty(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_ctx(root)
+            updated, count = _apply_wiki_updates(ctx, [], "meeting", "entry", "update")
+            self.assertEqual(updated, [])
+            self.assertEqual(count, 0)
+
+    def test_appends_timeline_when_entry_given(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_ctx(root)
+            _make_wiki_page(root, "mytopic")
+            _apply_wiki_updates(ctx, ["mytopic"], "meeting", "timeline entry text", "")
+            page = (ctx.wiki_dir / "mytopic.md").read_text(encoding="utf-8")
+            self.assertIn("timeline entry text", page)
+
+    def test_no_timeline_when_entry_empty(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_ctx(root)
+            _make_wiki_page(root, "mytopic2")
+            _, count = _apply_wiki_updates(ctx, ["mytopic2"], "meeting", "", "")
+            self.assertEqual(count, 0)
+
+    def test_compiled_truth_updated_for_first_topic(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_ctx(root)
+            _make_wiki_page(root, "alpha")
+            updated, _ = _apply_wiki_updates(ctx, ["alpha"], "decision", "entry", "new compiled truth value")
+            self.assertIn("alpha", updated)
+            page = (ctx.wiki_dir / "alpha.md").read_text(encoding="utf-8")
+            self.assertIn("new compiled truth value", page)
+
+
+# ---------------------------------------------------------------------------
+# TestRunIngestLlm — extracted LLM call helper
+# ---------------------------------------------------------------------------
+
+
+class TestRunIngestLlm(unittest.TestCase):
+    def test_returns_parsed_dict(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            src = _make_source_file(root, "doc.md", "# PR\nSome change.")
+            mock_resp = _mock_llm_response("test summary", [], "timeline entry")
+            with patch("agents_memory.services.ingest._call_llm", return_value=mock_resp):
+                result = _run_ingest_llm(str(src), "pr-review", "proj", "anthropic", "claude-3-5-haiku", [])
+            self.assertEqual(result["summary"], "test summary")
+
+    def test_raises_oserror_for_missing_file(self):
+        with self.assertRaises(OSError):
+            _run_ingest_llm("/nonexistent/file.md", "meeting", "", "anthropic", "model", [])
+
+
+# ---------------------------------------------------------------------------
+# TestPrintIngestResult — output helper
+# ---------------------------------------------------------------------------
+
+
+class TestPrintIngestResult(unittest.TestCase):
+    def test_dry_run_prefix(self):
+        import io, contextlib
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_ctx(root)
+            r = IngestResult(
+                ingest_type="meeting", source_path="f.md", project="p",
+                summary="summary text", dry_run=True,
+            )
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                _print_ingest_result(r, True, ctx)
+            self.assertIn("DRY-RUN", buf.getvalue())
+            self.assertIn("summary text", buf.getvalue())
+
+    def test_success_prefix(self):
+        import io, contextlib
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_ctx(root)
+            r = IngestResult(
+                ingest_type="meeting", source_path="f.md", project="proj",
+                summary="completed summary", dry_run=False,
+            )
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                _print_ingest_result(r, False, ctx)
+            self.assertIn("✅", buf.getvalue())
 
 
 if __name__ == "__main__":

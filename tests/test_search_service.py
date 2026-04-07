@@ -21,8 +21,13 @@ from agents_memory.services.search import (
     RECENT_DAYS,
     VECTOR_SCORE_WEIGHT,
     _fts_db_path,
+    _fts_file_to_row,
+    _fts_full_rebuild,
+    _get_vector_scores,
     _is_recent,
+    _merge_search_results,
     _open_fts_db,
+    _parse_search_args,
     build_fts_index,
     cmd_fts_index,
     cmd_hybrid_search,
@@ -460,6 +465,163 @@ class TestCmdHybridSearch(unittest.TestCase):
             with contextlib.redirect_stdout(buf):
                 cmd_hybrid_search(ctx, ["zzzxxx_no_match"])
             self.assertIn("未找到", buf.getvalue())
+
+
+# ---------------------------------------------------------------------------
+# TestParseSearchArgs — extracted from cmd_hybrid_search
+# ---------------------------------------------------------------------------
+
+
+class TestParseSearchArgs(unittest.TestCase):
+    def test_basic_query(self):
+        opts = _parse_search_args(["my query"])
+        self.assertEqual(opts["query"], "my query")
+        self.assertEqual(opts["limit"], 10)
+        self.assertFalse(opts["fts_only"])
+        self.assertFalse(opts["output_json"])
+
+    def test_limit_flag(self):
+        opts = _parse_search_args(["q", "--limit", "25"])
+        self.assertEqual(opts["limit"], 25)
+
+    def test_fts_only_flag(self):
+        opts = _parse_search_args(["q", "--fts-only"])
+        self.assertTrue(opts["fts_only"])
+
+    def test_json_flag(self):
+        opts = _parse_search_args(["q", "--json"])
+        self.assertTrue(opts["output_json"])
+
+    def test_invalid_limit_uses_default(self):
+        opts = _parse_search_args(["q", "--limit", "notanumber"])
+        self.assertEqual(opts["limit"], 10)
+
+    def test_unknown_flag_ignored(self):
+        opts = _parse_search_args(["q", "--unknown"])
+        self.assertEqual(opts["query"], "q")
+
+
+# ---------------------------------------------------------------------------
+# TestFtsFileToRow — extracted from build_fts_index
+# ---------------------------------------------------------------------------
+
+
+class TestFtsFileToRow(unittest.TestCase):
+    def test_returns_tuple_for_valid_record(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            path = _make_error_record(root, "ERR-001")
+            row = _fts_file_to_row(path)
+            self.assertIsNotNone(row)
+            assert row is not None
+            self.assertEqual(row[0], "ERR-001")   # id
+            self.assertEqual(row[1], "testproj")  # project
+
+    def test_returns_none_for_file_without_frontmatter(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            path = root / "errors" / "empty.md"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("No frontmatter here\n", encoding="utf-8")
+            self.assertIsNone(_fts_file_to_row(path))
+
+    def test_content_field_contains_body_text(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            path = _make_error_record(root, "ERR-002", body="unique body phrase zeta")
+            row = _fts_file_to_row(path)
+            assert row is not None
+            self.assertIn("unique body phrase zeta", row[8])  # content column
+
+
+# ---------------------------------------------------------------------------
+# TestFtsFull Rebuild — extracted from build_fts_index
+# ---------------------------------------------------------------------------
+
+
+class TestFtsFullRebuild(unittest.TestCase):
+    def test_inserts_all_rows(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_ctx(root)
+            for i in range(3):
+                _make_error_record(root, f"ERR-{i:03d}")
+            all_files = sorted(ctx.errors_dir.glob("*.md"))
+            from agents_memory.services.search import _create_fts_schema, _open_fts_db, _fts_db_path
+            conn = _open_fts_db(_fts_db_path(ctx))
+            _create_fts_schema(conn)
+            count = _fts_full_rebuild(conn, all_files)
+            self.assertEqual(count, 3)
+            conn.close()
+
+
+# ---------------------------------------------------------------------------
+# TestGetVectorScores — extracted from hybrid_search
+# ---------------------------------------------------------------------------
+
+
+class TestGetVectorScores(unittest.TestCase):
+    def test_returns_empty_when_lancedb_unavailable(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_ctx(root)
+            with patch.dict("sys.modules", {"lancedb": None}):
+                scores = _get_vector_scores(ctx, "test query", 10)
+            self.assertEqual(scores, {})
+
+    def test_returns_empty_when_vector_dir_absent(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_ctx(root)
+            # vector_dir does not exist
+            scores = _get_vector_scores(ctx, "query", 5)
+            self.assertEqual(scores, {})
+
+
+# ---------------------------------------------------------------------------
+# TestMergeSearchResults — extracted from hybrid_search
+# ---------------------------------------------------------------------------
+
+
+class TestMergeSearchResults(unittest.TestCase):
+    def _fts_entry(self, doc_id: str, fts_score: float, date_str: str = "2020-01-01") -> dict:
+        return {
+            "id": doc_id, "project": "p", "category": "c", "domain": "d",
+            "severity": "P2", "status": "new", "date_str": date_str, "filepath": "",
+            "fts_score": fts_score,
+        }
+
+    def test_fts_only_score_used_when_no_vector(self):
+        fts_by_id = {"A": self._fts_entry("A", 0.8)}
+        results = _merge_search_results(fts_by_id, {}, FTS_SCORE_WEIGHT, VECTOR_SCORE_WEIGHT)
+        self.assertEqual(len(results), 1)
+        self.assertAlmostEqual(results[0]["combined_score"], 0.8)
+
+    def test_vector_only_score_used_when_no_fts(self):
+        results = _merge_search_results({}, {"B": 0.7}, FTS_SCORE_WEIGHT, VECTOR_SCORE_WEIGHT)
+        self.assertEqual(len(results), 1)
+        self.assertAlmostEqual(results[0]["combined_score"], 0.7)
+
+    def test_combined_score_when_both_present(self):
+        fts_by_id = {"C": self._fts_entry("C", 1.0)}
+        vector_by_id = {"C": 1.0}
+        results = _merge_search_results(fts_by_id, vector_by_id, FTS_SCORE_WEIGHT, VECTOR_SCORE_WEIGHT)
+        expected = 1.0 * FTS_SCORE_WEIGHT + 1.0 * VECTOR_SCORE_WEIGHT
+        self.assertAlmostEqual(results[0]["combined_score"], expected, places=4)
+
+    def test_recent_boost_applied(self):
+        from datetime import date
+        today = date.today().isoformat()
+        fts_by_id = {"D": self._fts_entry("D", 0.5, date_str=today)}
+        results = _merge_search_results(fts_by_id, {}, FTS_SCORE_WEIGHT, VECTOR_SCORE_WEIGHT)
+        self.assertAlmostEqual(results[0]["combined_score"], 0.5 + RECENT_BOOST, places=4)
+
+    def test_all_ids_are_represented(self):
+        fts_by_id = {"E": self._fts_entry("E", 0.6), "F": self._fts_entry("F", 0.4)}
+        vector_by_id = {"F": 0.9, "G": 0.3}
+        results = _merge_search_results(fts_by_id, vector_by_id, FTS_SCORE_WEIGHT, VECTOR_SCORE_WEIGHT)
+        ids = {r["id"] for r in results}
+        self.assertEqual(ids, {"E", "F", "G"})
 
 
 if __name__ == "__main__":

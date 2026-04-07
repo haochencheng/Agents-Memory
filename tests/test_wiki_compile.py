@@ -30,7 +30,9 @@ from agents_memory.services.wiki import (
     write_wiki_page,
 )
 from agents_memory.services.wiki_compile import (
+    _gather_relevant_errors,
     _parse_compile_args,
+    _write_wiki_compile_result,
     build_compile_prompt,
     cmd_wiki_compile,
     compile_wiki_topic,
@@ -644,6 +646,88 @@ class TestCompileWikiTopic(unittest.TestCase):
         ):
             result = cmd_wiki_compile(self.ctx, ["mock-topic"])
         self.assertEqual(result, 0)
+
+
+# ---------------------------------------------------------------------------
+# TestGatherRelevantErrors — extracted helper
+# ---------------------------------------------------------------------------
+
+
+class TestGatherRelevantErrors(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.ctx = _build_ctx(self.root)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _make_error(self, eid: str, content: str = "") -> None:
+        _write(
+            self.root / "errors" / f"{eid}.md",
+            f"---\nid: {eid}\ntitle: {content or eid}\ncategory: test\n---\n\n{content or eid}",
+        )
+
+    def test_returns_empty_when_scope_is_not_errors_or_all(self) -> None:
+        self._make_error("AME-001", "python float issue")
+        result = _gather_relevant_errors(self.ctx, "python", "wiki", 10)
+        self.assertEqual(result, [])
+
+    def test_returns_matching_records_by_topic_keyword(self) -> None:
+        self._make_error("AME-001", "python float precision")
+        self._make_error("AME-002", "network timeout unrelated")
+        result = _gather_relevant_errors(self.ctx, "python", "errors", 10)
+        ids = [r.get("id", "") for r in result]
+        self.assertIn("AME-001", ids)
+
+    def test_falls_back_to_recent_when_no_match(self) -> None:
+        self._make_error("AME-001", "network timeout")
+        self._make_error("AME-002", "database lock")
+        result = _gather_relevant_errors(self.ctx, "completely-unrelated-xyz", "errors", 10)
+        # Falls back to all recent records
+        self.assertEqual(len(result), 2)
+
+    def test_respects_recent_n_limit(self) -> None:
+        for i in range(5):
+            self._make_error(f"AME-{i:03d}", "python error")
+        result = _gather_relevant_errors(self.ctx, "python", "errors", 3)
+        self.assertLessEqual(len(result), 3)
+
+
+# ---------------------------------------------------------------------------
+# TestWriteWikiCompileResult — extracted helper
+# ---------------------------------------------------------------------------
+
+
+class TestWriteWikiCompileResult(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.ctx = _build_ctx(self.root)
+        # Create a minimal wiki page for the topic
+        _write(
+            self.root / "memory" / "wiki" / "test-topic.md",
+            "---\ntopic: test-topic\n---\n## 结论（Compiled Truth）\n\n> Old truth.",
+        )
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_returns_timeline_entry_and_path(self) -> None:
+        entry, path = _write_wiki_compile_result(self.ctx, "test-topic", "## New Truth\n\n> Updated.", 5)
+        self.assertIn("wiki-compile", entry)
+        self.assertIn("5", entry)
+        self.assertTrue(path.endswith(".md"))
+
+    def test_path_file_contains_new_truth(self) -> None:
+        _, path = _write_wiki_compile_result(self.ctx, "test-topic", "## New Truth\n\n> Synth.", 2)
+        content = Path(path).read_text(encoding="utf-8")
+        self.assertIn("Synth", content)
+
+    def test_timeline_entry_has_today_date(self) -> None:
+        from datetime import date
+        entry, _ = _write_wiki_compile_result(self.ctx, "test-topic", "some truth", 1)
+        self.assertIn(date.today().isoformat(), entry)
 
 
 if __name__ == "__main__":
