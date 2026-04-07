@@ -1,0 +1,490 @@
+"""Tests for agents_memory/web — FastAPI endpoints and renderer.
+
+All tests are offline — no real services, no network calls.
+Uses FastAPI TestClient (httpx-based) with tmp_path fixtures.
+
+Run:
+    pytest tests/test_web_api.py -v
+    pytest tests/test_web_api.py -v -k TestPhase1
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import textwrap
+import unittest
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _write(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _build_env(root: Path) -> None:
+    """Create minimal project layout in *root* for tests."""
+    # Templates (required by build_context bootstrap)
+    _write(root / "templates" / "index.example.md", "# Index\n")
+    _write(root / "templates" / "projects.example.md", "# Projects\n")
+    _write(root / "templates" / "rules.example.md", "# Rules\n")
+
+    # Wiki pages
+    _write(
+        root / "memory" / "wiki" / "auth-design.md",
+        textwrap.dedent("""\
+            ---
+            topic: auth-design
+            updated_at: 2026-03-01
+            tags: [auth, jwt]
+            ---
+
+            # Auth Design
+
+            JWT access tokens expire after 1 hour.
+            Refresh tokens are stored in HttpOnly cookies.
+        """),
+    )
+    _write(
+        root / "memory" / "wiki" / "synapse-architecture.md",
+        textwrap.dedent("""\
+            ---
+            topic: synapse-architecture
+            updated_at: 2026-04-01
+            tags: [backend, design]
+            ---
+
+            # Synapse Architecture
+
+            Microservices communicate via gRPC.
+        """),
+    )
+
+    # Error records
+    _write(
+        root / "errors" / "ERR-2026-0312-001.md",
+        textwrap.dedent("""\
+            ---
+            id: ERR-2026-0312-001
+            title: Token validation fails on refresh
+            status: open
+            project: synapse-network
+            severity: high
+            date: 2026-03-12
+            category: auth
+            domain: backend
+            ---
+
+            ## Problem
+            Refresh token silently rejected after Redis flush.
+        """),
+    )
+
+    # Rules file
+    _write(
+        root / "memory" / "rules.md",
+        "# Rules\n\nAlways write tests.\n",
+    )
+
+    # Ingest log
+    _write(
+        root / "memory" / "ingest_log.jsonl",
+        json.dumps({
+            "ts": "2026-04-07T10:00:00Z",
+            "source_type": "error_record",
+            "project": "synapse-network",
+            "id": "ERR-2026-0312-001",
+            "status": "ok",
+        }) + "\n",
+    )
+
+
+def _make_client(root: Path) -> TestClient:
+    """Set AGENTS_MEMORY_ROOT and return a fresh TestClient."""
+    os.environ["AGENTS_MEMORY_ROOT"] = str(root)
+    # Force reimport of api module so AppContext picks up new env var
+    import importlib
+    import agents_memory.web.api as api_mod
+    importlib.reload(api_mod)
+    return TestClient(api_mod.app)
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 — Core read endpoints
+# ---------------------------------------------------------------------------
+
+
+class TestPhase1(unittest.TestCase):
+    """GET /api/stats, /api/wiki, /api/wiki/:topic, /api/wiki/lint, /api/errors, /api/rules."""
+
+    def setUp(self) -> None:
+        import tempfile
+        self._tmpdir = tempfile.mkdtemp()
+        self._root = Path(self._tmpdir)
+        _build_env(self._root)
+        self._client = _make_client(self._root)
+
+    def tearDown(self) -> None:
+        import shutil
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def test_stats_returns_counts(self) -> None:
+        r = self._client.get("/api/stats")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertIn("wiki_count", data)
+        self.assertIn("error_count", data)
+        self.assertIn("ingest_count", data)
+        self.assertEqual(data["wiki_count"], 2)
+        self.assertEqual(data["error_count"], 1)
+
+    def test_stats_has_projects(self) -> None:
+        r = self._client.get("/api/stats")
+        data = r.json()
+        self.assertIsInstance(data["projects"], list)
+
+    def test_wiki_list_all_topics(self) -> None:
+        r = self._client.get("/api/wiki")
+        self.assertEqual(r.status_code, 200)
+        topics = r.json()["topics"]
+        slugs = [t["topic"] for t in topics]
+        self.assertIn("auth-design", slugs)
+        self.assertIn("synapse-architecture", slugs)
+
+    def test_wiki_list_has_required_fields(self) -> None:
+        r = self._client.get("/api/wiki")
+        for t in r.json()["topics"]:
+            self.assertIn("topic", t)
+            self.assertIn("title", t)
+            self.assertIn("word_count", t)
+            self.assertIsInstance(t["word_count"], int)
+
+    def test_wiki_detail_ok(self) -> None:
+        r = self._client.get("/api/wiki/auth-design")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertEqual(data["topic"], "auth-design")
+        self.assertIn("content_html", data)
+        self.assertTrue(len(data["content_html"]) > 0)
+        self.assertIn("<h1", data["content_html"])  # toc ext adds id attribute
+
+    def test_wiki_detail_not_found(self) -> None:
+        r = self._client.get("/api/wiki/nonexistent-topic-xyz")
+        self.assertEqual(r.status_code, 404)
+        self.assertIn("not found", r.json()["detail"].lower())
+
+    def test_wiki_detail_has_frontmatter(self) -> None:
+        r = self._client.get("/api/wiki/auth-design")
+        data = r.json()
+        self.assertIsInstance(data["frontmatter"], dict)
+        self.assertIn("updated_at", data["frontmatter"])
+
+    def test_wiki_lint_returns_list(self) -> None:
+        r = self._client.get("/api/wiki/lint")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertIn("issues", data)
+        self.assertIsInstance(data["issues"], list)
+        self.assertIn("total", data)
+
+    def test_wiki_lint_empty_dir(self) -> None:
+        """lint should work on empty wiki dir — not 500."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            empty_root = Path(td)
+            _write(empty_root / "templates" / "index.example.md", "")
+            _write(empty_root / "templates" / "projects.example.md", "")
+            _write(empty_root / "templates" / "rules.example.md", "")
+            client = _make_client(empty_root)
+            r = client.get("/api/wiki/lint")
+            self.assertEqual(r.status_code, 200)
+            data = r.json()
+            self.assertEqual(data["total"], 0)
+            self.assertEqual(data["issues"], [])
+
+    def test_errors_list_default(self) -> None:
+        r = self._client.get("/api/errors")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertIn("errors", data)
+        self.assertIsInstance(data["errors"], list)
+        self.assertGreaterEqual(len(data["errors"]), 1)
+
+    def test_errors_list_status_filter(self) -> None:
+        r = self._client.get("/api/errors?status=open")
+        self.assertEqual(r.status_code, 200)
+        for e in r.json()["errors"]:
+            self.assertEqual(e["status"], "open")
+
+    def test_errors_list_project_filter(self) -> None:
+        r = self._client.get("/api/errors?project=synapse-network")
+        self.assertEqual(r.status_code, 200)
+        errors = r.json()["errors"]
+        for e in errors:
+            self.assertEqual(e["project"], "synapse-network")
+
+    def test_errors_detail_ok(self) -> None:
+        r = self._client.get("/api/errors/ERR-2026-0312-001")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertEqual(data["id"], "ERR-2026-0312-001")
+        self.assertIn("content_html", data)
+        self.assertTrue(len(data["content_html"]) > 0)
+
+    def test_errors_detail_not_found(self) -> None:
+        r = self._client.get("/api/errors/ERR-9999-0000-999")
+        self.assertEqual(r.status_code, 404)
+
+    def test_rules_ok(self) -> None:
+        r = self._client.get("/api/rules")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertIn("raw", data)
+        self.assertIn("content_html", data)
+        self.assertTrue(len(data["raw"]) > 0)
+
+    def test_rules_missing_graceful(self) -> None:
+        """rules.md missing should not 500."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            empty_root = Path(td)
+            _write(empty_root / "templates" / "index.example.md", "")
+            _write(empty_root / "templates" / "projects.example.md", "")
+            _write(empty_root / "templates" / "rules.example.md", "")
+            client = _make_client(empty_root)
+            r = client.get("/api/rules")
+            self.assertEqual(r.status_code, 200)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — Search + write endpoints
+# ---------------------------------------------------------------------------
+
+
+class TestPhase2(unittest.TestCase):
+    """GET /api/search, POST /api/ingest, PUT /api/wiki/:topic, GET /api/ingest/log."""
+
+    def setUp(self) -> None:
+        import tempfile
+        self._tmpdir = tempfile.mkdtemp()
+        self._root = Path(self._tmpdir)
+        _build_env(self._root)
+        self._client = _make_client(self._root)
+
+    def tearDown(self) -> None:
+        import shutil
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def test_search_keyword_hits_wiki(self) -> None:
+        r = self._client.get("/api/search?q=jwt&mode=keyword")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertIn("results", data)
+        self.assertIsInstance(data["results"], list)
+        self.assertGreater(data["total"], 0)
+        ids = [x["id"] for x in data["results"]]
+        self.assertIn("auth-design", ids)
+
+    def test_search_hybrid_returns_results(self) -> None:
+        r = self._client.get("/api/search?q=architecture&mode=hybrid")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertIn("results", data)
+
+    def test_search_missing_q_returns_422(self) -> None:
+        r = self._client.get("/api/search")
+        self.assertEqual(r.status_code, 422)
+
+    def test_search_response_has_required_fields(self) -> None:
+        r = self._client.get("/api/search?q=test")
+        data = r.json()
+        self.assertIn("query", data)
+        self.assertIn("mode", data)
+        self.assertIn("results", data)
+        self.assertIn("total", data)
+
+    def test_ingest_dry_run(self) -> None:
+        payload = {
+            "content": "# Test Document\nThis is a test.",
+            "source_type": "error_record",
+            "project": "test-project",
+            "dry_run": True,
+        }
+        r = self._client.post("/api/ingest", json=payload)
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertTrue(data["dry_run"])
+        self.assertFalse(data["ingested"])
+        # dry_run should not create files
+        created = list(self._root.glob("errors/*.md"))
+        # Only the one we seeded in setUp
+        self.assertEqual(len(created), 1)
+
+    def test_ingest_creates_record(self) -> None:
+        payload = {
+            "content": "# New Error\nThis is a new error.",
+            "source_type": "error_record",
+            "project": "test-project",
+            "dry_run": False,
+        }
+        r = self._client.post("/api/ingest", json=payload)
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertTrue(data["ingested"])
+        self.assertNotEqual(data["id"], "")
+        # File should exist on disk
+        record_path = self._root / "errors" / f"{data['id']}.md"
+        self.assertTrue(record_path.exists())
+
+    def test_ingest_appends_log(self) -> None:
+        payload = {
+            "content": "# Log test\nContent.",
+            "source_type": "meeting",
+            "project": "proj-a",
+            "dry_run": False,
+        }
+        self._client.post("/api/ingest", json=payload)
+        log_path = self._root / "memory" / "ingest_log.jsonl"
+        lines = log_path.read_text().splitlines()
+        self.assertGreater(len(lines), 1)  # original + new
+
+    def test_wiki_put_compiled_truth(self) -> None:
+        payload = {"compiled_truth": "JWT tokens expire in 1 hour."}
+        r = self._client.put("/api/wiki/auth-design", json=payload)
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertTrue(data["updated"])
+        self.assertEqual(data["topic"], "auth-design")
+
+    def test_wiki_put_not_found(self) -> None:
+        payload = {"compiled_truth": "Some truth."}
+        r = self._client.put("/api/wiki/nonexistent-xyz", json=payload)
+        self.assertEqual(r.status_code, 404)
+
+    def test_ingest_log_returns_list(self) -> None:
+        r = self._client.get("/api/ingest/log")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertIn("entries", data)
+        self.assertIsInstance(data["entries"], list)
+        self.assertGreater(len(data["entries"]), 0)
+
+    def test_ingest_log_limit(self) -> None:
+        r = self._client.get("/api/ingest/log?limit=1")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertLessEqual(len(data["entries"]), 1)
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — Async task endpoints
+# ---------------------------------------------------------------------------
+
+
+class TestPhase3(unittest.TestCase):
+    """POST /api/wiki/:topic/compile, GET /api/tasks/:task_id."""
+
+    def setUp(self) -> None:
+        import tempfile
+        self._tmpdir = tempfile.mkdtemp()
+        self._root = Path(self._tmpdir)
+        _build_env(self._root)
+        self._client = _make_client(self._root)
+
+    def tearDown(self) -> None:
+        import shutil
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def test_compile_returns_202_and_task_id(self) -> None:
+        from unittest.mock import patch
+        with patch("agents_memory.services.wiki_compile.compile_wiki_topic", return_value={"ok": True}):
+            r = self._client.post("/api/wiki/auth-design/compile")
+        self.assertEqual(r.status_code, 202)
+        data = r.json()
+        self.assertIn("task_id", data)
+        self.assertNotEqual(data["task_id"], "")
+        self.assertIn(data["status"], ["pending", "running", "done", "failed"])
+
+    def test_compile_not_found_topic(self) -> None:
+        r = self._client.post("/api/wiki/nonexistent-xyz/compile")
+        self.assertEqual(r.status_code, 404)
+
+    def test_task_status_exists(self) -> None:
+        from unittest.mock import patch
+        with patch("agents_memory.services.wiki_compile.compile_wiki_topic", return_value={}):
+            r = self._client.post("/api/wiki/auth-design/compile")
+        task_id = r.json()["task_id"]
+
+        r2 = self._client.get(f"/api/tasks/{task_id}")
+        self.assertEqual(r2.status_code, 200)
+        data = r2.json()
+        self.assertEqual(data["task_id"], task_id)
+        self.assertIn(data["status"], ["pending", "running", "done", "failed"])
+
+    def test_task_not_found(self) -> None:
+        r = self._client.get("/api/tasks/nonexistent-task-id-xyz")
+        self.assertEqual(r.status_code, 404)
+
+
+# ---------------------------------------------------------------------------
+# Renderer unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestRenderer(unittest.TestCase):
+    """Unit tests for agents_memory/web/renderer.py."""
+
+    def setUp(self) -> None:
+        from agents_memory.web.renderer import md_to_html
+        self.md_to_html = md_to_html
+
+    def test_heading_converts_to_h1(self) -> None:
+        html = self.md_to_html("# Hello World")
+        self.assertIn("<h1", html)  # toc ext adds id attribute: <h1 id="hello-world">
+        self.assertIn("Hello World", html)
+
+    def test_code_block_renders(self) -> None:
+        html = self.md_to_html("```python\nx = 1\n```")
+        self.assertIn("<code>", html)
+
+    def test_xss_script_stripped(self) -> None:
+        html = self.md_to_html("<script>alert(1)</script>")
+        self.assertNotIn("<script>", html)
+        self.assertNotIn("alert(1)", html)
+
+    def test_xss_iframe_stripped(self) -> None:
+        html = self.md_to_html("<iframe src='evil.com'></iframe>")
+        self.assertNotIn("<iframe", html)
+
+    def test_xss_onclick_stripped(self) -> None:
+        html = self.md_to_html('<a onclick="evil()">click</a>')
+        self.assertNotIn("onclick", html)
+
+    def test_empty_string_returns_empty(self) -> None:
+        html = self.md_to_html("")
+        self.assertEqual(html, "")
+
+    def test_whitespace_returns_empty(self) -> None:
+        html = self.md_to_html("   \n\n  ")
+        self.assertEqual(html, "")
+
+    def test_table_renders(self) -> None:
+        md = "| A | B |\n|---|---|\n| 1 | 2 |"
+        html = self.md_to_html(md)
+        self.assertIn("<table>", html)
+
+    def test_link_renders(self) -> None:
+        html = self.md_to_html("[GitHub](https://github.com)")
+        self.assertIn("<a ", html)
+        self.assertIn("https://github.com", html)
+
+
+if __name__ == "__main__":
+    unittest.main()
