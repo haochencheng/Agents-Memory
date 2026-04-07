@@ -31,9 +31,9 @@ def _healthy_readme() -> str:
     return "\n".join(
         [
             "# Demo",
-            "安装与启动细节见 docs/getting-started.md",
-            "接入其他项目见 docs/integration.md",
-            "最新架构设计见 docs/ai-engineering-operating-system.md",
+            "安装与启动细节见 docs/guides/getting-started.md",
+            "接入其他项目见 docs/guides/integration.md",
+            "最新架构设计见 docs/product/ai-engineering-operating-system.md",
         ]
     )
 
@@ -55,7 +55,7 @@ def _write_open_source_files(root: Path, *, include_collaboration: bool = True) 
     _write_text(root / "LICENSE", "MIT\n")
     _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
     _write_text(
-        root / "docs" / "release-checklist.md",
+        root / "docs" / "ops" / "release-checklist.md",
         "# Release Checklist\n\n更新 CHANGELOG.md\n.github/workflows/ci.yml\nGit tag\nGitHub Release\n",
     )
     _write_text(
@@ -113,7 +113,7 @@ class DocsCheckTests(unittest.TestCase):
             root = Path(tmpdir)
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "docs" / "README.md", "- [Missing](missing.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
 
             findings = collect_docs_check_findings(root)
@@ -125,7 +125,7 @@ class DocsCheckTests(unittest.TestCase):
             root = Path(tmpdir)
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
 
             findings = collect_docs_check_findings(root)
@@ -137,13 +137,13 @@ class DocsCheckTests(unittest.TestCase):
             root = Path(tmpdir)
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             (root / "tests").mkdir(parents=True, exist_ok=True)
 
@@ -156,13 +156,13 @@ class DocsCheckTests(unittest.TestCase):
             root = Path(tmpdir)
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             (root / "tests").mkdir(parents=True, exist_ok=True)
 
@@ -175,13 +175,13 @@ class DocsCheckTests(unittest.TestCase):
             root = Path(tmpdir)
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_open_source_files(root, include_collaboration=False)
             (root / "tests").mkdir(parents=True, exist_ok=True)
@@ -195,13 +195,13 @@ class DocsCheckTests(unittest.TestCase):
             root = Path(tmpdir)
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_open_source_files(root)
             (root / "SECURITY.md").unlink()
@@ -218,17 +218,17 @@ class DocsCheckTests(unittest.TestCase):
             root = Path(tmpdir)
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_open_source_files(root)
             (root / "CHANGELOG.md").unlink()
-            (root / "docs" / "release-checklist.md").unlink()
+            (root / "docs" / "ops" / "release-checklist.md").unlink()
             (root / "tests").mkdir(parents=True, exist_ok=True)
 
             findings = collect_docs_check_findings(root)
@@ -240,16 +240,16 @@ class DocsCheckTests(unittest.TestCase):
             root = Path(tmpdir)
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_open_source_files(root)
-            _write_text(root / "docs" / "release-checklist.md", "# Release Checklist\n\n更新 CHANGELOG.md\n")
+            _write_text(root / "docs" / "ops" / "release-checklist.md", "# Release Checklist\n\n更新 CHANGELOG.md\n")
             (root / "tests").mkdir(parents=True, exist_ok=True)
 
             findings = collect_docs_check_findings(root)
@@ -261,13 +261,13 @@ class DocsCheckTests(unittest.TestCase):
             root = Path(tmpdir)
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_open_source_files(root)
             (root / ".github" / "workflows" / "ci.yml").unlink()
@@ -282,13 +282,13 @@ class DocsCheckTests(unittest.TestCase):
             root = Path(tmpdir)
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_open_source_files(root)
             _write_raw_text(root / ".github" / "workflows" / "ci.yml", "name: CI\nrun: python -m pip install .\n")
@@ -303,13 +303,13 @@ class DocsCheckTests(unittest.TestCase):
             root = Path(tmpdir)
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_open_source_files(root)
             _write_raw_text(
@@ -329,14 +329,14 @@ class DocsCheckTests(unittest.TestCase):
             path.write_text(_healthy_readme(), encoding="utf-8")
             _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
-            _write_text(root / "docs" / "ops.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "ops" / "runbook.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_text(root / "LICENSE", "MIT\n")
             _write_text(root / "pyproject.toml", "[project]\nname='demo'\n[project.urls]\nRepository = \"https://example.com/repo\"\nDocumentation = \"https://example.com/docs\"\nIssues = \"https://example.com/issues\"\n")
@@ -366,14 +366,14 @@ class DocsCheckTests(unittest.TestCase):
             _write_text(root / "README.md", "# Demo\n完整安装教程\n完整运维手册\n所有命令都写在这里\n")
             _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n- [Ops](ops.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
-            _write_text(root / "docs" / "ops.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "ops" / "runbook.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_text(root / "LICENSE", "MIT\n")
             _write_text(root / "pyproject.toml", "[project]\nname='demo'\n[project.urls]\nRepository = \"https://example.com/repo\"\nDocumentation = \"https://example.com/docs\"\nIssues = \"https://example.com/issues\"\n")
@@ -403,10 +403,10 @@ class DocsCheckTests(unittest.TestCase):
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n- [Ops](ops.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
-            _write_text(root / "docs" / "ops.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "ops" / "runbook.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
             _write_text(
-                root / "docs" / "ai-engineering-operating-system.md",
+                root / "docs" / "product" / "ai-engineering-operating-system.md",
                 "\n".join(
                     [
                         "# AI Engineering Operating System",
@@ -421,12 +421,12 @@ class DocsCheckTests(unittest.TestCase):
                     ]
                 ),
             )
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
             _write_text(
-                root / "docs" / "foundation-hardening.md",
+                root / "docs" / "ops" / "foundation-hardening.md",
                 "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n",
             )
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
@@ -458,14 +458,14 @@ class DocsCheckTests(unittest.TestCase):
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n- [Ops](ops.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
-            _write_text(root / "docs" / "ops.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
-            _write_text(root / "docs" / "architecture.md", "三层分级记忆\n关键词搜索\nQdrant\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "ops" / "runbook.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "三层分级记忆\n关键词搜索\nQdrant\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_text(root / "LICENSE", "MIT\n")
             _write_text(root / "pyproject.toml", "[project]\nname='demo'\n[project.urls]\nRepository = \"https://example.com/repo\"\nDocumentation = \"https://example.com/docs\"\nIssues = \"https://example.com/issues\"\n")
@@ -495,14 +495,14 @@ class DocsCheckTests(unittest.TestCase):
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n- [Ops](ops.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
-            _write_text(root / "docs" / "ops.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "新结构\n可插拔\nadapter\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "ops" / "runbook.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "新结构\n可插拔\nadapter\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_text(root / "LICENSE", "MIT\n")
             _write_text(root / "pyproject.toml", "[project]\nname='demo'\n[project.urls]\nRepository = \"https://example.com/repo\"\nDocumentation = \"https://example.com/docs\"\nIssues = \"https://example.com/issues\"\n")
@@ -532,14 +532,14 @@ class DocsCheckTests(unittest.TestCase):
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n- [Ops](ops.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "python3 scripts/memory.py new\n")
-            _write_text(root / "docs" / "ops.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "enable\nregister\nbridge\nMCP\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "python3 scripts/memory.py new\n")
+            _write_text(root / "docs" / "ops" / "runbook.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "enable\nregister\nbridge\nMCP\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_text(root / "LICENSE", "MIT\n")
             _write_text(root / "pyproject.toml", "[project]\nname='demo'\n[project.urls]\nRepository = \"https://example.com/repo\"\nDocumentation = \"https://example.com/docs\"\nIssues = \"https://example.com/issues\"\n")
@@ -569,14 +569,14 @@ class DocsCheckTests(unittest.TestCase):
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n- [Ops](ops.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "本仓库如何克隆、安装、启动\n目标项目如何接入 Agents-Memory\n本仓库首次安装与启动\n日常运维与故障处理\n")
-            _write_text(root / "docs" / "ops.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "enable\nregister\ndoctor\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "本仓库如何克隆、安装、启动\n目标项目如何接入 Agents-Memory\n本仓库首次安装与启动\n日常运维与故障处理\n")
+            _write_text(root / "docs" / "ops" / "runbook.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "enable\nregister\ndoctor\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_text(root / "LICENSE", "MIT\n")
             _write_text(root / "pyproject.toml", "[project]\nname='demo'\n[project.urls]\nRepository = \"https://example.com/repo\"\nDocumentation = \"https://example.com/docs\"\nIssues = \"https://example.com/issues\"\n")
@@ -606,14 +606,14 @@ class DocsCheckTests(unittest.TestCase):
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n- [Ops](ops.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "本仓库如何克隆、安装、启动\n目标项目如何接入 Agents-Memory\n本仓库首次安装与启动\n日常运维与故障处理\n")
-            _write_text(root / "docs" / "ops.md", "docker-compose up -d\nembed\nQdrant\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "本仓库如何克隆、安装、启动\n目标项目如何接入 Agents-Memory\n本仓库首次安装与启动\n日常运维与故障处理\n")
+            _write_text(root / "docs" / "ops" / "runbook.md", "docker-compose up -d\nembed\nQdrant\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_text(root / "LICENSE", "MIT\n")
             _write_text(root / "pyproject.toml", "[project]\nname='demo'\n[project.urls]\nRepository = \"https://example.com/repo\"\nDocumentation = \"https://example.com/docs\"\nIssues = \"https://example.com/issues\"\n")
@@ -643,14 +643,14 @@ class DocsCheckTests(unittest.TestCase):
             _write_text(root / "README.md", _healthy_readme())
             _write_text(root / "CONTRIBUTING.md", "# Contributing\n")
             _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n- [Ops](ops.md)\n")
-            _write_text(root / "docs" / "getting-started.md", "安装依赖\n启动服务\nQdrant\n")
-            _write_text(root / "docs" / "ops.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
-            _write_text(root / "docs" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
-            _write_text(root / "docs" / "architecture.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
-            _write_text(root / "docs" / "modular-architecture.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
-            _write_text(root / "docs" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
-            _write_text(root / "docs" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
-            _write_text(root / "docs" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
+            _write_text(root / "docs" / "guides" / "getting-started.md", "安装依赖\n启动服务\nQdrant\n")
+            _write_text(root / "docs" / "ops" / "runbook.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
+            _write_text(root / "docs" / "product" / "ai-engineering-operating-system.md", "Shared Engineering Brain\nMemory\nStandards\nPlanning\nValidation\n实施状态矩阵\n")
+            _write_text(root / "docs" / "architecture" / "overview.md", "仓库级实现决策与技术取舍\n不重复产品定位\nAI Engineering Operating System\n仓库实现 ADR\n")
+            _write_text(root / "docs" / "architecture" / "modular.md", "代码目录结构与模块分层\nruntime / services / commands / integrations\n为什么这样实现\n代码如何分层与扩展\n")
+            _write_text(root / "docs" / "guides" / "integration.md", "目标项目如何接入\n用户执行哪些命令\n如何验证是否生效\n外部项目如何接入与验证\n")
+            _write_text(root / "docs" / "guides" / "commands.md", "命令签名与参数形态\n命令参考\n外部项目接入流程\n本仓库本地启动与运维\n")
+            _write_text(root / "docs" / "ops" / "foundation-hardening.md", "Behavior change\n=> code change\n=> docs change\n=> test or validation change\n")
             _write_text(root / "llms.txt", "python3 scripts/memory.py new\n")
             _write_text(root / "LICENSE", "MIT\n")
             _write_text(root / "pyproject.toml", "[project]\nname='demo'\n[project.urls]\nRepository = \"https://example.com/repo\"\nDocumentation = \"https://example.com/docs\"\nIssues = \"https://example.com/issues\"\n")
@@ -679,9 +679,9 @@ class DocsCheckTests(unittest.TestCase):
             root = Path(tmpdir)
             ctx = self._build_context(root)
             _write_text(root / "README.md", _healthy_readme())
-            _write_text(root / "docs" / "README.md", "- [Getting Started](getting-started.md)\n- [Ops](ops.md)\n")
+            _write_text(root / "docs" / "README.md", "- [Getting Started](guides/getting-started.md)\n- [Ops](ops/runbook.md)\n")
             _write_text(
-                root / "docs" / "ai-engineering-operating-system.md",
+                root / "docs" / "product" / "ai-engineering-operating-system.md",
                 "\n".join(
                     [
                         "# AI Engineering Operating System",
@@ -695,7 +695,7 @@ class DocsCheckTests(unittest.TestCase):
                 ),
             )
             _write_text(
-                root / "docs" / "architecture.md",
+                root / "docs" / "architecture" / "overview.md",
                 "\n".join(
                     [
                         "仓库级实现决策与技术取舍",
@@ -706,7 +706,7 @@ class DocsCheckTests(unittest.TestCase):
                 ),
             )
             _write_text(
-                root / "docs" / "modular-architecture.md",
+                root / "docs" / "architecture" / "modular.md",
                 "\n".join(
                     [
                         "代码目录结构与模块分层",
@@ -717,7 +717,7 @@ class DocsCheckTests(unittest.TestCase):
                 ),
             )
             _write_text(
-                root / "docs" / "integration.md",
+                root / "docs" / "guides" / "integration.md",
                 "\n".join(
                     [
                         "目标项目如何接入",
@@ -728,7 +728,7 @@ class DocsCheckTests(unittest.TestCase):
                 ),
             )
             _write_text(
-                root / "docs" / "commands.md",
+                root / "docs" / "guides" / "commands.md",
                 "\n".join(
                     [
                         "命令签名与参数形态",
@@ -739,7 +739,7 @@ class DocsCheckTests(unittest.TestCase):
                 ),
             )
             _write_text(
-                root / "docs" / "foundation-hardening.md",
+                root / "docs" / "ops" / "foundation-hardening.md",
                 "\n".join(
                     [
                         "Behavior change",
@@ -750,7 +750,7 @@ class DocsCheckTests(unittest.TestCase):
                 ),
             )
             _write_text(
-                root / "docs" / "getting-started.md",
+                root / "docs" / "guides" / "getting-started.md",
                 "\n".join(
                     [
                         "本仓库如何克隆、安装、启动",
@@ -799,7 +799,7 @@ class DocsCheckTests(unittest.TestCase):
                     ]
                 ),
             )
-            _write_text(root / "docs" / "ops.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
+            _write_text(root / "docs" / "ops" / "runbook.md", "日常运维命令和例行维护\n日志、索引、Qdrant、备份、排障\n本仓库如何首次安装与启动\n外部项目接入流程\n")
             _write_text(
                 root / "llms.txt",
                 "\n".join(

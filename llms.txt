@@ -85,18 +85,27 @@ Agents-Memory/
 │   └── mcp.example.json            # public-safe VS Code MCP example
 │
 ├── docs/
-│   ├── README.md                   # 文档入口
-│   ├── commands.md                 # CLI 全量命令总表与推荐入口
-│   ├── getting-started.md          # first-run and activation workflow
-│   ├── integration.md              # target project integration and enable workflow
-│   ├── copilot-auto-activation.md  # Copilot 自动激活设计
-│   ├── ai-engineering-operating-system.md # product/system framing
-│   ├── foundation-hardening.md     # hardening and guardrail notes
-│   ├── modular-architecture.md     # 模块化与插件化结构
-│   ├── architecture.md             # 架构决策记录（ADR-001 ~ ADR-006）
-│   ├── ops.md                      # 运维手册：CLI 用法 / MCP / 向量搜索 / Docker
-│   ├── stale-cleanup.md            # stale artifact cleanup guidance
-│   └── plans/                      # generated planning / onboarding / refactor bundles
+│   ├── README.md                   # 文档导航总览
+│   ├── product/
+│   │   └── ai-engineering-operating-system.md  # 产品定位与系统基线
+│   ├── architecture/
+│   │   ├── overview.md             # 架构决策记录（ADR-001~ADR-006）
+│   │   ├── modular.md              # 代码分层与插件扩展点
+│   │   └── analysis.md             # 架构分析与优化报告
+│   ├── guides/
+│   │   ├── getting-started.md      # first-run and activation workflow
+│   │   ├── integration.md          # target project integration and enable workflow
+│   │   ├── commands.md             # CLI 全量命令总表与推荐入口
+│   │   ├── model-selection.md      # 本地模型选型指南
+│   │   └── copilot-auto-activation.md  # Copilot 自动激活设计
+│   ├── ops/
+│   │   ├── runbook.md              # 运维手册：CLI / MCP / 向量搜索 / Docker
+│   │   ├── release-checklist.md    # 发版检查清单
+│   │   ├── foundation-hardening.md # hardening and guardrail notes
+│   │   └── stale-cleanup.md        # stale artifact cleanup guidance
+│   ├── frontend/                   # 前端设计文档（tech stack / arch / API / plans）
+│   ├── plans/                      # generated planning / onboarding / refactor bundles
+│   └── maintenance/                # bug fix and refactor records
 │
 ├── tests/                          # unittest regression suite
 │   ├── test_docs_check.py

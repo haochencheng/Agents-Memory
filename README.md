@@ -16,7 +16,7 @@ doc_status: active
 [![Release](https://img.shields.io/github/v/release/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/releases)
 [![CI](https://github.com/haochencheng/Agents-Memory/actions/workflows/ci.yml/badge.svg)](https://github.com/haochencheng/Agents-Memory/actions/workflows/ci.yml)
 [![Changelog](https://img.shields.io/badge/changelog-managed-0A7EA4)](CHANGELOG.md)
-[![Release Checklist](https://img.shields.io/badge/release-checklist-reviewed-2F855A)](docs/release-checklist.md)
+[![Release Checklist](https://img.shields.io/badge/release-checklist-reviewed-2F855A)](docs/ops/release-checklist.md)
 [![Contributors](https://img.shields.io/github/contributors/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/graphs/contributors)
 [![Last Commit](https://img.shields.io/github/last-commit/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory/commits/main)
 [![Repo Size](https://img.shields.io/github/repo-size/haochencheng/Agents-Memory)](https://github.com/haochencheng/Agents-Memory)
@@ -249,20 +249,20 @@ bash scripts/web-start.sh start   # FastAPI :10100, Streamlit :10000
 
 1. [CI](https://github.com/haochencheng/Agents-Memory/actions/workflows/ci.yml) is public and mirrors the local install, compile, test, and docs-check path.
 2. CI is split into `tests` and `docs` jobs for clearer branch protection.
-3. [CHANGELOG.md](CHANGELOG.md) and [docs/release-checklist.md](docs/release-checklist.md) govern public release execution.
+3. [CHANGELOG.md](CHANGELOG.md) and [docs/ops/release-checklist.md](docs/ops/release-checklist.md) govern public release execution.
 4. [SECURITY.md](SECURITY.md), [SUPPORT.md](SUPPORT.md), and [CONTRIBUTING.md](CONTRIBUTING.md) define collaboration paths up front.
 
 ### Documentation
 
 | Doc | Purpose |
 | --- | --- |
-| [docs/getting-started.md](docs/getting-started.md) | Local install, startup, and baseline verification |
-| [docs/integration.md](docs/integration.md) | How another repo integrates Agents-Memory |
-| [docs/commands.md](docs/commands.md) | CLI command map and parameter reference |
-| [docs/ops.md](docs/ops.md) | Operations, recovery, and troubleshooting |
-| [docs/architecture.md](docs/architecture.md) | Repo-level ADRs and technical decisions |
-| [docs/modular-architecture.md](docs/modular-architecture.md) | Code layering, agent adapters, extension points |
-| [docs/ai-engineering-operating-system.md](docs/ai-engineering-operating-system.md) | Full product baseline and implementation status |
+| [docs/guides/getting-started.md](docs/guides/getting-started.md) | Local install, startup, and baseline verification |
+| [docs/guides/integration.md](docs/guides/integration.md) | How another repo integrates Agents-Memory |
+| [docs/guides/commands.md](docs/guides/commands.md) | CLI command map and parameter reference |
+| [docs/ops/runbook.md](docs/ops/runbook.md) | Operations, recovery, and troubleshooting |
+| [docs/architecture/overview.md](docs/architecture/overview.md) | Repo-level ADRs and technical decisions |
+| [docs/architecture/modular.md](docs/architecture/modular.md) | Code layering, agent adapters, extension points |
+| [docs/product/ai-engineering-operating-system.md](docs/product/ai-engineering-operating-system.md) | Full product baseline and implementation status |
 
 Full documentation map: [docs/README.md](docs/README.md)
 
@@ -286,7 +286,7 @@ The repository uses public examples under `templates/` so real project context, 
 
 Before shipping behavior changes, update code, matching docs, and matching tests or validation scripts together.
 
-Contribution guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md). Pull requests should follow [PULL_REQUEST_TEMPLATE.md](PULL_REQUEST_TEMPLATE.md). Community expectations live in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Security issues should follow [SECURITY.md](SECURITY.md). Support paths are listed in [SUPPORT.md](SUPPORT.md). Releases should update [CHANGELOG.md](CHANGELOG.md) and [docs/release-checklist.md](docs/release-checklist.md).
+Contribution guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md). Pull requests should follow [PULL_REQUEST_TEMPLATE.md](PULL_REQUEST_TEMPLATE.md). Community expectations live in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Security issues should follow [SECURITY.md](SECURITY.md). Support paths are listed in [SUPPORT.md](SUPPORT.md). Releases should update [CHANGELOG.md](CHANGELOG.md) and [docs/ops/release-checklist.md](docs/ops/release-checklist.md).
 
 [Back to top](#top)
 
@@ -516,26 +516,26 @@ bash scripts/web-start.sh start   # FastAPI :10100，Streamlit :10000
 
 1. [CI](https://github.com/haochencheng/Agents-Memory/actions/workflows/ci.yml) 是公开的，执行的就是本地会跑的安装、编译、测试和 `docs-check`。
 2. CI 已拆成独立的 `tests` 和 `docs` jobs，便于 branch protection 单独要求通过。
-3. [CHANGELOG.md](CHANGELOG.md) 和 [docs/release-checklist.md](docs/release-checklist.md) 共同约束公开发版流程。
+3. [CHANGELOG.md](CHANGELOG.md) 和 [docs/ops/release-checklist.md](docs/ops/release-checklist.md) 共同约束公开发版流程。
 4. [SECURITY.md](SECURITY.md)、[SUPPORT.md](SUPPORT.md) 和 [CONTRIBUTING.md](CONTRIBUTING.md) 让协作路径在首页即可追溯。
 
 ### 文档入口
 
 | 文档 | 说明 |
 | --- | --- |
-| [docs/getting-started.md](docs/getting-started.md) | 首次安装、启动、基础验证 |
-| [docs/integration.md](docs/integration.md) | 目标项目如何接入 Agents-Memory |
-| [docs/commands.md](docs/commands.md) | CLI 命令总表与参数参考 |
-| [docs/ops.md](docs/ops.md) | 日常运维、恢复与排障 |
-| [docs/architecture.md](docs/architecture.md) | 仓库级 ADR 与技术决策 |
-| [docs/modular-architecture.md](docs/modular-architecture.md) | 代码分层、agent adapter 扩展点 |
-| [docs/ai-engineering-operating-system.md](docs/ai-engineering-operating-system.md) | 完整产品基线与实施状态矩阵 |
+| [docs/guides/getting-started.md](docs/guides/getting-started.md) | 首次安装、启动、基础验证 |
+| [docs/guides/integration.md](docs/guides/integration.md) | 目标项目如何接入 Agents-Memory |
+| [docs/guides/commands.md](docs/guides/commands.md) | CLI 命令总表与参数参考 |
+| [docs/ops/runbook.md](docs/ops/runbook.md) | 日常运维、恢复与排障 |
+| [docs/architecture/overview.md](docs/architecture/overview.md) | 仓库级 ADR 与技术决策 |
+| [docs/architecture/modular.md](docs/architecture/modular.md) | 代码分层、agent adapter 扩展点 |
+| [docs/product/ai-engineering-operating-system.md](docs/product/ai-engineering-operating-system.md) | 完整产品基线与实施状态矩阵 |
 
 完整文档地图见 [docs/README.md](docs/README.md)。
 
-最新架构设计见 docs/ai-engineering-operating-system.md。
-安装与启动细节见 docs/getting-started.md。
-接入其他项目见 docs/integration.md。
+最新架构设计见 docs/product/ai-engineering-operating-system.md。
+安装与启动细节见 docs/guides/getting-started.md。
+接入其他项目见 docs/guides/integration.md。
 
 公开仓库只包含代码、模板、标准、profiles 和文档。以下内容属于本地运行数据，**默认不应提交**：
 
@@ -555,7 +555,7 @@ vectors/
 
 提交行为变更前，请同步更新代码、对应文档以及对应测试或验证脚本。
 
-贡献说明见 [CONTRIBUTING.md](CONTRIBUTING.md)。提交合并请求时请按 [PULL_REQUEST_TEMPLATE.md](PULL_REQUEST_TEMPLATE.md) 补齐验证信息；协作行为遵循 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)；安全问题请按 [SECURITY.md](SECURITY.md) 私下报告；支持入口见 [SUPPORT.md](SUPPORT.md)；发布时同步维护 [CHANGELOG.md](CHANGELOG.md) 和 [docs/release-checklist.md](docs/release-checklist.md)。
+贡献说明见 [CONTRIBUTING.md](CONTRIBUTING.md)。提交合并请求时请按 [PULL_REQUEST_TEMPLATE.md](PULL_REQUEST_TEMPLATE.md) 补齐验证信息；协作行为遵循 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)；安全问题请按 [SECURITY.md](SECURITY.md) 私下报告；支持入口见 [SUPPORT.md](SUPPORT.md)；发布时同步维护 [CHANGELOG.md](CHANGELOG.md) 和 [docs/ops/release-checklist.md](docs/ops/release-checklist.md)。
 
 [返回顶部](#top)
 

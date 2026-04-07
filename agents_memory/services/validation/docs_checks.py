@@ -72,7 +72,7 @@ AI_OS_LEGACY_SECTION_MARKERS = [
 
 README_FILE = "README.md"
 DOCS_DIR = "docs"
-GETTING_STARTED_FILE = "getting-started.md"
+GETTING_STARTED_FILE = "guides/getting-started.md"
 LLMS_FILE = "llms.txt"
 TESTS_DIR = "tests"
 LICENSE_FILE = "LICENSE"
@@ -94,26 +94,26 @@ DOC_FRONT_MATTER_PATTERN = re.compile(r"\A---\n(?P<body>.*?)\n---\n", re.DOTALL)
 CONTRACT_REQUIREMENTS = {
     "open_source_readme": {
         "path": Path(README_FILE),
-        "phrases": ["安装与启动细节见 docs/getting-started.md", "接入其他项目见 docs/integration.md", "最新架构设计见 docs/ai-engineering-operating-system.md"],
+        "phrases": ["安装与启动细节见 docs/guides/getting-started.md", "接入其他项目见 docs/guides/integration.md", "最新架构设计见 docs/product/ai-engineering-operating-system.md"],
     },
     "engineering_brain": {
-        "path": Path(DOCS_DIR) / "ai-engineering-operating-system.md",
+        "path": Path(DOCS_DIR) / "product" / "ai-engineering-operating-system.md",
         "phrases": ["Shared Engineering Brain", "Memory", "Standards", "Planning", "Validation", "实施状态矩阵"],
     },
     "repo_architecture": {
-        "path": Path(DOCS_DIR) / "architecture.md",
+        "path": Path(DOCS_DIR) / "architecture" / "overview.md",
         "phrases": ["仓库级实现决策与技术取舍", "不重复产品定位", "AI Engineering Operating System", "仓库实现 ADR"],
     },
     "modular_architecture": {
-        "path": Path(DOCS_DIR) / "modular-architecture.md",
+        "path": Path(DOCS_DIR) / "architecture" / "modular.md",
         "phrases": ["代码目录结构与模块分层", "runtime / services / commands / integrations", "为什么这样实现", "代码如何分层与扩展"],
     },
     "integration_flow": {
-        "path": Path(DOCS_DIR) / "integration.md",
+        "path": Path(DOCS_DIR) / "guides" / "integration.md",
         "phrases": ["目标项目如何接入", "用户执行哪些命令", "如何验证是否生效", "外部项目如何接入与验证"],
     },
     "commands_reference": {
-        "path": Path(DOCS_DIR) / "commands.md",
+        "path": Path(DOCS_DIR) / "guides" / "commands.md",
         "phrases": ["命令签名与参数形态", "命令参考", "外部项目接入流程", "本仓库本地启动与运维"],
     },
     "local_getting_started": {
@@ -121,11 +121,11 @@ CONTRACT_REQUIREMENTS = {
         "phrases": ["本仓库如何克隆、安装、启动", "目标项目如何接入 Agents-Memory", "本仓库首次安装与启动", "日常运维与故障处理"],
     },
     "ops_runbook": {
-        "path": Path(DOCS_DIR) / "ops.md",
+        "path": Path(DOCS_DIR) / "ops" / "runbook.md",
         "phrases": ["日常运维命令和例行维护", "日志、索引、Qdrant、备份、排障", "本仓库如何首次安装与启动", "外部项目接入流程"],
     },
     "foundation_hardening": {
-        "path": Path(DOCS_DIR) / "foundation-hardening.md",
+        "path": Path(DOCS_DIR) / "ops" / "foundation-hardening.md",
         "phrases": ["Behavior change", "=> code change", "=> docs change", "=> test or validation change"],
     },
 }
@@ -195,7 +195,7 @@ OPEN_SOURCE_RELEASE_CHECKLIST_PHRASES = [
 
 GITHUB_DIR = Path(".github")
 CI_WORKFLOW_PATH = GITHUB_DIR / "workflows" / "ci.yml"
-RELEASE_CHECKLIST_PATH = Path(DOCS_DIR) / "release-checklist.md"
+RELEASE_CHECKLIST_PATH = Path(DOCS_DIR) / "ops" / "release-checklist.md"
 
 OPEN_SOURCE_REQUIRED_FILES = [
     Path("CHANGELOG.md"),
@@ -552,7 +552,7 @@ def _collect_contract_findings(project_root: Path) -> list[ValidationFinding]:
 
 
 def _collect_ai_os_structure_findings(project_root: Path) -> list[ValidationFinding]:
-    path = project_root / DOCS_DIR / "ai-engineering-operating-system.md"
+    path = project_root / DOCS_DIR / "product" / "ai-engineering-operating-system.md"
     text = _read_if_exists(path)
     if not text:
         return []
