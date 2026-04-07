@@ -1,13 +1,143 @@
 ---
-title: Phase 1 — Wiki Compiled Truth + Timeline 格式升级 & wiki-compile 命令
-status: in-progress
+title: "Phase 1: Wiki Compiled Truth / Timeline + wiki-compile"
+status: completed
 created_at: 2026-04-07
 updated_at: 2026-04-07
 scope: agents_memory/services/wiki.py, agents_memory/services/wiki_compile.py, agents_memory/commands/wiki.py, agents_memory/mcp_app.py
 tests: tests/test_wiki_service.py, tests/test_wiki_compile.py
 ---
 
-# Phase 1 实施计划
+# Phase 1 — Wiki Compiled Truth / Timeline 格式升级 + wiki-compile
+
+## 设计目标
+
+借鉴 GBrain 的 **compiled truth + timeline 双区架构**，让每个 Wiki 页面同时支持：
+
+1. **Compiled Truth 区**（LLM 维护，可整体重写）— 综合结论、已知 Pattern
+2. **Timeline 区**（Append-only，只追加不修改）— 时间戳事件记录
+
+`wiki-compile` 命令调用 LLM （Anthropic/OpenAI/Ollama）自动从 `errors/` 记录提炼知识，写入 wiki 页面的 compiled_truth 区。
+
+---
+
+## Wiki 页面格式（v2）
+
+```markdown
+---
+topic: finance-safety
+created_at: 2026-04-07
+updated_at: 2026-04-07
+compiled_at: 2026-04-07
+confidence: high
+sources: [AME-001, AME-007]
+links:
+  - topic: smart-contract-errors
+    context: "Reentrancy 与 finance-safety 有重叠"
+---
+
+## 结论（Compiled Truth）
+
+> 最新综合评估：...
+
+- 已知 Pattern A
+- 已知 Pattern B
+
+---
+
+## 时间线
+
+- 2026-04-07 [错误记录] 发现重入攻击漏洞
+- 2026-03-01 [PR] 关闭安全审查 PR#42
+```
+
+**关键约束：**
+- `---` 分隔线将 compiled_truth 区和 timeline 区隔离
+- `## 时间线` 标题必须存在
+- Timeline 条目按时间逆序排列（最新在最前）
+- Compiled truth 可被 LLM 整体覆写； timeline 只追加不修改
+
+---
+
+## 实现清单
+
+### `agents_memory/services/wiki.py`
+
+| 函数 | 作用 |
+|------|------|
+| `parse_wiki_sections(content)` | 解析页面为 `{frontmatter_str, compiled_truth, timeline}` |
+| `build_compiled_page(topic, compiled_truth, timeline, *, existing_frontmatter)` | 用三部分重建完整页面 |
+| `append_timeline_entry(wiki_dir, topic, entry)` | 首插追加（最新在最前），不存则创建 |
+| `update_compiled_truth(wiki_dir, topic, new_truth)` | 只重写 compiled_truth 区，保留 timeline |
+
+### `agents_memory/services/wiki_compile.py`（新文件）
+
+| 函数 | 作用 |
+|------|------|
+| `_call_llm(prompt, *, provider, model)` | 路由到 `_call_llm_anthropic/openai/ollama` |
+| `build_compile_prompt(topic, current_truth, error_summaries)` | 构建 synthesis prompt |
+| `compile_wiki_topic(ctx, topic, *, recent_n, scope, provider, model, dry_run)` | 读 errors → LLM → 更新 wiki |
+| `cmd_wiki_compile(ctx, args)` | CLI 入口 |
+
+**LLM Provider 选择：**
+
+| 环境变量 | 默认层级 | 说明 |
+|----------|---------|------|
+| `AMEM_LLM_PROVIDER` | `anthropic` | `anthropic` \| `openai` \| `ollama` |
+| `AMEM_LLM_MODEL` | 按 provider 默认 | `claude-sonnet-4-5` / `gpt-4o-mini` / `qwen2.5:7b` |
+| `ANTHROPIC_API_KEY` | — | anthropic 必须 |
+| `OPENAI_API_KEY` | — | openai 必须 |
+| `OLLAMA_HOST` | `http://localhost:11434` | ollama 地址 |
+
+### `agents_memory/commands/wiki.py`
+
+注册命令：`wiki-compile`
+
+### `agents_memory/mcp_app.py`
+
+```python
+@mcp.tool()
+def memory_wiki_compile(
+    topic: str,
+    scope: str = "errors",
+    recent_n: int = 20,
+    dry_run: bool = False,
+) -> str: ...
+```
+
+---
+
+## CLI 参考
+
+```bash
+amem wiki-compile <topic>
+  [--scope errors|all]     # 来源范围
+  [--recent-n 20]          # 参考最近 N 条错误记录
+  [--provider anthropic|openai|ollama]
+  [--model <name>]
+  [--dry-run]              # 预览，不写入
+```
+
+---
+
+## 测试覆盖
+
+文件：`tests/test_wiki_compile.py`（52 个测试）
+
+| 测试类 | 覆盖内容 |
+|---------|----------|
+| `TestParseWikiSections` | 分区解析、缺失分区处理 |
+| `TestBuildCompiledPage` | 页面重建、frontmatter 守护 |
+| `TestAppendTimelineEntry` | 首插追加、分区创建 |
+| `TestUpdateCompiledTruth` | 只改 compiled_truth，保持 timeline |
+| `TestBuildCompilePrompt` | Prompt 构建内容校验 |
+| `TestCompileWikiTopic` | LLM mock， dry_run / 写入路径 |
+
+---
+
+## 状态
+
+✅ 已实现并测试通过。291 个全局测试 OK。
+
 
 ## 目标
 

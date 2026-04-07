@@ -268,21 +268,6 @@ def _collect_keyword_matches(errors_dir: Path, keyword: str, limit: int) -> list
 
 
 @mcp.tool()
-def memory_search(query: str, limit: int = 5) -> str:
-    # Search error records by keyword and return a summary of matches.
-    _log_tool_start("memory_search", query=query, limit=limit)
-    matches = _collect_keyword_matches(ctx.errors_dir, query.lower(), limit)
-    if not matches:
-        _log_tool_end("memory_search", status="no_matches", query=query)
-        return f"No error records matching '{query}'."
-    lines = [f"Found {len(matches)} match(es) for '{query}':\n"]
-    for match in matches:
-        lines.append(f"• {match.get('id', '')}  [{match.get('severity', '')}]  {match.get('project', '')} / {match.get('category', '')}  → status: {match.get('status', '')}")
-    _log_tool_end("memory_search", status="ok", query=query, matches=len(matches))
-    return "\n".join(lines)
-
-
-@mcp.tool()
 def memory_get_error(record_id: str) -> str:
     _log_tool_start("memory_get_error", record_id=record_id)
     for filepath in ctx.errors_dir.glob("*.md"):
