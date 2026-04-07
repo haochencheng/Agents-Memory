@@ -34,3 +34,4 @@ venv/
 
 # MacOS
 .DS_Store
+.coverage
