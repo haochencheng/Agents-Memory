@@ -20,6 +20,7 @@ from agents_memory.services.projects import parse_projects
 from agents_memory.services.records import cmd_update_index, parse_frontmatter
 from agents_memory.services.validation import collect_refactor_watch_hotspots, serialize_refactor_hotspot
 from agents_memory.services.wiki import list_wiki_topics, search_wiki, write_wiki_page
+from agents_memory.services.wiki_compile import compile_wiki_topic
 
 ctx = build_context(logger_name="agents_memory.mcp", reference_file=__file__)
 
@@ -466,6 +467,44 @@ def memory_wiki_update(topic: str, content: str, source: str = "") -> str:
     log_file_update(ctx.logger, action="wiki_update", path=path, detail=f"topic={topic}")
     _log_tool_end("memory_wiki_update", status="ok", topic=topic)
     return f"✅ Wiki page updated: {path}\nTopic: {topic}"
+
+
+@mcp.tool()
+def memory_wiki_compile(
+    topic: str,
+    scope: str = "errors",
+    recent_n: int = 20,
+    dry_run: bool = False,
+) -> str:
+    """Synthesise a wiki page's compiled_truth from recent error records using an LLM.
+
+    Reads up to *recent_n* error records relevant to *topic*, calls the configured
+    LLM (AMEM_LLM_PROVIDER / AMEM_LLM_MODEL env vars), updates the compiled_truth
+    section of the wiki page, and appends a timeline entry.
+
+    Use ``dry_run=True`` to preview without writing.
+
+    Args:
+        topic:     Wiki topic to compile (must already exist or will be created).
+        scope:     Source scope — "errors" (default) or "all".
+        recent_n:  Maximum number of error records to include in synthesis.
+        dry_run:   If True, return a preview without writing to disk.
+    """
+    import json as _json
+    _log_tool_start("memory_wiki_compile", topic=topic, scope=scope, recent_n=recent_n, dry_run=dry_run)
+    try:
+        result = compile_wiki_topic(
+            ctx,
+            topic,
+            recent_n=recent_n,
+            scope=scope,
+            dry_run=dry_run,
+        )
+    except RuntimeError as exc:
+        _log_tool_end("memory_wiki_compile", status="error", topic=topic)
+        return f"❌ LLM 调用失败: {exc}"
+    _log_tool_end("memory_wiki_compile", status=result["status"], topic=topic, error_count=result["error_count"])
+    return _json.dumps(result, ensure_ascii=False, indent=2)
 
 
 def main() -> None:
