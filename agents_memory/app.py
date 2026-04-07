@@ -4,9 +4,11 @@ import sys
 from collections.abc import Callable
 
 from agents_memory.commands import integration as integration_commands
+from agents_memory.commands import ingest as ingest_commands
 from agents_memory.commands import planning as planning_commands
 from agents_memory.commands import profiles as profile_commands
 from agents_memory.commands import records as record_commands
+from agents_memory.commands import search as search_commands
 from agents_memory.commands import validation as validation_commands
 from agents_memory.commands import vector as vector_commands
 from agents_memory.commands import wiki as wiki_commands
@@ -78,7 +80,9 @@ def command_registry() -> dict[str, Callable]:
     registry.update(record_commands.register())
     registry.update(vector_commands.register())
     registry.update(integration_commands.register())
+    registry.update(ingest_commands.register())
     registry.update(planning_commands.register())
+    registry.update(search_commands.register())
     registry.update(profile_commands.register())
     registry.update(validation_commands.register())
     registry.update(workflow_commands.register())

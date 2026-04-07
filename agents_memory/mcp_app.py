@@ -507,5 +507,135 @@ def memory_wiki_compile(
     return _json.dumps(result, ensure_ascii=False, indent=2)
 
 
+@mcp.tool()
+def memory_wiki_lint(check: str = "all") -> str:
+    """Lint all wiki pages for structural issues.
+
+    Checks for missing frontmatter fields, broken cross-links, and missing
+    compiled_truth sections.
+
+    Args:
+        check: Scope of lint checks. Currently only "all" is supported.
+    """
+    import io as _io
+    import contextlib as _contextlib
+    from agents_memory.services.wiki import cmd_wiki_lint
+
+    _log_tool_start("memory_wiki_lint", check=check)
+    buf = _io.StringIO()
+    with _contextlib.redirect_stdout(buf):
+        exit_code = cmd_wiki_lint(ctx, [f"--check={check}"] if check != "all" else [])
+    output = buf.getvalue()
+    _log_tool_end("memory_wiki_lint", status="ok" if exit_code == 0 else "warnings")
+    return output or "✅ Wiki lint 通过：未发现问题。"
+
+
+@mcp.tool()
+def memory_search(query: str, limit: int = 10, mode: str = "hybrid") -> str:
+    """Search error records using hybrid FTS + vector ranking.
+
+    Automatically rebuilds the FTS index when stale.
+    Falls back gracefully when vector index is unavailable.
+
+    Args:
+        query: Natural-language or keyword search query.
+        limit: Maximum number of results to return (default 10).
+        mode:  "hybrid" (FTS+vector, default), "fts" (text only), "vector" (semantic only).
+    """
+    import json as _json
+    from agents_memory.services.search import hybrid_search, search_fts
+    from agents_memory.services.vector import cmd_vsearch
+
+    _log_tool_start("memory_search", query=query, limit=limit, mode=mode)
+    try:
+        if mode == "fts":
+            results = search_fts(ctx, query, limit=limit)
+        elif mode == "vector":
+            import io as _io
+            import contextlib as _contextlib
+            buf = _io.StringIO()
+            with _contextlib.redirect_stdout(buf):
+                cmd_vsearch(ctx, query, top_k=limit)
+            _log_tool_end("memory_search", status="ok", mode=mode)
+            return buf.getvalue()
+        else:
+            results = hybrid_search(ctx, query, limit=limit)
+    except Exception as exc:  # noqa: BLE001
+        _log_tool_end("memory_search", status="error")
+        return f"❌ 搜索失败: {exc}"
+
+    _log_tool_end("memory_search", status="ok", mode=mode, result_count=len(results))
+    if not results:
+        return f"未找到匹配 '{query}' 的记录。\n提示: 先运行 amem fts-index 或 amem embed 构建索引。"
+    return _json.dumps(results, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+def memory_ingest(
+    content: str,
+    source_type: str,
+    source_ref: str = "",
+    project: str = "",
+    dry_run: bool = False,
+) -> str:
+    """Ingest a document (PR, meeting notes, decision, code review) into the memory system.
+
+    Extracts insights via LLM, updates relevant wiki pages, appends timeline entries,
+    and logs the event to memory/ingest_log.jsonl.
+
+    Args:
+        content:     Full text of the document to ingest.
+        source_type: One of: pr-review, meeting, decision, code-review.
+        source_ref:  Human-readable reference (e.g. "PR #123", "meeting 2024-01-15").
+        project:     Optional project tag to associate with this ingest event.
+        dry_run:     If True, preview without writing to disk.
+    """
+    import json as _json
+    import tempfile
+    import os
+    from agents_memory.services.ingest import ingest_document, INGEST_TYPES
+
+    if source_type not in INGEST_TYPES:
+        return f"❌ 不支持的类型 '{source_type}'。支持: {', '.join(INGEST_TYPES)}"
+
+    _log_tool_start("memory_ingest", source_type=source_type, source_ref=source_ref, project=project, dry_run=dry_run)
+
+    # Write content to a temp file so ingest_document can read it
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".md", delete=False, encoding="utf-8"
+    ) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        result = ingest_document(
+            ctx,
+            source_path=tmp_path,
+            ingest_type=source_type,
+            project=project,
+            dry_run=dry_run,
+        )
+    finally:
+        os.unlink(tmp_path)
+
+    _log_tool_end("memory_ingest", status="ok" if not result.error else "error",
+                  source_type=source_type, topics=len(result.topics_updated))
+
+    if result.error:
+        return f"❌ 摄取失败: {result.error}"
+
+    prefix = "[DRY-RUN] " if dry_run else ""
+    summary = {
+        "status": "dry_run" if dry_run else "ok",
+        "source_type": result.ingest_type,
+        "source_ref": source_ref,
+        "project": result.project,
+        "summary": result.summary,
+        "topics_updated": result.topics_updated,
+        "timeline_entries_added": result.timeline_entries_added,
+    }
+    return f"{prefix}✅ 摄取完成\n\n" + _json.dumps(summary, ensure_ascii=False, indent=2)
+
+
 def main() -> None:
     mcp.run()
