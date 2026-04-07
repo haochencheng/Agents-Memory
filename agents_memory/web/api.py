@@ -25,22 +25,34 @@ from agents_memory.services.wiki import (
     update_compiled_truth,
 )
 from agents_memory.web.models import (
+    CheckResult,
+    ChecksResponse,
+    ChecksSummary,
     CompileResponse,
     ErrorDetailResponse,
     ErrorListResponse,
     ErrorMeta,
+    GraphEdge,
+    GraphNode,
     IngestLogEntry,
     IngestLogResponse,
     IngestRequest,
     IngestResponse,
     LintIssue,
+    ProjectInfo,
+    ProjectStatsResponse,
+    ProjectsResponse,
     RulesResponse,
+    SchedulerTask,
+    SchedulerTaskCreate,
+    SchedulerTasksResponse,
     SearchResponse,
     SearchResult,
     StatsResponse,
     TaskStatus,
     TopicMeta,
     WikiDetailResponse,
+    WikiGraphResponse,
     WikiLintResponse,
     WikiListResponse,
     WikiUpdateRequest,
@@ -66,8 +78,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+import uuid
+
 # In-memory async task store {task_id: TaskStatus}
 _task_store: dict[str, dict[str, Any]] = {}
+# In-memory scheduler tasks store
+_scheduler_tasks: list[dict[str, Any]] = []
 
 
 def _get_ctx() -> AppContext:
@@ -178,6 +194,107 @@ def get_stats() -> StatsResponse:
 
 
 # ---------------------------------------------------------------------------
+# Routes — Projects
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/projects", response_model=ProjectsResponse)
+def list_projects() -> ProjectsResponse:
+    ctx = _get_ctx()
+    from agents_memory.services.projects import parse_projects  # noqa: PLC0415
+    raw_projects = parse_projects(ctx)
+    errors = collect_errors(ctx)
+    error_counts: dict[str, int] = {}
+    for e in errors:
+        pid = e.get("project", "")
+        if pid:
+            error_counts[pid] = error_counts.get(pid, 0) + 1
+    wiki_topics = list_wiki_topics(ctx.wiki_dir)
+    wiki_count = len(wiki_topics)
+    projects = [
+        ProjectInfo(
+            id=p.get("id", ""),
+            name=p.get("id", ""),
+            description=p.get("description", ""),
+            health="ok" if error_counts.get(p.get("id", ""), 0) == 0 else "warn",
+            wiki_count=wiki_count,
+            error_count=error_counts.get(p.get("id", ""), 0),
+        )
+        for p in raw_projects
+    ]
+    return ProjectsResponse(projects=projects)
+
+
+@app.get("/api/projects/{project_id}/stats", response_model=ProjectStatsResponse)
+def project_stats(project_id: str) -> ProjectStatsResponse:
+    ctx = _get_ctx()
+    errors = collect_errors(ctx)
+    err_count = sum(1 for e in errors if e.get("project") == project_id)
+    health = "ok" if err_count == 0 else "warn"
+    wiki_topics = list_wiki_topics(ctx.wiki_dir)
+    return ProjectStatsResponse(
+        id=project_id,
+        health=health,
+        wiki_count=len(wiki_topics),
+        error_count=err_count,
+        checklist_done=0,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Routes — Scheduler
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/scheduler/tasks", response_model=SchedulerTasksResponse)
+def list_scheduler_tasks() -> SchedulerTasksResponse:
+    return SchedulerTasksResponse(tasks=[SchedulerTask(**t) for t in _scheduler_tasks])
+
+
+@app.post("/api/scheduler/tasks", response_model=SchedulerTask, status_code=201)
+def create_scheduler_task(body: SchedulerTaskCreate) -> SchedulerTask:
+    task = SchedulerTask(
+        id=str(uuid.uuid4())[:8],
+        name=body.name,
+        check_type=body.check_type,
+        project=body.project,
+        cron_expr=body.cron_expr,
+        status="active",
+    )
+    _scheduler_tasks.append(task.model_dump())
+    return task
+
+
+@app.delete("/api/scheduler/tasks/{task_id}", status_code=204)
+def delete_scheduler_task(task_id: str) -> None:
+    global _scheduler_tasks
+    before = len(_scheduler_tasks)
+    _scheduler_tasks = [t for t in _scheduler_tasks if t.get("id") != task_id]
+    if len(_scheduler_tasks) == before:
+        raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
+
+
+# ---------------------------------------------------------------------------
+# Routes — Checks
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/checks", response_model=ChecksResponse)
+def list_checks(
+    project: str | None = Query(None),
+    check_type: str | None = Query(None),
+    status: str | None = Query(None),
+) -> ChecksResponse:
+    # Returns empty list — checks are populated by CLI runs
+    return ChecksResponse(checks=[], total=0)
+
+
+@app.get("/api/checks/summary", response_model=ChecksSummary)
+def checks_summary() -> ChecksSummary:
+    return ChecksSummary()
+
+
+# ---------------------------------------------------------------------------
 # Routes — Wiki
 # ---------------------------------------------------------------------------
 
@@ -187,6 +304,48 @@ def wiki_lint() -> WikiLintResponse:
     ctx = _get_ctx()
     issues = _lint_wiki(ctx)
     return WikiLintResponse(issues=issues, total=len(issues))
+
+
+@app.get("/api/wiki/graph", response_model=WikiGraphResponse)
+def wiki_graph() -> WikiGraphResponse:
+    """Build a reference graph from wiki topics.
+    
+    Nodes = all wiki topics; edges = cross-references between pages.
+    """
+    ctx = _get_ctx()
+    nodes: list[GraphNode] = []
+    edges: list[GraphEdge] = []
+    topic_ids: set[str] = set()
+
+    for topic in list_wiki_topics(ctx.wiki_dir):
+        raw = read_wiki_page(ctx.wiki_dir, topic)
+        if raw is None:
+            continue
+        fm = _parse_frontmatter_str(raw)
+        title = fm.get("topic", topic).replace("-", " ").title()
+        nodes.append(GraphNode(
+            id=topic,
+            title=title,
+            word_count=_word_count(raw),
+        ))
+        topic_ids.add(topic)
+
+    # Build edges from [[topic]] or [text](topic) links in wiki pages
+    import re as _re
+    for topic in topic_ids:
+        raw = read_wiki_page(ctx.wiki_dir, topic)
+        if raw is None:
+            continue
+        # Match markdown links and wiki-style [[links]]
+        links = _re.findall(r"\[\[([^\]]+)\]\]|\[.+?\]\(([^)]+)\)", raw)
+        for match in links:
+            target = match[0] or match[1]
+            # Normalise: strip extension, lowercase
+            target = target.split("/")[-1].replace(".md", "").strip()
+            if target and target in topic_ids and target != topic:
+                edges.append(GraphEdge(source=topic, target=target))
+
+    return WikiGraphResponse(nodes=nodes, edges=edges)
 
 
 @app.get("/api/wiki", response_model=WikiListResponse)

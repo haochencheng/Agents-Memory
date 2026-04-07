@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-04-07
+updated_at: 2026-04-08
 doc_status: active
 ---
 
@@ -19,3 +19,14 @@ doc_status: active
 1. 无缺失文件引用
 2. 无关键命令文档漂移
 3. 无明显已废弃但未标记的结构说明
+
+## 计划管理规则
+
+6. `docs/plans/` 下必须存在 `active/` 和 `archive/` 两个子目录
+7. 已完成计划须移入 `archive/`，进行中保留在 `active/`
+8. `docs/plans/README.md` 须反映当前 active/archive 分类状态
+
+## 前端文档规则
+
+9. E2E 测试计划须存放于 `docs/test/frontend/`
+10. 前端端口约定：dev server `:10000`，API proxy → `:10100`

@@ -158,3 +158,115 @@ class IngestStatusResponse(BaseModel):
     ingested: bool
     id: str = ""
     dry_run: bool
+
+
+# ---------------------------------------------------------------------------
+# Projects
+# ---------------------------------------------------------------------------
+
+
+class ProjectInfo(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+    profile_path: str = ""
+    health: str = "unknown"
+    wiki_count: int = 0
+    error_count: int = 0
+    rule_count: int = 0
+    last_ingest: str = ""
+
+
+class ProjectsResponse(BaseModel):
+    projects: list[ProjectInfo]
+
+
+class ProjectStatsResponse(BaseModel):
+    id: str
+    health: str = "unknown"
+    wiki_count: int = 0
+    error_count: int = 0
+    checklist_done: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Scheduler
+# ---------------------------------------------------------------------------
+
+
+class SchedulerTask(BaseModel):
+    id: str
+    name: str
+    check_type: str = "docs"
+    project: str = ""
+    cron_expr: str = ""
+    status: str = "active"
+    last_run: str = ""
+    next_run: str = ""
+    last_result: str = ""
+
+
+class SchedulerTaskCreate(BaseModel):
+    name: str
+    check_type: str = "docs"
+    project: str = ""
+    cron_expr: str = ""
+
+
+class SchedulerTasksResponse(BaseModel):
+    tasks: list[SchedulerTask]
+
+
+# ---------------------------------------------------------------------------
+# Checks
+# ---------------------------------------------------------------------------
+
+
+class CheckResult(BaseModel):
+    id: str
+    project: str = ""
+    check_type: str = "docs"
+    status: str = "pass"
+    run_at: str = ""
+    summary: str = ""
+    details: list[str] = Field(default_factory=list)
+
+
+class ChecksResponse(BaseModel):
+    checks: list[CheckResult]
+    total: int
+
+
+class ChecksSummary(BaseModel):
+    docs_pass: int = 0
+    docs_warn: int = 0
+    docs_fail: int = 0
+    profile_pass: int = 0
+    profile_warn: int = 0
+    profile_fail: int = 0
+    plan_pass: int = 0
+    plan_warn: int = 0
+    plan_fail: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Wiki Graph
+# ---------------------------------------------------------------------------
+
+
+class GraphNode(BaseModel):
+    id: str
+    title: str = ""
+    project: str = ""
+    word_count: int = 0
+
+
+class GraphEdge(BaseModel):
+    source: str
+    target: str
+    type: str = "reference"
+
+
+class WikiGraphResponse(BaseModel):
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]

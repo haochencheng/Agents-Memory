@@ -78,9 +78,6 @@ function ForceGraphCanvas({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEd
 export default function KnowledgeGraphPage() {
   const { data, isLoading, error } = useWikiGraph()
 
-  if (isLoading) return <LoadingSpinner text="加载知识图谱..." />
-  if (error) return <ErrorAlert message="知识图谱加载失败" />
-
   const nodes: GraphNode[] = data?.nodes ?? []
   const edges: GraphEdge[] = data?.edges ?? []
 
@@ -91,12 +88,16 @@ export default function KnowledgeGraphPage() {
         <span className="text-sm text-gray-500">{nodes.length} 节点 · {edges.length} 连接</span>
       </div>
 
-      {nodes.length === 0 ? (
+      {isLoading && <LoadingSpinner text="加载知识图谱..." />}
+      {error && <ErrorAlert message="知识图谱加载失败" />}
+
+      {!isLoading && !error && nodes.length === 0 && (
         <div className="bg-white rounded-xl border p-12 text-center text-gray-400">
           <div className="text-5xl mb-3">🕸️</div>
           <p>暂无图谱数据</p>
         </div>
-      ) : (
+      )}
+      {!isLoading && !error && nodes.length > 0 && (
         <ForceGraphCanvas nodes={nodes} edges={edges} />
       )}
     </div>

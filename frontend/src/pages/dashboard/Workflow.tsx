@@ -24,21 +24,22 @@ function getStepStatus(step: string): 'done' | 'active' | 'pending' | 'failed' {
 export default function Workflow() {
   const { data: projects, isLoading, error } = useProjects()
 
-  if (isLoading) return <LoadingSpinner text="加载工作流状态..." />
-  if (error) return <ErrorAlert message="工作流数据加载失败" />
-
   const steps = WORKFLOW_STEPS.map(s => ({ ...s, status: getStepStatus(s.key) }))
 
   return (
     <div className="space-y-6" data-testid="workflow-page">
       <h1 className="page-title">Workflow 状态</h1>
 
-      {(!projects?.projects || projects.projects.length === 0) ? (
+      {isLoading && <LoadingSpinner text="加载工作流状态..." />}
+      {error && <ErrorAlert message="工作流数据加载失败" />}
+
+      {!isLoading && !error && (!projects?.projects || projects.projects.length === 0) && (
         <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
           <div className="text-4xl mb-3">🔄</div>
           <p className="text-gray-500">暂无工作流记录</p>
         </div>
-      ) : (
+      )}
+      {!isLoading && !error && projects?.projects && projects.projects.length > 0 && (
         <div className="space-y-4">
           {projects.projects.map(p => (
             <div key={p.name} className="bg-white rounded-xl border border-gray-100 p-5">

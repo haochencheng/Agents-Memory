@@ -37,9 +37,6 @@ function ProjectCard({ name }: { name: string }) {
 export default function ProjectList() {
   const { data: projects, isLoading, error } = useProjects()
 
-  if (isLoading) return <LoadingSpinner text="加载项目列表..." />
-  if (error) return <ErrorAlert message="项目列表加载失败" />
-
   return (
     <div className="space-y-6" data-testid="project-list-page">
       <div className="flex items-center justify-between">
@@ -47,13 +44,17 @@ export default function ProjectList() {
         <span className="text-sm text-gray-500">{projects?.projects?.length ?? 0} 个项目</span>
       </div>
 
-      {(!projects?.projects || projects.projects.length === 0) ? (
+      {isLoading && <LoadingSpinner text="加载项目列表..." />}
+      {error && <ErrorAlert message="项目列表加载失败" />}
+
+      {!isLoading && !error && (!projects?.projects || projects.projects.length === 0) && (
         <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
           <div className="text-4xl mb-3">📁</div>
           <p className="text-gray-500">暂无接入项目</p>
           <p className="text-sm text-gray-400 mt-1">通过 CLI 或 API 添加项目后在此展示</p>
         </div>
-      ) : (
+      )}
+      {!isLoading && !error && projects?.projects && projects.projects.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.projects.map(p => (
             <ProjectCard key={p.name} name={p.name} />

@@ -38,7 +38,6 @@ export default function Scheduler() {
   }
 
   if (isLoading) return <LoadingSpinner text="加载调度任务..." />
-  if (error) return <ErrorAlert message="调度任务加载失败" />
 
   return (
     <div className="space-y-6" data-testid="scheduler-page">
@@ -51,6 +50,8 @@ export default function Scheduler() {
           {showForm ? '× 取消' : '+ 新增任务'}
         </button>
       </div>
+
+      {error && <ErrorAlert message="调度任务加载失败" />}
 
       {/* Create form */}
       {showForm && (
