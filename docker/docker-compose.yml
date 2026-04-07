@@ -1,10 +1,15 @@
-# Agents-Memory — 向量数据库 docker-compose
+# Agents-Memory — 向量数据库 + 本地 LLM docker-compose
 #
-# 本地已有 PostgreSQL，这里只加 Qdrant（向量搜索）。
-# 用于多 Agent / 多机器共享记忆场景，单机使用 LanceDB（无需 Docker）。
+# 本地已有 PostgreSQL，这里添加：
+#   - Qdrant（向量搜索，多 Agent 共享）
+#   - Ollama（本地 LLM + Embedding，免 API Key）
 #
 # 启动：
 #   cd docker && docker-compose up -d
+# 仅启动 Qdrant：
+#   docker-compose up -d qdrant
+# 仅启动 Ollama：
+#   docker-compose up -d ollama
 # 停止：
 #   cd docker && docker-compose down
 # 数据清除：
@@ -36,6 +41,38 @@ services:
       retries: 5
       start_period: 10s
 
+  # ──────────────────────────────────────────────────────────────────────────
+  # Ollama — 本地 LLM 推理服务（CPU / GPU 均可）
+  # 用途：
+  #   1. nomic-embed-text  — 本地 Embedding（替代 OpenAI text-embedding-3-small）
+  #   2. qwen2.5:7b / llama3  — wiki-compile / ingest 的本地 LLM 合成
+  #
+  # 首次使用后拉取模型（在容器外或通过 API）：
+  #   docker exec -it agents-memory-ollama ollama pull nomic-embed-text
+  #   docker exec -it agents-memory-ollama ollama pull qwen2.5:7b
+  #
+  # 或通过 REST API 拉取：
+  #   curl http://localhost:11434/api/pull -d '{"name":"nomic-embed-text"}'
+  # ──────────────────────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: agents-memory-ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    environment:
+      # 启用 GPU 加速（可选，需要 NVIDIA Docker runtime）
+      # - NVIDIA_VISIBLE_DEVICES=all
+      - OLLAMA_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
 volumes:
   qdrant_storage:
     driver: local
@@ -43,6 +80,12 @@ volumes:
       type: none
       o: bind
       device: ./data/qdrant
+  ollama_models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/ollama
 
 networks:
   default:

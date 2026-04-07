@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-03-28
+updated_at: 2026-04-07
 doc_status: active
 ---
 
@@ -109,18 +109,47 @@ pip install mcp
 python3.12 -c "from mcp.server.fastmcp import FastMCP; print('OK')"
 ```
 
-### 向量搜索（≥ 200 条记录时可选）
+### 向量搜索 — OpenAI（云端，需 API Key）
 
 ```bash
 pip install lancedb openai pyarrow
 export OPENAI_API_KEY=sk-...
 ```
 
+### 向量搜索 — Ollama nomic-embed-text（本地，免费，推荐）
+
+```bash
+# 1. 启动 Ollama（通过 Docker）
+mkdir -p docker/data/ollama
+cd docker && docker-compose up -d ollama
+
+# 2. 拉取 nomic-embed-text 模型（768 维，体积约 274MB）
+docker exec -it agents-memory-ollama ollama pull nomic-embed-text
+
+# 3. 设置 Agents-Memory 使用 Ollama 作为 Embedding 提供方
+export AMEM_EMBED_PROVIDER=ollama
+# 可选：自定义 Ollama 地址（默认 http://localhost:11434）
+# export OLLAMA_HOST=http://localhost:11434
+
+# 4. 验证 Embedding 工作正常
+python3.12 -c "from agents_memory.services.records import get_embedding; v=get_embedding('test'); print(len(v), v[:3])"
+# 输出: 768 [0.xxx, 0.xxx, 0.xxx]
+```
+
+> **本地嵌入 vs 云端嵌入**
+> | | nomic-embed-text (Ollama) | text-embedding-3-small (OpenAI) |
+> |---|---|---|
+> | 费用 | 免费 | $0.02/1M tokens |
+> | 维度 | 768d | 1536d |
+> | 需要联网 | 否 | 是 |
+> | 设置 | `AMEM_EMBED_PROVIDER=ollama` | `OPENAI_API_KEY=...` |
+
 ### Qdrant 多 Agent 共享（可选）
 
 ```bash
 pip install qdrant-client
-cd docker && docker-compose up -d
+mkdir -p docker/data/qdrant
+cd docker && docker-compose up -d qdrant
 ```
 
 ---
@@ -156,6 +185,12 @@ python3 scripts/memory.py list
 
 python3 scripts/memory.py search pydantic
 # 输出: 包含 "pydantic" 的所有错误记录
+
+python3 scripts/memory.py fts-index
+# 输出: 构建 SQLite FTS5 全文检索索引（零依赖，自动维护）
+
+python3 scripts/memory.py hybrid-search "type guard"
+# 输出: 混合搜索（FTS+向量，综合评分排序）
 
 python3 scripts/memory.py embed
 # 输出: 构建 / 更新本地 LanceDB 向量索引

@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-03-27
+updated_at: 2026-04-07
 doc_status: active
 ---
 
@@ -95,10 +95,16 @@ python3 scripts/memory.py stats
 ### 搜索错误
 
 ```bash
-# 关键词搜索（< 200 条记录时）
+# 1. 关键词搜索（< 200 条，零依赖）
 python3 scripts/memory.py search pydantic
 
-# 语义搜索（≥ 200 条后）
+# 2. 混合搜索 — FTS BM25 + 向量相似度（推荐，零额外依赖）
+python3 scripts/memory.py fts-index          # 首次构建 FTS 索引（stale 时自动重建）
+python3 scripts/memory.py hybrid-search "TypeScript 类型收窄失效"
+python3 scripts/memory.py hybrid-search "timeout" --limit 5 --fts-only  # 仅 FTS
+python3 scripts/memory.py hybrid-search "oom" --json                     # JSON 输出
+
+# 3. 纯向量搜索（需先 embed，≥ 200 条后）
 python3 scripts/memory.py vsearch "TypeScript 类型收窄失效"
 ```
 
@@ -116,6 +122,40 @@ python3 scripts/memory.py promote 2026-03-26-spec2flow-001
 python3 scripts/memory.py archive
 ```
 
+### Ingest 文档摄取
+
+将 PR 描述、会议记录、架构决策记录等结构化写入记忆系统：
+
+```bash
+# Ingest PR 描述
+python3 scripts/memory.py ingest docs/pr-123.md --type pr-review --project synapse-network
+
+# Ingest 会议记录
+python3 scripts/memory.py ingest docs/meeting-2026-04-07.md --type meeting
+
+# Ingest 架构决策
+python3 scripts/memory.py ingest docs/adr-042.md --type decision --project backend
+
+# 预览（不写入）
+python3 scripts/memory.py ingest docs/pr.md --type pr-review --dry-run
+
+# 查看摄取日志
+python3 scripts/memory.py ingest dummy --log
+```
+
+支持类型：`pr-review`、`meeting`、`decision`、`code-review`
+摄取日志存储于：`memory/ingest_log.jsonl`
+
+### Wiki 维护
+
+```bash
+# Wiki 结构与交叉链接检查
+python3 scripts/memory.py wiki-lint
+
+# 生成 wiki 合成摘要（调用 LLM）
+python3 scripts/memory.py wiki-compile python --dry-run
+```
+
 ---
 
 ## 向量搜索启用（记录达到 200 条后）
@@ -126,10 +166,28 @@ python3 scripts/memory.py archive
 pip install lancedb openai pyarrow
 ```
 
-### 2. 设置 OpenAI Key
+### 2. Embedding 提供方选择
+
+| 提供方 | 命令 | 说明 |
+|--------|------|------|
+| OpenAI（默认） | `export AMEM_EMBED_PROVIDER=openai` | 需要 `OPENAI_API_KEY`，1536d |
+| Ollama（本地） | `export AMEM_EMBED_PROVIDER=ollama` | 本地运行，免费，768d |
+
+**使用 OpenAI：**
 
 ```bash
+export AMEM_EMBED_PROVIDER=openai   # 或省略（默认）
 export OPENAI_API_KEY=sk-...
+pip install lancedb openai pyarrow
+```
+
+**使用 Ollama nomic-embed-text（推荐本地）：**
+
+```bash
+# 启动 Ollama 并拉取模型（见下文 Ollama Docker 章节）
+export AMEM_EMBED_PROVIDER=ollama
+export OLLAMA_HOST=http://localhost:11434   # 默认，可省略
+pip install lancedb pyarrow                # 无需 openai
 ```
 
 ### 3. 构建本地向量索引
@@ -145,6 +203,66 @@ python3 scripts/memory.py embed
 python3 scripts/memory.py vsearch "balance 并发扣款死锁"
 python3 scripts/memory.py vsearch "filter type guard typescript" 10   # 返回 top 10
 ```
+
+---
+
+## Ollama Docker — 本地 LLM + Embedding
+
+### 首次启动
+
+```bash
+cd /path/to/Agents-Memory/docker
+mkdir -p data/ollama
+docker-compose up -d ollama
+```
+
+验证启动：
+
+```bash
+curl http://localhost:11434/api/tags
+# → {"models":[...]}
+```
+
+### 拉取模型
+
+```bash
+# Embedding 模型（必须，274MB）
+docker exec -it agents-memory-ollama ollama pull nomic-embed-text
+
+# LLM 用于 wiki-compile / ingest 合成（可选）
+docker exec -it agents-memory-ollama ollama pull qwen2.5:7b   # 4.7GB，推荐
+docker exec -it agents-memory-ollama ollama pull llama3.2     # 2GB，轻量
+```
+
+或通过 REST API 拉取（适合脚本化）：
+
+```bash
+curl http://localhost:11434/api/pull -d '{"name":"nomic-embed-text"}'
+```
+
+### 验证 Embedding
+
+```bash
+export AMEM_EMBED_PROVIDER=ollama
+python3.12 -c "from agents_memory.services.records import get_embedding; v=get_embedding('hello'); print(len(v))"
+# → 768
+```
+
+### 停止 / 清理
+
+```bash
+docker-compose stop ollama           # 停止但保留模型数据
+docker-compose down                  # 停容器，保留 volume 数据
+docker-compose down -v               # 清除所有数据（包括已拉取的模型！）
+```
+
+### 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `AMEM_EMBED_PROVIDER` | `openai` | `openai` \| `ollama` |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama API 地址 |
+| `OLLAMA_PORT` | `11434` | docker-compose 端口 |
 
 ---
 
@@ -197,7 +315,8 @@ docker-compose down -v        # 清除所有向量数据（危险！）
 | `QDRANT_HOST` | `localhost` | Qdrant 主机地址 |
 | `QDRANT_PORT` | `6333` | Qdrant REST 端口 |
 | `QDRANT_COLLECTION` | `agents-memory` | 集合名称 |
-| `OPENAI_API_KEY` | — | embed 命令必须 |
+| `OPENAI_API_KEY` | — | OpenAI embed 模式必须 |
+| `AMEM_EMBED_PROVIDER` | `openai` | 切换 `ollama` > 使用本地 embedding |
 
 ---
 
@@ -208,8 +327,12 @@ docker-compose down -v        # 清除所有向量数据（危险！）
 | 用途 | 存储方式 |
 |------|----------|
 | 错误记录（结构化文本）| `errors/*.md`（本地运行数据，默认不进入公开仓库）|
+| Wiki 知识库 | `memory/wiki/*.md`（编译真相 + 时间线）|
 | 向量索引（本地）| `vectors/` LanceDB（gitignored）|
+| FTS 全文索引 | `vectors/fts.db` SQLite（自动维护）|
+| 摄取日志 | `memory/ingest_log.jsonl`（追加写，gitignored）|
 | 向量索引（共享）| Qdrant（单独容器）|
+| 本地 LLM + Embedding | Ollama（单独容器，可选）|
 | 业务数据库 | 已有 PostgreSQL（无需改动）|
 
 两个 Docker 容器互不干扰，网络隔离。

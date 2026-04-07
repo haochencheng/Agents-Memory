@@ -14,8 +14,18 @@ MCP_CONFIG_NAME = "mcp.json"
 PYTHON_BIN = "python3.12"
 
 VECTOR_THRESHOLD = 200
+
+# OpenAI embeddings (default)
 EMBED_MODEL = "text-embedding-3-small"
 EMBED_DIM = 1536
+
+# Ollama local embeddings (nomic-embed-text)
+EMBED_PROVIDER_ENV = "AMEM_EMBED_PROVIDER"  # "openai" | "ollama"
+OLLAMA_EMBED_MODEL = "nomic-embed-text"
+OLLAMA_EMBED_DIM = 768  # nomic-embed-text output dimension
+OLLAMA_HOST_ENV = "OLLAMA_HOST"
+DEFAULT_OLLAMA_HOST = "http://localhost:11434"
+
 QDRANT_HOST_ENV = "QDRANT_HOST"
 QDRANT_PORT_ENV = "QDRANT_PORT"
 QDRANT_COLLECTION_ENV = "QDRANT_COLLECTION"

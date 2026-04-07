@@ -1,12 +1,24 @@
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from collections import Counter
 from datetime import date, timedelta
 from pathlib import Path
 
-from agents_memory.constants import CATEGORIES, DOMAINS, EMBED_MODEL, PROJECTS, VECTOR_THRESHOLD
+from agents_memory.constants import (
+    CATEGORIES,
+    DEFAULT_OLLAMA_HOST,
+    DOMAINS,
+    EMBED_MODEL,
+    EMBED_PROVIDER_ENV,
+    OLLAMA_EMBED_DIM,
+    OLLAMA_EMBED_MODEL,
+    OLLAMA_HOST_ENV,
+    PROJECTS,
+    VECTOR_THRESHOLD,
+)
 from agents_memory.logging_utils import log_file_update
 from agents_memory.runtime import AppContext
 
@@ -347,7 +359,7 @@ def build_record_text(meta: dict, filepath: Path) -> str:
     return f"{header}\n{body}"[:3000]
 
 
-def get_embedding(text: str) -> list[float]:
+def _get_openai_embedding(text: str) -> list[float]:
     try:
         import openai
     except ImportError:
@@ -356,3 +368,41 @@ def get_embedding(text: str) -> list[float]:
     client = openai.OpenAI()
     response = client.embeddings.create(model=EMBED_MODEL, input=text)
     return response.data[0].embedding
+
+
+def _get_ollama_embedding(text: str) -> list[float]:
+    """Call Ollama /api/embeddings endpoint with nomic-embed-text.
+
+    Requires Ollama running locally (default http://localhost:11434).
+    Pull the model first:  ollama pull nomic-embed-text
+    """
+    import json as _json
+    import urllib.request
+    host = os.environ.get(OLLAMA_HOST_ENV, DEFAULT_OLLAMA_HOST).rstrip("/")
+    url = f"{host}/api/embeddings"
+    payload = _json.dumps({"model": OLLAMA_EMBED_MODEL, "prompt": text}).encode()
+    req = urllib.request.Request(
+        url, data=payload, method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+            data = _json.loads(resp.read())
+        return data["embedding"]
+    except Exception as exc:  # noqa: BLE001
+        print(f"Ollama embedding 调用失败 ({url}): {exc}")
+        print("请确认 Ollama 已启动且已拉取模型: ollama pull nomic-embed-text")
+        sys.exit(1)
+
+
+def get_embedding(text: str) -> list[float]:
+    """Return an embedding vector for *text*.
+
+    Provider is selected by AMEM_EMBED_PROVIDER env var:
+      - 'openai'  (default): OpenAI text-embedding-3-small (1536d, requires OPENAI_API_KEY)
+      - 'ollama':            Ollama nomic-embed-text (768d, local, free)
+    """
+    provider = os.environ.get(EMBED_PROVIDER_ENV, "openai")
+    if provider == "ollama":
+        return _get_ollama_embedding(text)
+    return _get_openai_embedding(text)
