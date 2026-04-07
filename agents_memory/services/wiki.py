@@ -682,7 +682,10 @@ def cmd_wiki_lint(ctx: AppContext, args: list[str]) -> int:
     check_mode = "all"
     i = 0
     while i < len(args):
-        if args[i] == "--check" and i + 1 < len(args):
+        if args[i].startswith("--check="):
+            check_mode = args[i].split("=", 1)[1]
+            i += 1
+        elif args[i] == "--check" and i + 1 < len(args):
             check_mode = args[i + 1]
             i += 2
         else:

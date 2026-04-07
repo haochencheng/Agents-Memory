@@ -1,7 +1,7 @@
 ---
 created_at: 2026-04-07
 updated_at: 2026-04-07
-doc_status: active
+doc_status: stable
 ---
 
 # Phase 5 — Wiki Lint + MCP 工具完整化

@@ -1,7 +1,7 @@
 ---
 created_at: 2026-03-28
 updated_at: 2026-04-07
-doc_status: active
+doc_status: stable
 ---
 
 # Phase 4 — Ingest 结构化摄取流水线

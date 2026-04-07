@@ -347,6 +347,100 @@ Phase 5（1天）: Wiki Lint
 
 ---
 
+## 八、五阶段功能 CLI / MCP 集成矩阵
+
+> Phase 1–5 已全部落地。下表是每个功能的 CLI 命令、MCP 工具、服务实现及测试入口的完整对照。
+
+### Phase 1 — Wiki Compiled Truth / wiki-compile
+
+| 维度 | 实现 |
+|------|------|
+| **CLI 命令** | `amem wiki-compile <topic> [--scope errors\|rules\|all] [--recent-n N] [--dry-run] [--provider P] [--model M]` |
+| **CLI 注册** | `agents_memory/commands/wiki.py` → `wiki-compile` |
+| **MCP 工具** | `memory_wiki_compile(topic, scope, recent_n, dry_run)` |
+| **服务层** | `agents_memory/services/wiki_compile.py` — `compile_wiki_topic()` |
+| **Wiki 页格式** | compiled_truth 区（LLM 重写）+ timeline 区（append-only）用 `---` 分隔 |
+| **LLM 路由** | `AMEM_LLM_PROVIDER` 环境变量：`anthropic`（默认）`\|` `openai` `\|` `ollama` |
+| **测试文件** | `tests/test_wiki_compile.py`，`tests/test_mcp_phases.py::TestMCPWikiCompile` |
+
+### Phase 2 — 混合搜索（FTS + 向量）
+
+| 维度 | 实现 |
+|------|------|
+| **CLI 命令 1** | `amem fts-index [--force]` — 构建 / 重建 SQLite FTS5 索引 |
+| **CLI 命令 2** | `amem hybrid-search <query> [--limit N] [--fts-only] [--json]` — FTS + 向量混合查询 |
+| **CLI 注册** | `agents_memory/commands/search.py` → `fts-index`, `hybrid-search` |
+| **MCP 工具** | `memory_search(query, limit, mode)` — mode: `hybrid`（默认）`\|` `fts` `\|` `vector` |
+| **服务层** | `agents_memory/services/search.py` — `build_fts_index()`, `search_fts()`, `hybrid_search()` |
+| **评分公式** | `combined = fts×0.4 + vec×0.6`；近 30 天 +0.1 boost |
+| **FTS 存储** | `vectors/fts.db`（SQLite FTS5 + unicode61 分词器，gitignored）|
+| **测试文件** | `tests/test_search_service.py`，`tests/test_mcp_phases.py::TestMCPSearch` |
+
+### Phase 3 — Wiki 交叉引用
+
+| 维度 | 实现 |
+|------|------|
+| **CLI 命令 1** | `amem wiki-link <from> <to> [--context "说明"]` — 幂等有向链接 |
+| **CLI 命令 2** | `amem wiki-backlinks <topic>` — 反向链接查询（O(n)扫描）|
+| **CLI 注册** | `agents_memory/commands/wiki.py` → `wiki-link`, `wiki-backlinks` |
+| **MCP 工具** | 通过 `memory_wiki_update` 更新 frontmatter links 字段 |
+| **服务层** | `agents_memory/services/wiki.py` — `get_wiki_links()`, `set_wiki_links()`, `cmd_wiki_link()`, `cmd_wiki_backlinks()` |
+| **存储格式** | frontmatter `links:` YAML list，每项含 `topic`（必须）和 `context`（可选）|
+| **测试文件** | `tests/test_wiki_service.py::TestGetWikiLinks`,`TestUpsertLinkEntry` |
+
+### Phase 4 — Ingest 结构化摄取流水线
+
+| 维度 | 实现 |
+|------|------|
+| **CLI 命令** | `amem ingest <file> --type <type> [--project <id>] [--dry-run] [--log] [--provider P] [--model M]` |
+| **CLI 注册** | `agents_memory/commands/ingest.py` → `ingest` |
+| **MCP 工具** | `memory_ingest(content, source_type, source_ref, project, dry_run)` |
+| **服务层** | `agents_memory/services/ingest.py` — `ingest_document()`, `build_ingest_prompt()`, `read_ingest_log()` |
+| **支持类型** | `pr-review`, `meeting`, `decision`, `code-review` |
+| **日志格式** | `memory/ingest_log.jsonl`（JSONL，append-only，UTC ISO 8601）|
+| **LLM 输出** | `{summary, topics, timeline_entry, compiled_truth_update(可选)}` |
+| **测试文件** | `tests/test_ingest_service.py`，`tests/test_mcp_phases.py::TestMCPIngest` |
+
+### Phase 5 — Wiki Lint + MCP 工具完整化
+
+| 维度 | 实现 |
+|------|------|
+| **CLI 命令** | `amem wiki-lint [--check orphans\|stale\|missing-links\|all]` |
+| **CLI 注册** | `agents_memory/commands/wiki.py` → `wiki-lint` |
+| **MCP 工具** | `memory_wiki_lint(check)` — 捕获 stdout 并返回 |
+| **服务层** | `agents_memory/services/wiki.py` — `cmd_wiki_lint()`, `_lint_orphans()`, `_lint_stale()`, `_lint_missing_links()` |
+| **孤立检测** | 入链为 0 的 topic → `[orphan]` |
+| **过期检测** | `compiled_at` 超过 30 天 → `[stale]` |
+| **缺失链接** | body 提及其他 topic 名但 `links:` 未记录 → `[missing-link]` |
+| **返回值** | 始终 exit 0；问题通过 stdout 输出 |
+| **测试文件** | `tests/test_wiki_service.py::TestLintOrphans,TestLintStale`，`tests/test_mcp_phases.py::TestMCPWikiLint` |
+
+### MCP 工具总表（截至 Phase 5）
+
+| MCP 工具 | 对应 CLI | Phase |
+|----------|---------|-------|
+| `memory_get_index` | — | core |
+| `memory_get_onboarding_state` | `doctor` | core |
+| `memory_get_onboarding_next_action` | `do-next` | core |
+| `memory_execute_onboarding_next_action` | `do-next` | core |
+| `memory_get_refactor_hotspots` | `doctor` | core |
+| `memory_init_refactor_bundle` | `start-task` | core |
+| `memory_get_rules` | `list` | core |
+| `memory_get_error` | `list` | core |
+| `memory_record_error` | `new` | core |
+| `memory_increment_repeat` | — | core |
+| `memory_list_projects` | `list` | core |
+| `memory_sync_stats` | `stats` | core |
+| `memory_wiki_list` | `wiki-list` | core |
+| `memory_wiki_query` | `wiki-query` | core |
+| `memory_wiki_update` | `wiki-ingest` | core |
+| `memory_wiki_compile` | `wiki-compile` | Phase 1 |
+| `memory_search` | `fts-index` + `hybrid-search` | Phase 2 |
+| `memory_wiki_lint` | `wiki-lint` | Phase 5 |
+| `memory_ingest` | `ingest` | Phase 4 |
+
+---
+
 ## 参考
 
 - [Karpathy LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — 增量知识编译模式

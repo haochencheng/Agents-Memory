@@ -1,7 +1,7 @@
 ---
 created_at: 2026-04-07
 updated_at: 2026-04-07
-doc_status: active
+doc_status: stable
 ---
 
 # Phase 1 — Wiki Compiled Truth / Timeline 格式升级 + wiki-compile

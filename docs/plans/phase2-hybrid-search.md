@@ -1,7 +1,7 @@
 ---
 created_at: 2026-03-28
 updated_at: 2026-04-07
-doc_status: active
+doc_status: stable
 ---
 
 # Phase 2 — 混合搜索 FTS + 向量
