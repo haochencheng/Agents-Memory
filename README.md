@@ -113,6 +113,95 @@ flowchart LR
 | **Validation** | Unified delivery gate: docs-check, profile-check, plan-check, test gate, complexity gate |
 | **Learning Bus** | Promote errors and good practices to standards, validation rules, and eval cases |
 
+### Knowledge Layer (Wiki) Architecture
+
+The Memory layer includes a structured wiki knowledge graph. This is a **zoom-in on the Memory layer**, not a separate system.
+
+```mermaid
+flowchart TD
+  subgraph Sources["Sources"]
+    E[errors/*.md]
+    PR[PR reviews / meeting notes]
+    DEC[decision records]
+  end
+
+  subgraph Ingest["Ingest Pipeline"]
+    ING[amem ingest --type pr-review|decision|meeting]
+    WC[amem wiki-compile --topic X --scope errors]
+  end
+
+  subgraph Wiki["memory/wiki/*.md  —  Knowledge Graph"]
+    WP["Wiki Page\n---\ntopic: finance-safety\ncompiled_at: 2026-04-07\nconfidence: high\nsources: [AME-001]\nlinks:\n  - topic: smart-contract-errors\n---\n## Compiled Truth  ← LLM rewrites\n## Known Patterns\n---\n## Timeline  ← append-only"]
+  end
+
+  subgraph Search["Hybrid Search"]
+    FTS[FTS index]
+    VEC[vector index / LanceDB]
+    HS[amem hybrid-search\ncombined_score = fts×0.4 + vec×0.6]
+  end
+
+  subgraph Lint["Wiki Lint"]
+    L1[orphan pages]
+    L2[stale compiled_truth]
+    L3[missing cross-links]
+  end
+
+  E --> ING
+  PR --> ING
+  DEC --> ING
+  ING --> WC
+  WC -->|LLM synthesises| WP
+  WP --> FTS
+  WP --> VEC
+  FTS --> HS
+  VEC --> HS
+  WP --> L1
+  WP --> L2
+  WP --> L3
+
+  style Sources fill:#fef3c7,stroke:#d97706
+  style Ingest fill:#d1fae5,stroke:#059669
+  style Wiki fill:#ede9fe,stroke:#7c3aed
+  style Search fill:#dbeafe,stroke:#3b82f6
+  style Lint fill:#fee2e2,stroke:#dc2626
+```
+
+**Wiki page anatomy** (compiled_truth + append-only timeline):
+
+```markdown
+---
+topic: finance-safety
+compiled_at: 2026-04-07
+confidence: high
+sources: [AME-001, AME-007]
+links:
+  - topic: smart-contract-errors
+    context: "Reentrancy overlaps with precision rules"
+---
+
+## Compiled Truth        ← LLM rewrites on each wiki-compile run
+> Consolidated finding: use Decimal, never float for on-chain values.
+
+## Known Patterns
+- AME-001: USDT precision loss on transfer
+
+---
+
+## Timeline             ← append-only, never rewritten
+- **2026-04-07** | wiki-compile — synthesised from 7 error records
+- **2026-03-20** | AME-007 — first recorded precision failure
+```
+
+**Wiki commands:**
+
+| Command | Purpose |
+| --- | --- |
+| `amem wiki-compile --topic X` | LLM synthesises compiled_truth from latest errors |
+| `amem wiki-link <from> <to>` | Add cross-reference between topics |
+| `amem wiki-backlinks <topic>` | Show all pages linking to this topic |
+| `amem wiki-lint` | Detect orphans, stale truths, missing links |
+| `amem ingest <file> --type ...` | Structured ingest of PR / meeting / decision records |
+
 **Code layout:**
 
 ```text
@@ -291,6 +380,95 @@ flowchart LR
 | **Validation** | 统一交付门禁：docs-check、profile-check、plan-check、test gate、complexity gate |
 | **Learning Bus** | 把错误和最佳实践升级为跨项目 standards、validation rules、eval cases |
 
+### 知识层（Wiki）架构
+
+Memory 层内置结构化 Wiki 知识图谱，是对上方系统架构图中 Memory 层的纵向展开，**不是独立系统**。
+
+```mermaid
+flowchart TD
+  subgraph Sources["输入源"]
+    E[errors/*.md 错误记录]
+    PR[PR review / 会议记录]
+    DEC[决策记录]
+  end
+
+  subgraph Ingest["Ingest 流水线"]
+    ING[amem ingest --type pr-review|decision|meeting]
+    WC[amem wiki-compile --topic X --scope errors]
+  end
+
+  subgraph Wiki["memory/wiki/*.md  —  知识图谱"]
+    WP["Wiki 页面\n---\ntopic: finance-safety\ncompiled_at: 2026-04-07\nconfidence: high\nsources: [AME-001]\nlinks:\n  - topic: smart-contract-errors\n---\n## 结论（Compiled Truth）← LLM 重写\n## 已知 Pattern\n---\n## 时间线 ← 只追加，不改写"]
+  end
+
+  subgraph Search["混合搜索"]
+    FTS[FTS 全文索引]
+    VEC[向量索引 / LanceDB]
+    HS[amem hybrid-search\ncombined_score = fts×0.4 + vec×0.6]
+  end
+
+  subgraph Lint["Wiki 健康检查"]
+    L1[孤岛页面检测]
+    L2[过期结论检测]
+    L3[缺失交叉引用检测]
+  end
+
+  E --> ING
+  PR --> ING
+  DEC --> ING
+  ING --> WC
+  WC -->|LLM 合成| WP
+  WP --> FTS
+  WP --> VEC
+  FTS --> HS
+  VEC --> HS
+  WP --> L1
+  WP --> L2
+  WP --> L3
+
+  style Sources fill:#fef3c7,stroke:#d97706
+  style Ingest fill:#d1fae5,stroke:#059669
+  style Wiki fill:#ede9fe,stroke:#7c3aed
+  style Search fill:#dbeafe,stroke:#3b82f6
+  style Lint fill:#fee2e2,stroke:#dc2626
+```
+
+**Wiki 页面结构**（compiled_truth 结论区 + append-only 时间线）：
+
+```markdown
+---
+topic: finance-safety
+compiled_at: 2026-04-07
+confidence: high
+sources: [AME-001, AME-007]
+links:
+  - topic: smart-contract-errors
+    context: "Reentrancy 与精度规则有重叠"
+---
+
+## 结论（Compiled Truth）        ← LLM 每次 wiki-compile 时整体重写
+> 综合评估：链上金额运算必须用 Decimal，禁止使用 float。
+
+## 已知 Pattern
+- AME-001：USDT transfer 精度丢失
+
+---
+
+## 时间线                        ← 只追加，永不改写
+- **2026-04-07** | wiki-compile — 从 7 条错误记录合成
+- **2026-03-20** | AME-007 — 首次记录精度问题
+```
+
+**Wiki 命令：**
+
+| 命令 | 作用 |
+| --- | --- |
+| `amem wiki-compile --topic X` | LLM 从最近错误合成 compiled_truth |
+| `amem wiki-link <from> <to>` | 建立 topic 之间的交叉引用 |
+| `amem wiki-backlinks <topic>` | 查看哪些页面引用了当前 topic |
+| `amem wiki-lint` | 检测孤岛页、过期结论、缺失链接 |
+| `amem ingest <file> --type ...` | 结构化导入 PR / 会议记录 / 决策文档 |
+
 **代码分层：**
 
 ```text
@@ -355,7 +533,9 @@ bash scripts/web-start.sh start   # FastAPI :10100，Streamlit :10000
 
 完整文档地图见 [docs/README.md](docs/README.md)。
 
-### 开源边界
+最新架构设计见 docs/ai-engineering-operating-system.md。
+安装与启动细节见 docs/getting-started.md。
+接入其他项目见 docs/integration.md。
 
 公开仓库只包含代码、模板、标准、profiles 和文档。以下内容属于本地运行数据，**默认不应提交**：
 
