@@ -521,8 +521,18 @@ def cmd_bootstrap(
     full: bool = False,
     dry_run: bool = False,
     json_output: bool = False,
+    ingest_wiki: bool = False,
+    wiki_limit: int = 24,
 ) -> int:
-    return cmd_enable(ctx, project_id_or_path, full=full, dry_run=dry_run, json_output=json_output)
+    return cmd_enable(
+        ctx,
+        project_id_or_path,
+        full=full,
+        dry_run=dry_run,
+        json_output=json_output,
+        ingest_wiki=ingest_wiki,
+        wiki_limit=wiki_limit,
+    )
 
 
 def _print_wiki_context(ctx: AppContext, task_name: str) -> None:

@@ -21,11 +21,13 @@ plans/
 - `bootstrap-checklist.md` — 项目初始化检查（PARTIAL）
 - `refactor-watch.md` — 持续重构监控
 - `onboarding-copilot-activation/` — Copilot 激活接入
+- `synapse-network-auto-onboarding/` — Synapse-Network 自动接入与 wiki 摄取方案
 - `refactor-agents-memory-*` — 各服务重构任务（进行中）
 
 ### active/ 评估（2026-04-08）
 - 继续保留：`bootstrap-checklist.md`、`refactor-watch.md`
 - 仍需执行：`onboarding-copilot-activation/`
+- 新增执行中：`synapse-network-auto-onboarding/`
 - 仍需处理的 refactor bundle：
 	- `refactor-agents-memory-mcp-app-py-memory-record-error/`
 	- `refactor-agents-memory-services-integration-py-cmd-register/`

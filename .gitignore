@@ -13,6 +13,8 @@ docker/data/
 index.md
 memory/projects.md
 memory/rules.md
+memory/ingest_log.jsonl
+memory/wiki/
 errors/*.md
 errors/archive/
 .agents-memory/

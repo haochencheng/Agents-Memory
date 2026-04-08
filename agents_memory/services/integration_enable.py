@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Callable
 from agents_memory.constants import COPILOT_INSTRUCTIONS_REL, DEFAULT_BRIDGE_INSTRUCTION_REL, MCP_CONFIG_NAME, VSCODE_DIRNAME
 from agents_memory.runtime import AppContext
 from agents_memory.services.integration_register import _ensure_registered_project
+from agents_memory.services.project_onboarding import ProjectKnowledgeIngestResult, ingest_project_wiki_sources
 from agents_memory.services.integration_setup import cmd_bridge_install, cmd_copilot_setup, write_vscode_mcp_json
 from agents_memory.services.profiles import PROFILE_MANIFEST_REL, PROJECT_FACTS_REL, ProfileStandardsSyncResult, apply_profile, detect_applied_profile, load_profile, expected_profile_paths, sync_profile_standards
 from agents_memory.services.projects import project_already_registered, resolve_project_target
@@ -121,10 +122,7 @@ def _collect_bridge_preview(project_root: Path) -> tuple[list[str], list[str], l
     return [], [], [str(bridge_path)]
 
 
-def _collect_full_mode_preview(
-    ctx: AppContext,
-    project_root: Path,
-) -> tuple[list[str], list[str], list[str]]:
+def _collect_full_mode_preview(project_root: Path) -> tuple[list[str], list[str], list[str]]:
     # Collect preview items that are only executed in --full mode.
     capabilities = ["install or update Copilot activation block"]
     planned_writes = [str(project_root / COPILOT_INSTRUCTIONS_REL)]
@@ -151,6 +149,8 @@ def _collect_standard_previews(
     *,
     project_id: str,
     full: bool,
+    ingest_wiki: bool,
+    wiki_limit: int,
     doctor_report_fn: DoctorReportFn,
 ) -> tuple[list[str], list[str], list[str]]:
     # Collect preview data for registry, bridge, MCP, profile, doctor, and onboarding steps.
@@ -167,6 +167,19 @@ def _collect_standard_previews(
     onboarding_caps, onboarding_writes = _preview_onboarding_bundle_actions(ctx, project_root, doctor_report_fn=doctor_report_fn)
     caps.extend(onboarding_caps)
     writes.extend(onboarding_writes)
+    if ingest_wiki:
+        preview_result = ingest_project_wiki_sources(
+            ctx,
+            project_root,
+            project_id=project_id,
+            max_files=wiki_limit,
+            dry_run=True,
+        )
+        if preview_result.sources:
+            caps.append(f"ingest up to {len(preview_result.sources)} project knowledge files into the shared wiki")
+            writes.extend(str(ctx.wiki_dir / f"{item.topic}.md") for item in preview_result.sources)
+        else:
+            skipped.append("project wiki ingest skipped: no markdown knowledge sources found")
     return caps, writes, skipped
 
 
@@ -176,14 +189,22 @@ def _preview_enable_actions(
     *,
     project_id: str,
     full: bool,
+    ingest_wiki: bool,
+    wiki_limit: int,
     doctor_report_fn: DoctorReportFn,
 ) -> dict[str, object]:
     # Aggregate all planned capabilities and writes for a dry-run preview.
     caps, writes, skipped = _collect_standard_previews(
-        ctx, project_root, project_id=project_id, full=full, doctor_report_fn=doctor_report_fn
+        ctx,
+        project_root,
+        project_id=project_id,
+        full=full,
+        ingest_wiki=ingest_wiki,
+        wiki_limit=wiki_limit,
+        doctor_report_fn=doctor_report_fn,
     )
     if full:
-        full_caps, full_writes, full_skipped = _collect_full_mode_preview(ctx, project_root)
+        full_caps, full_writes, full_skipped = _collect_full_mode_preview(project_root)
         caps.extend(full_caps)
         writes.extend(full_writes)
         skipped.extend(full_skipped)
@@ -276,10 +297,20 @@ def _run_enable_dry_run(
     *,
     project_id: str,
     full: bool,
+    ingest_wiki: bool,
+    wiki_limit: int,
     json_output: bool,
     doctor_report_fn: DoctorReportFn,
 ) -> int:
-    preview = _preview_enable_actions(ctx, project_root, project_id=project_id, full=full, doctor_report_fn=doctor_report_fn)
+    preview = _preview_enable_actions(
+        ctx,
+        project_root,
+        project_id=project_id,
+        full=full,
+        ingest_wiki=ingest_wiki,
+        wiki_limit=wiki_limit,
+        doctor_report_fn=doctor_report_fn,
+    )
     _render_enable_preview(preview, json_output=json_output)
     ctx.logger.info(
         "enable_preview | target=%s | full=%s | planned_writes=%s",
@@ -323,6 +354,18 @@ def _print_enable_standards_sync(result: ProfileStandardsSyncResult) -> None:
         print(f"- standards: synced ({detail})")
         return
     print("- standards: ready")
+
+
+def _print_enable_wiki_ingest(result: ProjectKnowledgeIngestResult) -> None:
+    if not result.sources:
+        print("- wiki ingest: skipped (no markdown knowledge sources found)")
+        return
+    print(f"- wiki ingest: imported {result.ingested_count} files into {len(result.sources)} wiki topics")
+    for item in result.sources[:5]:
+        print(f"  - {item.source_path} -> {item.topic}")
+    remaining = len(result.sources) - 5
+    if remaining > 0:
+        print(f"  - ... and {remaining} more")
 
 
 def _sync_enable_profile_standards(ctx: AppContext, project_root: Path, profile_id: str | None) -> None:
@@ -448,15 +491,25 @@ def cmd_enable(
     full: bool = False,
     dry_run: bool = False,
     json_output: bool = False,
+    ingest_wiki: bool = False,
+    wiki_limit: int = 24,
     doctor_report_fn: DoctorReportFn,
     doctor_command_fn: DoctorCommandFn,
     load_state_fn: LoadStateFn,
     merge_refactor_state_fn: MergeRefactorStateFn,
     write_state_fn: WriteStateFn,
 ) -> int:
-    # Unified enable workflow: register → bridge → mcp → profile → doctor → bundle.
+    # Unified enable workflow: register → bridge → mcp → profile → doctor → bundle → optional wiki ingest.
     project_root = Path(project_id_or_path).expanduser().resolve()
-    ctx.logger.info("enable_start | target=%s | full=%s | dry_run=%s | json_output=%s", project_root, full, dry_run, json_output)
+    ctx.logger.info(
+        "enable_start | target=%s | full=%s | dry_run=%s | json_output=%s | ingest_wiki=%s | wiki_limit=%s",
+        project_root,
+        full,
+        dry_run,
+        json_output,
+        ingest_wiki,
+        wiki_limit,
+    )
     validation_error = _validate_enable_request(project_root, dry_run=dry_run, json_output=json_output)
     if validation_error is not None:
         return validation_error
@@ -465,7 +518,16 @@ def cmd_enable(
 
     project_id = resolve_project_target(ctx, str(project_root))[0]
     if dry_run:
-        return _run_enable_dry_run(ctx, project_root, project_id=project_id, full=full, json_output=json_output, doctor_report_fn=doctor_report_fn)
+        return _run_enable_dry_run(
+            ctx,
+            project_root,
+            project_id=project_id,
+            full=full,
+            ingest_wiki=ingest_wiki,
+            wiki_limit=wiki_limit,
+            json_output=json_output,
+            doctor_report_fn=doctor_report_fn,
+        )
 
     project_id, registered_now = _ensure_registered_project(ctx, project_root)
     print(f"- registry: {'created' if registered_now else 'ready'} ({project_id})")
@@ -485,6 +547,18 @@ def cmd_enable(
             write_state_fn=write_state_fn,
         )
 
+    if ingest_wiki:
+        wiki_result = ingest_project_wiki_sources(ctx, project_root, project_id=project_id, max_files=wiki_limit)
+        _print_enable_wiki_ingest(wiki_result)
+
     _print_enable_next_steps(full=full)
-    ctx.logger.info("enable_complete | target=%s | full=%s | dry_run=%s | project_id=%s", project_root, full, dry_run, project_id)
+    ctx.logger.info(
+        "enable_complete | target=%s | full=%s | dry_run=%s | project_id=%s | ingest_wiki=%s | wiki_limit=%s",
+        project_root,
+        full,
+        dry_run,
+        project_id,
+        ingest_wiki,
+        wiki_limit,
+    )
     return 0

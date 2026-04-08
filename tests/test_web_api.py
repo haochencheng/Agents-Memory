@@ -164,6 +164,7 @@ class TestPhase1(unittest.TestCase):
             self.assertIn("topic", t)
             self.assertIn("title", t)
             self.assertIn("word_count", t)
+            self.assertIn("project", t)
             self.assertIsInstance(t["word_count"], int)
 
     def test_wiki_detail_ok(self) -> None:
@@ -172,7 +173,7 @@ class TestPhase1(unittest.TestCase):
         data = r.json()
         self.assertEqual(data["topic"], "auth-design")
         self.assertIn("content_html", data)
-        self.assertTrue(len(data["content_html"]) > 0)
+        self.assertGreater(len(data["content_html"]), 0)
         self.assertIn("<h1", data["content_html"])  # toc ext adds id attribute
 
     def test_wiki_detail_not_found(self) -> None:
@@ -236,7 +237,7 @@ class TestPhase1(unittest.TestCase):
         data = r.json()
         self.assertEqual(data["id"], "ERR-2026-0312-001")
         self.assertIn("content_html", data)
-        self.assertTrue(len(data["content_html"]) > 0)
+        self.assertGreater(len(data["content_html"]), 0)
 
     def test_errors_detail_not_found(self) -> None:
         r = self._client.get("/api/errors/ERR-9999-0000-999")
@@ -248,7 +249,7 @@ class TestPhase1(unittest.TestCase):
         data = r.json()
         self.assertIn("raw", data)
         self.assertIn("content_html", data)
-        self.assertTrue(len(data["raw"]) > 0)
+        self.assertGreater(len(data["raw"]), 0)
 
     def test_rules_missing_graceful(self) -> None:
         """rules.md missing should not 500."""
@@ -431,6 +432,59 @@ class TestPhase3(unittest.TestCase):
     def test_task_not_found(self) -> None:
         r = self._client.get("/api/tasks/nonexistent-task-id-xyz")
         self.assertEqual(r.status_code, 404)
+
+
+class TestProjectOnboardingApi(unittest.TestCase):
+    def setUp(self) -> None:
+        import tempfile
+        self._tmpdir = tempfile.mkdtemp()
+        self._root = Path(self._tmpdir)
+        _build_env(self._root)
+        _write(self._root / "templates" / "agents-memory-bridge.instructions.md", "root={{AGENTS_MEMORY_ROOT}}\nproject={{PROJECT_ID}}\n")
+        for name in ["README.template.md", "spec.template.md", "plan.template.md", "task-graph.template.md", "validation.template.md"]:
+            _write(self._root / "templates" / "planning" / name, f"# {name}\nplanning bundle\n## Acceptance Criteria\n## Change Set\n## Work Items\n## Exit Criteria\n## Required Checks\n{{{{TASK_NAME}}}}\n")
+        self._client = _make_client(self._root)
+
+    def tearDown(self) -> None:
+        import shutil
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def test_onboarding_bootstrap_registers_project_and_ingests_docs(self) -> None:
+        project_root = self._root / "Synapse-Network"
+        project_root.mkdir()
+        _write(project_root / "README.md", "# Synapse Network\n")
+        _write(project_root / "AGENTS.md", "# AGENTS\n")
+        _write(project_root / "docs" / "architecture.md", "# Architecture\n")
+
+        response = self._client.post(
+            "/api/onboarding/bootstrap",
+            json={
+                "project_root": str(project_root),
+                "full": False,
+                "ingest_wiki": True,
+                "max_files": 10,
+                "dry_run": False,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["project_id"], "synapse-network")
+        self.assertGreaterEqual(payload["ingested_files"], 2)
+        self.assertIn("README.md", payload["discovered_files"])
+        self.assertTrue(any(item["topic"] == "synapse-network-readme" for item in payload["sources"]))
+
+        projects = self._client.get("/api/projects").json()["projects"]
+        synapse = next(item for item in projects if item["id"] == "synapse-network")
+        self.assertGreaterEqual(synapse["wiki_count"], 2)
+
+        stats = self._client.get("/api/projects/synapse-network/stats").json()
+        self.assertGreaterEqual(stats["wiki_count"], 2)
+        self.assertGreaterEqual(stats["ingest_count"], 2)
+
+        wiki_topics = self._client.get("/api/wiki").json()["topics"]
+        self.assertTrue(any(topic["project"] == "synapse-network" for topic in wiki_topics))
 
 
 # ---------------------------------------------------------------------------

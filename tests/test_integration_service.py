@@ -12,6 +12,7 @@ from agents_memory.runtime import build_context
 from agents_memory.commands.integration import _parse_doctor_args, _parse_enable_args, _parse_onboarding_execute_args
 from agents_memory.services.integration import _doctor_action_sequence, _doctor_bootstrap_checklist, _doctor_bridge_check, _doctor_group_checks, _doctor_group_remediations, _doctor_group_status, _doctor_group_summary, _doctor_planning_checks, _doctor_refactor_watch_checks, _doctor_overall, _doctor_runbook_steps, cmd_bridge_install, cmd_doctor, cmd_enable, execute_onboarding_next_action, onboarding_next_action, write_vscode_mcp_json
 from agents_memory.services.profiles import apply_profile, load_profile
+from agents_memory.services.wiki import read_wiki_page
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -97,6 +98,50 @@ class IntegrationServiceTests(unittest.TestCase):
             changed = write_vscode_mcp_json(ctx, project_root)
 
             self.assertFalse(changed)
+
+    def test_write_vscode_mcp_json_repairs_stale_agents_memory_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            mcp_path = project_root / ".vscode" / "mcp.json"
+            stale_entry = {
+                "type": "stdio",
+                "command": "python3.12",
+                "args": ["/Users/cliff/workspace/Agents-Memory/scripts/mcp_server.py"],
+                "env": {},
+            }
+            _write_text(
+                mcp_path,
+                json.dumps(
+                    {
+                        "servers": {
+                            "agents-memory": stale_entry,
+                            "existing-server": {
+                                "type": "stdio",
+                                "command": "python3",
+                                "args": ["existing.py"],
+                                "env": {},
+                            },
+                        }
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+            )
+
+            changed = write_vscode_mcp_json(ctx, project_root)
+            content = json.loads(mcp_path.read_text(encoding="utf-8"))
+
+            self.assertTrue(changed)
+            self.assertIn("existing-server", content["servers"])
+            self.assertEqual(content["servers"]["agents-memory"]["args"], [str(ctx.base_dir / "scripts" / "mcp_server.py")])
+
+    def test_parse_enable_args_accepts_wiki_ingest_flags(self) -> None:
+        parsed = _parse_enable_args(["/tmp/demo", "--full", "--ingest-wiki", "--wiki-limit", "12"])
+        self.assertEqual(parsed, ("/tmp/demo", True, False, False, True, 12))
 
     def test_cmd_bridge_install_renders_repo_specific_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -381,28 +426,34 @@ class IntegrationServiceTests(unittest.TestCase):
         self.assertTrue(approve_unsafe)
 
     def test_parse_enable_args_supports_full_mode(self) -> None:
-        project_id_or_path, full, dry_run, json_output = _parse_enable_args(["demo-project", "--full"])
+        project_id_or_path, full, dry_run, json_output, ingest_wiki, wiki_limit = _parse_enable_args(["demo-project", "--full"])
 
         self.assertEqual(project_id_or_path, "demo-project")
         self.assertTrue(full)
         self.assertFalse(dry_run)
         self.assertFalse(json_output)
+        self.assertFalse(ingest_wiki)
+        self.assertEqual(wiki_limit, 24)
 
     def test_parse_enable_args_supports_dry_run(self) -> None:
-        project_id_or_path, full, dry_run, json_output = _parse_enable_args(["demo-project", "--dry-run"])
+        project_id_or_path, full, dry_run, json_output, ingest_wiki, wiki_limit = _parse_enable_args(["demo-project", "--dry-run"])
 
         self.assertEqual(project_id_or_path, "demo-project")
         self.assertFalse(full)
         self.assertTrue(dry_run)
         self.assertFalse(json_output)
+        self.assertFalse(ingest_wiki)
+        self.assertEqual(wiki_limit, 24)
 
     def test_parse_enable_args_supports_json_output(self) -> None:
-        project_id_or_path, full, dry_run, json_output = _parse_enable_args(["demo-project", "--full", "--dry-run", "--json"])
+        project_id_or_path, full, dry_run, json_output, ingest_wiki, wiki_limit = _parse_enable_args(["demo-project", "--full", "--dry-run", "--json"])
 
         self.assertEqual(project_id_or_path, "demo-project")
         self.assertTrue(full)
         self.assertTrue(dry_run)
         self.assertTrue(json_output)
+        self.assertFalse(ingest_wiki)
+        self.assertEqual(wiki_limit, 24)
 
     def test_cmd_doctor_surfaces_planning_root_warning_for_applied_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1150,3 +1201,26 @@ class IntegrationServiceTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             self.assertTrue((completed_bundle / "README.md").exists())
+
+    def test_cmd_enable_ingest_wiki_imports_project_docs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            project_root = root / "demo-project"
+            project_root.mkdir()
+            _write_text(root / "templates" / "agents-memory-bridge.instructions.md", "root={{AGENTS_MEMORY_ROOT}}\nproject={{PROJECT_ID}}\n")
+            for name in ["README.template.md", "spec.template.md", "plan.template.md", "task-graph.template.md", "validation.template.md"]:
+                _write_text(root / "templates" / "planning" / name, f"# {name}\nplanning bundle\n## Acceptance Criteria\n## Change Set\n## Work Items\n## Exit Criteria\n## Required Checks\n{{{{TASK_NAME}}}}\n")
+            _write_text(project_root / "README.md", "# Demo Project\n")
+            _write_text(project_root / "docs" / "architecture.md", "# Architecture\n")
+
+            with redirect_stdout(StringIO()):
+                exit_code = cmd_enable(ctx, str(project_root), ingest_wiki=True, wiki_limit=10)
+
+            self.assertEqual(exit_code, 0)
+            self.assertIsNotNone(read_wiki_page(ctx.wiki_dir, "demo-project-readme"))
+            architecture_page = read_wiki_page(ctx.wiki_dir, "demo-project-docs-architecture")
+            self.assertIsNotNone(architecture_page)
+            assert architecture_page is not None
+            self.assertIn("project: demo-project", architecture_page)
+            self.assertIn("source_path: docs/architecture.md", architecture_page)

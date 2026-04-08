@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 import sys
 from datetime import date
 from pathlib import Path
@@ -67,6 +69,52 @@ def _refresh_updated_at(content: str, today: str) -> str:
         for line in fm_lines
     )
     return updated_fm + content[fm_end:]
+
+
+def _format_frontmatter_value(value: Any) -> str:
+    if isinstance(value, list):
+        return "[" + ", ".join(_format_frontmatter_value(item) for item in value) + "]"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    text = str(value)
+    if re.fullmatch(r"[A-Za-z0-9_./-]+", text):
+        return text
+    return json.dumps(text, ensure_ascii=False)
+
+
+def _merge_frontmatter_extra(content: str, extra: dict[str, Any]) -> str:
+    if not extra:
+        return content
+    fm_end = _frontmatter_end(content)
+    if not fm_end:
+        return content
+    fm_lines = content[:fm_end].splitlines(keepends=True)
+    body = content[fm_end:]
+    closing_index = next(
+        (idx for idx in range(len(fm_lines) - 1, -1, -1) if fm_lines[idx].strip() == "---"),
+        len(fm_lines) - 1,
+    )
+    updated_lines: list[str] = []
+    seen_keys: set[str] = set()
+    for line in fm_lines[:closing_index]:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("-") or ":" not in stripped:
+            updated_lines.append(line)
+            continue
+        key = stripped.split(":", 1)[0].strip()
+        if key in extra:
+            updated_lines.append(f"{key}: {_format_frontmatter_value(extra[key])}\n")
+            seen_keys.add(key)
+            continue
+        updated_lines.append(line)
+    for key, value in extra.items():
+        if key in seen_keys:
+            continue
+        updated_lines.append(f"{key}: {_format_frontmatter_value(value)}\n")
+    updated_lines.append(fm_lines[closing_index])
+    return "".join(updated_lines) + body
 
 
 def _excerpt_around(content: str, keyword: str, context_lines: int = 3) -> str:
@@ -336,7 +384,14 @@ def read_wiki_page(wiki_dir: Path, topic: str) -> str | None:
     return path.read_text(encoding="utf-8") if path.exists() else None
 
 
-def write_wiki_page(wiki_dir: Path, topic: str, content: str, *, source: str = "") -> Path:
+def write_wiki_page(
+    wiki_dir: Path,
+    topic: str,
+    content: str,
+    *,
+    source: str = "",
+    frontmatter_extra: dict[str, Any] | None = None,
+) -> Path:
     """Create or overwrite a wiki page; auto-generates frontmatter when absent.
 
     Rules:
@@ -366,6 +421,9 @@ def write_wiki_page(wiki_dir: Path, topic: str, content: str, *, source: str = "
         if source:
             fm = fm.replace("sources: []", f"sources: [{source}]")
         final = fm + content
+
+    if frontmatter_extra:
+        final = _merge_frontmatter_extra(final, frontmatter_extra)
 
     path.write_text(final, encoding="utf-8")
     return path

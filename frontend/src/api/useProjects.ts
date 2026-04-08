@@ -17,6 +17,17 @@ export interface ProjectsResponse {
   projects: Project[]
 }
 
+export interface ProjectStats {
+  id: string
+  health: 'ok' | 'warn' | 'fail' | 'unknown'
+  wiki_count: number
+  error_count: number
+  checklist_done: number
+  ingest_count: number
+  last_error: string
+  last_ingest: string
+}
+
 export function useProjects() {
   return useQuery<ProjectsResponse>({
     queryKey: ['projects'],
@@ -28,7 +39,7 @@ export function useProjects() {
 }
 
 export function useProjectStats(id: string) {
-  return useQuery({
+  return useQuery<ProjectStats>({
     queryKey: ['projects', id, 'stats'],
     queryFn: async () => {
       const { data } = await client.get(`/projects/${id}/stats`)

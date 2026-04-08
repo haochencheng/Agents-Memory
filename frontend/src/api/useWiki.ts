@@ -7,6 +7,8 @@ export interface WikiTopic {
   tags: string[]
   word_count: number
   updated_at: string
+  project: string
+  source_path: string
 }
 
 export interface WikiTopicDetail extends WikiTopic {

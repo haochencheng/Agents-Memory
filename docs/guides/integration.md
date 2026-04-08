@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-04-07
+updated_at: 2026-04-08
 doc_status: active
 ---
 
@@ -100,6 +100,18 @@ amem bootstrap . --dry-run
 amem bootstrap . --full
 ```
 
+如果你希望在接入时把项目 README、AGENTS、设计文档和 `docs/` 下的 Markdown 一起导入共享 wiki：
+
+```bash
+amem bootstrap . --full --ingest-wiki
+```
+
+你也可以限制首轮导入规模：
+
+```bash
+amem bootstrap . --full --ingest-wiki --wiki-limit 24
+```
+
 如果你希望把全量预览交给 agent 或 CI 直接消费：
 
 ```bash
@@ -124,6 +136,13 @@ amem bootstrap . --full --dry-run --json
 3. 安装或更新 `.github/copilot-instructions.md`
 4. 安全补齐现有 planning bundle 缺失的受管文件
 5. 为第一条 refactor hotspot 生成 bundle，并把 follow-up 写回 onboarding state
+
+`--ingest-wiki` 会继续：
+
+1. 自动发现项目根目录下的关键 Markdown 知识源
+2. 默认优先导入 `README.md`、`AGENTS.md`、`DESIGN.md`、`CONTRIBUTING.md`、`docs/**/*.md`
+3. 为导入后的 wiki 页面写入 `project` 与 `source_path` frontmatter
+4. 追加 `project_wiki` 类型的 ingest log，供 dashboard / project detail 统计
 
 如果你仍然想逐项确认或手动控制每一步，也可以继续使用交互式 `amem register`：
 
@@ -169,6 +188,21 @@ Domains (逗号分隔) [frontend, python]: ↵
 > **提示 5**：当前目标项目里的 agent 读取入口是 `.github/copilot-instructions.md`、`.github/instructions/agents-memory-bridge.instructions.md`、`.github/instructions/agents-memory/standards/*`、根目录 `AGENTS.md` 中的受管 read-order block，以及 `.vscode/mcp.json`。这条接入链路不要求目标项目额外生成 `llms.txt` 才能生效；`llms.txt` 仍主要用于 Agents-Memory 仓库自身的机器可读地图。
 
 > **提示 6**：这里的自动修复目前只覆盖安全、模板化的 planning bundle 缺失文件修复。像 refactor hotspot 这类需要代码判断的项，仍会保留为 runbook / bundle，交给后续人工或 agent 按计划处理。
+
+> **提示 7**：如果你更想从前端完成同一件事，可以打开 `http://localhost:10000/wiki/ingest`，使用“项目自动接入”表单提交项目路径。该入口会调用 `/api/onboarding/bootstrap`，底层复用同一条接入与 wiki 导入服务逻辑。
+
+### Synapse-Network 示例
+
+```bash
+amem bootstrap /Users/cliff/workspace/agent/Synapse-Network --full --ingest-wiki
+```
+
+执行后可以这样验证：
+
+1. `http://localhost:10000/` 中出现 `synapse-network`
+2. `http://localhost:10000/projects` 中出现项目卡片
+3. `http://localhost:10000/projects/synapse-network` 中看到非零 `Wiki 页面` 与 `摄入次数`
+4. `http://localhost:10000/wiki/ingest` 的日志中显示导入的源文件与 topic 列表
 
 ---
 

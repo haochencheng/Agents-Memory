@@ -18,6 +18,8 @@ class TopicMeta(BaseModel):
     tags: list[str] = Field(default_factory=list)
     word_count: int
     updated_at: str = ""
+    project: str = ""
+    source_path: str = ""
 
 
 class ErrorMeta(BaseModel):
@@ -187,6 +189,37 @@ class ProjectStatsResponse(BaseModel):
     wiki_count: int = 0
     error_count: int = 0
     checklist_done: int = 0
+    ingest_count: int = 0
+    last_error: str = ""
+    last_ingest: str = ""
+
+
+class ProjectOnboardingRequest(BaseModel):
+    project_root: str
+    full: bool = True
+    ingest_wiki: bool = True
+    max_files: int = 24
+    dry_run: bool = False
+
+
+class ProjectKnowledgeSourceResponse(BaseModel):
+    source_path: str
+    topic: str
+
+
+class ProjectOnboardingResponse(BaseModel):
+    success: bool
+    project_id: str
+    project_root: str
+    full: bool
+    ingest_wiki: bool
+    dry_run: bool
+    enable_exit_code: int
+    enable_log: str = ""
+    discovered_files: list[str] = Field(default_factory=list)
+    ingested_files: int = 0
+    wiki_topics: list[str] = Field(default_factory=list)
+    sources: list[ProjectKnowledgeSourceResponse] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

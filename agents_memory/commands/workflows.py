@@ -5,13 +5,18 @@ from collections.abc import Callable
 from agents_memory.services.workflows import cmd_bootstrap, cmd_close_task, cmd_do_next, cmd_start_task, cmd_validate
 
 
-def _parse_bootstrap_args(args: list[str]) -> tuple[str, bool, bool, bool]:
-    # Parse --full, --dry-run, --json flags; first positional is target.
+def _parse_bootstrap_args(args: list[str]) -> tuple[str, bool, bool, bool, bool, int]:
+    # Parse --full, --dry-run, --json, --ingest-wiki, --wiki-limit flags; first positional is target.
     project_id_or_path = "."
     full = False
     dry_run = False
     json_output = False
-    for arg in args:
+    ingest_wiki = False
+    wiki_limit = 24
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        index += 1
         if arg == "--full":
             full = True
             continue
@@ -21,16 +26,36 @@ def _parse_bootstrap_args(args: list[str]) -> tuple[str, bool, bool, bool]:
         if arg == "--json":
             json_output = True
             continue
+        if arg == "--ingest-wiki":
+            ingest_wiki = True
+            continue
+        if arg == "--wiki-limit" and index < len(args):
+            try:
+                wiki_limit = max(1, int(args[index]))
+            except ValueError:
+                print(f"无效的 --wiki-limit: {args[index]}")
+            index += 1
+            continue
         if arg.startswith("--"):
             print(f"未知参数: {arg}")
             continue
         project_id_or_path = arg
-    return project_id_or_path, full, dry_run, json_output
+    return project_id_or_path, full, dry_run, json_output, ingest_wiki, wiki_limit
 
 
 def _handle_bootstrap(ctx, args: list[str]) -> None:
-    project_id_or_path, full, dry_run, json_output = _parse_bootstrap_args(args)
-    raise SystemExit(cmd_bootstrap(ctx, project_id_or_path, full=full, dry_run=dry_run, json_output=json_output))
+    project_id_or_path, full, dry_run, json_output, ingest_wiki, wiki_limit = _parse_bootstrap_args(args)
+    raise SystemExit(
+        cmd_bootstrap(
+            ctx,
+            project_id_or_path,
+            full=full,
+            dry_run=dry_run,
+            json_output=json_output,
+            ingest_wiki=ingest_wiki,
+            wiki_limit=wiki_limit,
+        )
+    )
 
 
 def _handle_start_task(ctx, args: list[str]) -> None:

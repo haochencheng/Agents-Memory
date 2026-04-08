@@ -188,6 +188,20 @@ class WikiPageTests(unittest.TestCase):
             content = path.read_text(encoding="utf-8")
             self.assertNotIn("updated_at: 2020-01-01", content)
 
+    def test_write_wiki_page_merges_frontmatter_extra(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wiki_dir = Path(tmpdir) / "wiki"
+            path = write_wiki_page(
+                wiki_dir,
+                "docs",
+                "body text",
+                source="README.md",
+                frontmatter_extra={"project": "synapse-network", "source_path": "README.md"},
+            )
+            content = path.read_text(encoding="utf-8")
+            self.assertIn("project: synapse-network", content)
+            self.assertIn("source_path: README.md", content)
+
 
 class WikiSearchTests(unittest.TestCase):
     def test_search_returns_empty_when_dir_missing(self) -> None:

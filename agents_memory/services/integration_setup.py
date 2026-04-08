@@ -222,14 +222,21 @@ def write_vscode_mcp_json(ctx: AppContext, project_root: Path) -> bool:
             existing = json.loads(mcp_file.read_text(encoding="utf-8"))
         except Exception:
             existing = {}
-        if "agents-memory" in existing.get("servers", {}):
-            ctx.logger.info("mcp_file_skip | path=%s | reason=already_contains_server", mcp_file)
+        servers = existing.setdefault("servers", {})
+        current_entry = servers.get("agents-memory")
+        if current_entry == server_entry:
+            ctx.logger.info("mcp_file_skip | path=%s | reason=already_contains_current_server", mcp_file)
             print(f"  已存在: {mcp_file}")
             return False
-        existing.setdefault("servers", {})["agents-memory"] = server_entry
+        servers["agents-memory"] = server_entry
         mcp_file.write_text(json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        log_file_update(ctx.logger, action="merge_mcp_config", path=mcp_file, detail=f"project_root={project_root}")
-        print(f"  ✅ 已合并写入 agents-memory server 条目 → {mcp_file}")
+        action = "repair_mcp_config" if current_entry is not None else "merge_mcp_config"
+        detail = f"project_root={project_root}"
+        log_file_update(ctx.logger, action=action, path=mcp_file, detail=detail)
+        if current_entry is not None:
+            print(f"  ✅ 已修复 agents-memory server 条目 → {mcp_file}")
+        else:
+            print(f"  ✅ 已合并写入 agents-memory server 条目 → {mcp_file}")
         return True
 
     vscode_dir.mkdir(exist_ok=True)

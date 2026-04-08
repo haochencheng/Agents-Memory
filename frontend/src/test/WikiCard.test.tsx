@@ -10,6 +10,8 @@ const TOPIC = {
   tags: ['onboarding', 'setup'],
   word_count: 450,
   updated_at: '2024-03-01T00:00:00Z',
+  project: 'demo-project',
+  source_path: 'README.md',
 }
 
 describe('WikiCard', () => {

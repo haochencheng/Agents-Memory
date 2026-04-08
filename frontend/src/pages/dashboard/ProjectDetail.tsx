@@ -8,14 +8,14 @@ import StatCard from '@/components/StatCard'
 import WikiCard from '@/components/WikiCard'
 
 export default function ProjectDetail() {
-  const { name = '' } = useParams<{ name: string }>()
-  const { data: stats, isLoading, error } = useProjectStats(name)
+  const { id = '' } = useParams<{ id: string }>()
+  const { data: stats, isLoading, error } = useProjectStats(id)
   const { data: wikis } = useWikiList()
 
-  const projectWikis = (wikis?.topics ?? []).filter(w => (w as unknown as { project?: string }).project === name)
+  const projectWikis = (wikis?.topics ?? []).filter(w => w.project === id)
 
-  if (isLoading) return <LoadingSpinner text={`加载项目 ${name}...`} />
-  if (error) return <ErrorAlert message={`项目 "${name}" 信息加载失败`} />
+  if (isLoading) return <LoadingSpinner text={`加载项目 ${id}...`} />
+  if (error) return <ErrorAlert message={`项目 "${id}" 信息加载失败`} />
 
   return (
     <div className="space-y-6" data-testid="project-detail-page">
@@ -24,7 +24,7 @@ export default function ProjectDetail() {
       </div>
 
       <div className="flex items-center justify-between">
-        <h1 className="page-title font-mono">{name}</h1>
+        <h1 className="page-title font-mono">{id}</h1>
         <HealthBadge status={stats?.health ?? 'unknown'} />
       </div>
 
@@ -39,10 +39,17 @@ export default function ProjectDetail() {
         <div>
           <h2 className="section-title mb-3">Wiki 页面</h2>
           <div className="space-y-3">
-            {projectWikis.map((w: { topic: string; title: string; tags: string[]; word_count: number; updated_at: string }) => (
+            {projectWikis.map(w => (
               <WikiCard key={w.topic} topic={w} />
             ))}
           </div>
+        </div>
+      )}
+
+      {stats?.last_ingest && (
+        <div className="bg-white rounded-xl border border-gray-100 p-5">
+          <h2 className="section-title mb-2">最近摄入</h2>
+          <p className="text-sm font-mono text-gray-700 bg-gray-50 rounded p-3">{stats.last_ingest}</p>
         </div>
       )}
 

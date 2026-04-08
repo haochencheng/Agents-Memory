@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from contextlib import redirect_stdout
 from datetime import datetime, timezone
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +20,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agents_memory.runtime import AppContext, build_context
 from agents_memory.services.records import collect_errors, parse_frontmatter, read_body
+from agents_memory.services.integration import cmd_enable as run_enable_command
+from agents_memory.services.project_onboarding import ingest_project_wiki_sources
+from agents_memory.services.projects import parse_projects, resolve_project_target
 from agents_memory.services.wiki import (
     list_wiki_topics,
     parse_wiki_sections,
@@ -40,6 +45,9 @@ from agents_memory.web.models import (
     IngestResponse,
     LintIssue,
     ProjectInfo,
+    ProjectKnowledgeSourceResponse,
+    ProjectOnboardingRequest,
+    ProjectOnboardingResponse,
     ProjectStatsResponse,
     ProjectsResponse,
     RulesResponse,
@@ -98,11 +106,9 @@ def _parse_frontmatter_str(raw: str) -> dict[str, Any]:
     """Extract frontmatter key-value pairs from raw wiki page content."""
     meta: dict[str, Any] = {}
     in_front = False
-    fence_count = 0
     for line in raw.splitlines():
         stripped = line.rstrip()
         if stripped == "---":
-            fence_count += 1
             if not in_front:
                 in_front = True
                 continue
@@ -146,6 +152,58 @@ def _read_ingest_log(ctx: AppContext, limit: int = 50) -> list[dict[str, Any]]:
     return entries
 
 
+def _load_wiki_topic_entries(ctx: AppContext) -> list[tuple[str, str, dict[str, Any]]]:
+    entries: list[tuple[str, str, dict[str, Any]]] = []
+    for topic in list_wiki_topics(ctx.wiki_dir):
+        raw = read_wiki_page(ctx.wiki_dir, topic)
+        if raw is None:
+            continue
+        entries.append((topic, raw, _parse_frontmatter_str(raw)))
+    return entries
+
+
+def _registered_project_ids(ctx: AppContext) -> list[str]:
+    return [item.get("id", "") for item in parse_projects(ctx) if item.get("id")]
+
+
+def _wiki_stats_by_project(ctx: AppContext) -> tuple[dict[str, int], dict[str, list[tuple[str, str, dict[str, Any]]]]]:
+    counts: dict[str, int] = {}
+    grouped: dict[str, list[tuple[str, str, dict[str, Any]]]] = {}
+    for topic, raw, fm in _load_wiki_topic_entries(ctx):
+        project_id = str(fm.get("project", "")).strip()
+        if not project_id:
+            continue
+        counts[project_id] = counts.get(project_id, 0) + 1
+        grouped.setdefault(project_id, []).append((topic, raw, fm))
+    return counts, grouped
+
+
+def _ingest_stats_by_project(ctx: AppContext) -> tuple[dict[str, int], dict[str, str]]:
+    counts: dict[str, int] = {}
+    latest: dict[str, str] = {}
+    for entry in _read_ingest_log(ctx, limit=10000):
+        project_id = str(entry.get("project", "")).strip()
+        if not project_id:
+            continue
+        counts[project_id] = counts.get(project_id, 0) + 1
+        ts = str(entry.get("ts", ""))
+        if ts and ts > latest.get(project_id, ""):
+            latest[project_id] = ts
+    return counts, latest
+
+
+def _error_stats_by_project(ctx: AppContext) -> tuple[dict[str, int], dict[str, str]]:
+    counts: dict[str, int] = {}
+    latest_error: dict[str, str] = {}
+    for error in collect_errors(ctx):
+        project_id = str(error.get("project", "")).strip()
+        if not project_id:
+            continue
+        counts[project_id] = counts.get(project_id, 0) + 1
+        latest_error[project_id] = str(error.get("id", latest_error.get(project_id, "")))
+    return counts, latest_error
+
+
 # ---------------------------------------------------------------------------
 # Wiki lint (simple checks)
 # ---------------------------------------------------------------------------
@@ -182,12 +240,18 @@ def get_stats() -> StatsResponse:
     wiki_topics = list_wiki_topics(ctx.wiki_dir)
     errors = collect_errors(ctx)
     ingest_log = _read_ingest_log(ctx, limit=10000)
-    projects: list[str] = sorted({e.get("project", "") for e in errors if e.get("project")})
+    projects: set[str] = set(_registered_project_ids(ctx))
+    projects.update(str(e.get("project", "")).strip() for e in errors if e.get("project"))
+    projects.update(str(e.get("project", "")).strip() for e in ingest_log if e.get("project"))
+    for _topic, _raw, fm in _load_wiki_topic_entries(ctx):
+        project_id = str(fm.get("project", "")).strip()
+        if project_id:
+            projects.add(project_id)
     return StatsResponse(
         wiki_count=len(wiki_topics),
         error_count=len(errors),
         ingest_count=len(ingest_log),
-        projects=projects,
+        projects=sorted(project for project in projects if project),
     )
 
 
@@ -199,24 +263,19 @@ def get_stats() -> StatsResponse:
 @app.get("/api/projects", response_model=ProjectsResponse)
 def list_projects() -> ProjectsResponse:
     ctx = _get_ctx()
-    from agents_memory.services.projects import parse_projects  # noqa: PLC0415
     raw_projects = parse_projects(ctx)
-    errors = collect_errors(ctx)
-    error_counts: dict[str, int] = {}
-    for e in errors:
-        pid = e.get("project", "")
-        if pid:
-            error_counts[pid] = error_counts.get(pid, 0) + 1
-    wiki_topics = list_wiki_topics(ctx.wiki_dir)
-    wiki_count = len(wiki_topics)
+    error_counts, _latest_error = _error_stats_by_project(ctx)
+    wiki_counts, _grouped_wiki = _wiki_stats_by_project(ctx)
+    _, latest_ingest = _ingest_stats_by_project(ctx)
     projects = [
         ProjectInfo(
             id=p.get("id", ""),
             name=p.get("id", ""),
             description=p.get("description", ""),
             health="ok" if error_counts.get(p.get("id", ""), 0) == 0 else "warn",
-            wiki_count=wiki_count,
+            wiki_count=wiki_counts.get(p.get("id", ""), 0),
             error_count=error_counts.get(p.get("id", ""), 0),
+            last_ingest=latest_ingest.get(p.get("id", ""), ""),
         )
         for p in raw_projects
     ]
@@ -226,16 +285,20 @@ def list_projects() -> ProjectsResponse:
 @app.get("/api/projects/{project_id}/stats", response_model=ProjectStatsResponse)
 def project_stats(project_id: str) -> ProjectStatsResponse:
     ctx = _get_ctx()
-    errors = collect_errors(ctx)
-    err_count = sum(1 for e in errors if e.get("project") == project_id)
+    error_counts, latest_error = _error_stats_by_project(ctx)
+    wiki_counts, _grouped_wiki = _wiki_stats_by_project(ctx)
+    ingest_counts, latest_ingest = _ingest_stats_by_project(ctx)
+    err_count = error_counts.get(project_id, 0)
     health = "ok" if err_count == 0 else "warn"
-    wiki_topics = list_wiki_topics(ctx.wiki_dir)
     return ProjectStatsResponse(
         id=project_id,
         health=health,
-        wiki_count=len(wiki_topics),
+        wiki_count=wiki_counts.get(project_id, 0),
         error_count=err_count,
         checklist_done=0,
+        ingest_count=ingest_counts.get(project_id, 0),
+        last_error=latest_error.get(project_id, ""),
+        last_ingest=latest_ingest.get(project_id, ""),
     )
 
 
@@ -324,6 +387,7 @@ def wiki_graph() -> WikiGraphResponse:
         nodes.append(GraphNode(
             id=topic,
             title=title,
+            project=str(fm.get("project", "")),
             word_count=_word_count(raw),
         ))
         topic_ids.add(topic)
@@ -350,11 +414,7 @@ def wiki_graph() -> WikiGraphResponse:
 def list_wiki() -> WikiListResponse:
     ctx = _get_ctx()
     topics_result: list[TopicMeta] = []
-    for topic in list_wiki_topics(ctx.wiki_dir):
-        raw = read_wiki_page(ctx.wiki_dir, topic)
-        if raw is None:
-            continue
-        fm = _parse_frontmatter_str(raw)
+    for topic, raw, fm in _load_wiki_topic_entries(ctx):
         title = fm.get("topic", topic).replace("-", " ").title()
         tags = fm.get("tags", [])
         if isinstance(tags, str):
@@ -366,6 +426,8 @@ def list_wiki() -> WikiListResponse:
                 tags=tags,
                 word_count=_word_count(raw),
                 updated_at=fm.get("updated_at", ""),
+                project=str(fm.get("project", "")),
+                source_path=str(fm.get("source_path", "")),
             )
         )
     return WikiListResponse(topics=topics_result)
@@ -427,7 +489,8 @@ async def wiki_compile(topic: str) -> CompileResponse:  # WRITE
                 result={"error": str(exc)},
             )
 
-    asyncio.create_task(_run())
+    task = asyncio.create_task(_run())
+    _task_store[task_id]["task"] = task
     return CompileResponse(task_id=task_id, status="pending")
 
 
@@ -620,6 +683,61 @@ def ingest_log(limit: int = Query(50, ge=1, le=1000)) -> IngestLogResponse:
         for e in entries_raw
     ]
     return IngestLogResponse(entries=entries, total=len(entries))
+
+
+@app.post("/api/onboarding/bootstrap", response_model=ProjectOnboardingResponse, status_code=200)
+def onboarding_bootstrap(body: ProjectOnboardingRequest) -> ProjectOnboardingResponse:
+    ctx = _get_ctx()
+    project_root = Path(body.project_root).expanduser().resolve()
+    if not project_root.exists() or not project_root.is_dir():
+        raise HTTPException(status_code=404, detail=f"Project root '{project_root}' not found")
+
+    enable_buffer = StringIO()
+    with redirect_stdout(enable_buffer):
+        enable_exit_code = run_enable_command(
+            ctx,
+            str(project_root),
+            full=body.full,
+            dry_run=body.dry_run,
+            json_output=False,
+        )
+
+    project_id = resolve_project_target(ctx, str(project_root))[0]
+    discovered_files: list[str] = []
+    sources: list[ProjectKnowledgeSourceResponse] = []
+    ingested_files = 0
+    wiki_topics: list[str] = []
+
+    if body.ingest_wiki and enable_exit_code == 0:
+        ingest_result = ingest_project_wiki_sources(
+            ctx,
+            project_root,
+            project_id=project_id,
+            max_files=max(1, body.max_files),
+            dry_run=body.dry_run,
+        )
+        discovered_files = ingest_result.discovered_files
+        sources = [
+            ProjectKnowledgeSourceResponse(source_path=item.source_path, topic=item.topic)
+            for item in ingest_result.sources
+        ]
+        ingested_files = ingest_result.ingested_count
+        wiki_topics = [item.topic for item in ingest_result.sources]
+
+    return ProjectOnboardingResponse(
+        success=enable_exit_code == 0,
+        project_id=project_id,
+        project_root=str(project_root),
+        full=body.full,
+        ingest_wiki=body.ingest_wiki,
+        dry_run=body.dry_run,
+        enable_exit_code=enable_exit_code,
+        enable_log=enable_buffer.getvalue().strip(),
+        discovered_files=discovered_files,
+        ingested_files=ingested_files,
+        wiki_topics=wiki_topics,
+        sources=sources,
+    )
 
 
 # ---------------------------------------------------------------------------

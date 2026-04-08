@@ -126,13 +126,24 @@ def _merge_refactor_followup_state(
     return payload
 
 
-def cmd_enable(ctx: AppContext, project_id_or_path: str = ".", *, full: bool = False, dry_run: bool = False, json_output: bool = False) -> int:
+def cmd_enable(
+    ctx: AppContext,
+    project_id_or_path: str = ".",
+    *,
+    full: bool = False,
+    dry_run: bool = False,
+    json_output: bool = False,
+    ingest_wiki: bool = False,
+    wiki_limit: int = 24,
+) -> int:
     return run_enable_command(
         ctx,
         project_id_or_path,
         full=full,
         dry_run=dry_run,
         json_output=json_output,
+        ingest_wiki=ingest_wiki,
+        wiki_limit=wiki_limit,
         doctor_report_fn=_doctor_report,
         doctor_command_fn=lambda hook_ctx, target: cmd_doctor(hook_ctx, target, write_state=True, write_checklist=True),
         load_state_fn=load_onboarding_state,
