@@ -52,17 +52,11 @@ doc_status: active
 
 ---
 
-## Phase 4 — Streamlit MVP UI（5 页面）
+## Phase 4 — 旧版 Python UI（已废弃）
 
-| # | 任务 | 产出 |
-|---|------|------|
-| 4.1 | 实现概览页（stats + lint 摘要） | streamlit_app.py |
-| 4.2 | 实现 Wiki 浏览页（列表 + 搜索 + 详情） | streamlit_app.py |
-| 4.3 | 实现搜索页（混合搜索结果） | streamlit_app.py |
-| 4.4 | 实现错误记录页（表格 + 过滤） | streamlit_app.py |
-| 4.5 | 实现 Ingest 页（表单提交） | streamlit_app.py |
+该阶段原本为旧版 Python UI 预留，现已被 `frontend/` React SPA 替代，不再作为当前实现路径。
 
-**验收标准:** 手动逐页截图验证，无崩溃，无 JS console 错误。
+**说明:** 历史实现已清理，相关内容仅保留为演进记录，不再继续维护。
 
 ---
 
@@ -81,7 +75,7 @@ doc_status: active
 
 ## Phase 6 — React 前端实现（✅ 已完成）
 
-> 根据 `08-product-frontend-design.md` 设计文档实现，替代 Phase 4 的 Streamlit MVP。
+> 根据 `08-product-frontend-design.md` 设计文档实现，替代旧版 Python UI 方案。
 
 | # | 任务 | 产出 | 状态 |
 |---|------|------|------|
@@ -94,13 +88,13 @@ doc_status: active
 | 6.7 | 实现 Wiki 页面（WikiHome / TopicDetail / TopicEdit / KnowledgeGraph / LintReport / Ingest） | `frontend/src/pages/wiki/` | ✅ |
 | 6.8 | 编写单元测试（28 个测试全部通过） | `frontend/src/test/` | ✅ |
 | 6.9 | 构建验证（`npm run build` 无错误） | `frontend/dist/` | ✅ |
-| 6.10 | 启动 Dev Server 验证（http://localhost:3002） | vite dev | ✅ |
+| 6.10 | 启动 Dev Server 验证（http://localhost:10000） | vite dev | ✅ |
 
 **验收结果:** 
 - TypeScript: 0 编译错误
 - 构建: `vite build` 成功，输出 281KB JS
 - 测试: 28/28 通过（5 个测试文件）
-- Dev Server: http://localhost:3002 返回正常 HTML
+- Dev Server: http://localhost:10000 返回正常 HTML
 
 ---
 
@@ -110,4 +104,4 @@ doc_status: active
 |------|------|
 | `services/` 接口不稳定 | api.py 通过 try/except 降级，端点不崩溃 |
 | wiki-compile 需要 Ollama | Phase 3 测试 mock LLM，不依赖本地模型启动 |
-| Streamlit 版本不兼容 | 固定 `streamlit>=1.32` |
+| 前端依赖或 Node 版本不兼容 | 固定 Node 18+，依赖由 `frontend/package.json` 管理 |

@@ -69,9 +69,7 @@ app = FastAPI(title="Agents-Memory API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
         "http://localhost:10000",
-        "http://127.0.0.1:5173",
         "http://127.0.0.1:10000",
     ],
     allow_methods=["GET", "POST", "PUT", "DELETE"],

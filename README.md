@@ -212,7 +212,8 @@ agents_memory/
 ├── commands/         # CLI dispatch → services
 ├── services/         # Business logic (records, search, wiki, planning, …)
 ├── integrations/     # Agent adapters (GitHub Copilot, ChatGPT, Claude)
-└── web/              # FastAPI REST API + Streamlit UI (ports 10100 / 10000)
+├── web/              # FastAPI REST API backend (port 10100)
+└── frontend/         # React SPA frontend (port 10000)
 ```
 
 ### Workflow
@@ -242,7 +243,7 @@ amem validate .
 python3.12 -m unittest discover -s tests -p 'test_*.py'
 
 # Start web UI (optional)
-bash scripts/web-start.sh start   # FastAPI :10100, Streamlit :10000
+bash scripts/web-start.sh restart   # FastAPI :10100, React :10000
 ```
 
 ### Trust Signals
@@ -479,7 +480,8 @@ agents_memory/
 ├── commands/         # CLI 分发 → services
 ├── services/         # 业务逻辑（records、search、wiki、planning 等）
 ├── integrations/     # Agent adapters（GitHub Copilot、ChatGPT、Claude）
-└── web/              # FastAPI REST API + Streamlit UI（端口 10100 / 10000）
+├── web/              # FastAPI REST API 后端（端口 10100）
+└── frontend/         # React SPA 前端（端口 10000）
 ```
 
 ### 工作流
@@ -509,7 +511,7 @@ amem validate .
 python3.12 -m unittest discover -s tests -p 'test_*.py'
 
 # 启动 Web UI（可选）
-bash scripts/web-start.sh start   # FastAPI :10100，Streamlit :10000
+bash scripts/web-start.sh restart   # FastAPI :10100，React :10000
 ```
 
 ### 可信信号

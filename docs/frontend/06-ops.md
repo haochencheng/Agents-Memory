@@ -191,8 +191,11 @@ cat logs/web-ui.log
 # 重新安装依赖
 pip3.12 install -r requirements.txt --break-system-packages
 
-# 运行单个测试类调试
-python3.12 -m pytest tests/test_web_e2e.py::TestE2EWikiPage -v -s
+# 运行前端单测
+cd frontend && npm test -- --run
+
+# 运行前端 E2E
+cd frontend && npx playwright test
 ```
 
 ## Bugfix 记录
