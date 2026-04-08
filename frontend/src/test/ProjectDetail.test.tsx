@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import ProjectDetail from '@/pages/dashboard/ProjectDetail'
@@ -17,6 +17,7 @@ function renderPage() {
     <MemoryRouter initialEntries={['/projects/synapse-network']}>
       <Routes>
         <Route path="/projects/:id" element={<ProjectDetail />} />
+        <Route path="/wiki/:topic" element={<div data-testid="wiki-topic-route">wiki detail</div>} />
       </Routes>
     </MemoryRouter>
   )
@@ -211,9 +212,11 @@ describe('ProjectDetail page', () => {
 
   it('renders tree view by default', () => {
     renderPage()
-    expect(screen.getByTestId('project-wiki-tree-view')).toBeInTheDocument()
-    expect(screen.getAllByText('Root Docs').length).toBeGreaterThan(0)
-    expect(screen.getByText('Synapse Network Plan')).toBeInTheDocument()
+    const treeView = screen.getByTestId('project-wiki-tree-view')
+
+    expect(treeView).toBeInTheDocument()
+    expect(within(treeView).getAllByText('Root Docs').length).toBeGreaterThan(0)
+    expect(within(treeView).getByText('Synapse Network Plan')).toBeInTheDocument()
   })
 
   it('switches to domain view', async () => {
@@ -222,8 +225,33 @@ describe('ProjectDetail page', () => {
 
     await user.click(screen.getByRole('button', { name: 'Domain' }))
 
-    expect(screen.getByTestId('project-wiki-domain-view')).toBeInTheDocument()
-    expect(screen.getByText('Architecture')).toBeInTheDocument()
+    const domainView = screen.getByTestId('project-wiki-domain-view')
+
+    expect(domainView).toBeInTheDocument()
+    expect(within(domainView).getByText('Architecture')).toBeInTheDocument()
     expect(screen.getAllByTestId('project-domain-group')).toHaveLength(3)
+  })
+
+  it('renders a collapsible explorer sidebar and opens wiki detail from file items', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    const sidebar = screen.getByTestId('project-wiki-sidebar')
+    const rootButtons = within(sidebar).getAllByTestId('project-explorer-node')
+
+    expect(within(sidebar).getByText('Project Explorer')).toBeInTheDocument()
+    expect(within(sidebar).getByText('Synapse Network Docs Architecture')).toBeInTheDocument()
+
+    await user.click(rootButtons[1])
+    expect(within(sidebar).queryByText('Synapse Network Docs Architecture')).not.toBeInTheDocument()
+
+    await user.click(within(sidebar).getAllByTestId('project-explorer-node')[1])
+    expect(within(sidebar).getByText('Synapse Network Docs Architecture')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Domain' }))
+    expect(screen.getByTestId('project-wiki-domain-view')).toBeInTheDocument()
+
+    await user.click(within(sidebar).getByRole('link', { name: /Synapse Network Plan/i }))
+    expect(screen.getByTestId('wiki-topic-route')).toBeInTheDocument()
   })
 })
