@@ -32,23 +32,25 @@ def _build_context(root: Path):
 
 
 class ProjectOnboardingServiceTests(unittest.TestCase):
-    def test_discover_project_wiki_sources_prioritises_core_docs(self) -> None:
+    def test_discover_project_wiki_sources_prefers_docs_corpus_and_includes_plans(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             project_root = Path(tmpdir) / "Synapse-Network"
             project_root.mkdir(parents=True)
             _write_text(project_root / "README.md", "# README\n")
             _write_text(project_root / "AGENTS.md", "# Agents\n")
             _write_text(project_root / "docs" / "architecture.md", "# Architecture\n")
-            _write_text(project_root / "docs" / "plans" / "ignored.md", "# Ignore me\n")
+            _write_text(project_root / "docs" / "plans" / "plan.md", "# Keep me\n")
+            _write_text(project_root / "services" / "gateway" / "README.md", "# Service README\n")
             _write_text(project_root / ".pytest_cache" / "README.md", "# Ignore cache\n")
             _write_text(project_root / ".github" / "instructions" / "agents-memory" / "ignored.md", "# Ignore me too\n")
 
-            discovered = discover_project_wiki_sources(project_root, max_files=10)
+            discovered = discover_project_wiki_sources(project_root)
             relative = [path.relative_to(project_root).as_posix() for path in discovered]
 
             self.assertEqual(relative[:2], ["README.md", "AGENTS.md"])
             self.assertIn("docs/architecture.md", relative)
-            self.assertNotIn("docs/plans/ignored.md", relative)
+            self.assertIn("docs/plans/plan.md", relative)
+            self.assertNotIn("services/gateway/README.md", relative)
             self.assertNotIn(".pytest_cache/README.md", relative)
             self.assertNotIn(".github/instructions/agents-memory/ignored.md", relative)
 
@@ -77,3 +79,17 @@ class ProjectOnboardingServiceTests(unittest.TestCase):
             lines = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
             self.assertEqual(lines[0]["source_type"], "project_wiki")
             self.assertEqual(lines[0]["project"], "synapse-network")
+
+    def test_discover_project_wiki_sources_applies_optional_limit_to_docs_corpus(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir) / "Synapse-Network"
+            project_root.mkdir(parents=True)
+            _write_text(project_root / "README.md", "# README\n")
+            _write_text(project_root / "AGENTS.md", "# Agents\n")
+            _write_text(project_root / "docs" / "a.md", "# A\n")
+            _write_text(project_root / "docs" / "b.md", "# B\n")
+
+            discovered = discover_project_wiki_sources(project_root, max_files=3)
+            relative = [path.relative_to(project_root).as_posix() for path in discovered]
+
+            self.assertEqual(relative, ["README.md", "AGENTS.md", "docs/a.md"])

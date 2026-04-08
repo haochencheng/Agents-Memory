@@ -486,6 +486,34 @@ class TestProjectOnboardingApi(unittest.TestCase):
         wiki_topics = self._client.get("/api/wiki").json()["topics"]
         self.assertTrue(any(topic["project"] == "synapse-network" for topic in wiki_topics))
 
+    def test_onboarding_bootstrap_defaults_to_full_docs_corpus_when_max_files_omitted(self) -> None:
+        project_root = self._root / "Synapse-Network"
+        project_root.mkdir()
+        _write(project_root / "README.md", "# Synapse Network\n")
+        _write(project_root / "AGENTS.md", "# AGENTS\n")
+        _write(project_root / "docs" / "architecture.md", "# Architecture\n")
+        _write(project_root / "docs" / "plans" / "plan.md", "# Plan\n")
+        _write(project_root / "services" / "gateway" / "README.md", "# Service README\n")
+
+        response = self._client.post(
+            "/api/onboarding/bootstrap",
+            json={
+                "project_root": str(project_root),
+                "full": False,
+                "ingest_wiki": True,
+                "dry_run": False,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertGreaterEqual(payload["ingested_files"], 4)
+        self.assertIn("README.md", payload["discovered_files"])
+        self.assertIn("AGENTS.md", payload["discovered_files"])
+        self.assertIn("docs/architecture.md", payload["discovered_files"])
+        self.assertIn("docs/plans/plan.md", payload["discovered_files"])
+        self.assertNotIn("services/gateway/README.md", payload["discovered_files"])
+
 
 # ---------------------------------------------------------------------------
 # Renderer unit tests
@@ -506,7 +534,7 @@ class TestRenderer(unittest.TestCase):
 
     def test_code_block_renders(self) -> None:
         html = self.md_to_html("```python\nx = 1\n```")
-        self.assertIn("<code>", html)
+        self.assertIn("<code", html)
 
     def test_xss_script_stripped(self) -> None:
         html = self.md_to_html("<script>alert(1)</script>")

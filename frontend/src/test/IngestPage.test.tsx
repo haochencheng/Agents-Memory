@@ -55,7 +55,7 @@ describe('Ingest page', () => {
       project_root: '/tmp/Synapse-Network',
       full: true,
       ingest_wiki: true,
-      max_files: 24,
+      max_files: null,
     })
     expect(await screen.findByText(/项目接入完成/)).toBeInTheDocument()
   })

@@ -33,7 +33,7 @@ USAGE = """Agents-Memory CLI — 错误记录管理工具
   python3 memory.py register [path]            # 一键注册新项目（agent + bridge + mcp）
   python3 memory.py mcp-setup [project-id]     # 在已注册项目中写入 .vscode/mcp.json
     python3 memory.py enable [path] [--full] [--dry-run] [--json] [--ingest-wiki] [--wiki-limit <n>]
-                                                 # 一键启用 Shared Engineering Brain；可选自动导入项目 Markdown 知识源到共享 wiki
+                                                 # 一键启用 Shared Engineering Brain；默认导入根目录核心文档与 docs/ 下全部 Markdown，可用 --wiki-limit 截断
     python3 memory.py bootstrap [path] [--full] [--dry-run] [--json] [--ingest-wiki] [--wiki-limit <n>]
                                                                                                # 顶层 workflow 入口；语义等价于 enable，更适合按用户意图组织接入流程
   python3 memory.py doctor [project-id] [--write-checklist] [--write-state]

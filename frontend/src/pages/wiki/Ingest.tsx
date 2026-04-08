@@ -12,7 +12,7 @@ interface OnboardingForm {
   project_root: string
   full: boolean
   ingest_wiki: boolean
-  max_files: number
+  max_files: number | ''
 }
 
 const EMPTY_FORM: IngestForm = { project: '', source_type: 'markdown', content: '' }
@@ -20,7 +20,7 @@ const EMPTY_ONBOARDING_FORM: OnboardingForm = {
   project_root: '',
   full: true,
   ingest_wiki: true,
-  max_files: 24,
+  max_files: '',
 }
 
 export default function Ingest() {
@@ -68,7 +68,10 @@ export default function Ingest() {
     }
     appendLog(`启动项目自动接入: root=${onboardingForm.project_root}`)
     try {
-      const result = await onboarding.mutateAsync(onboardingForm)
+      const result = await onboarding.mutateAsync({
+        ...onboardingForm,
+        max_files: onboardingForm.max_files === '' ? null : onboardingForm.max_files,
+      })
       appendLog(`[OK] 项目接入完成: project=${result.project_id}, bootstrap_exit=${result.enable_exit_code}`)
       if (result.enable_log) {
         appendLog(`bootstrap log:\n${result.enable_log}`)
@@ -202,11 +205,12 @@ export default function Ingest() {
               id="onboarding-max-files"
               type="number"
               min={1}
-              max={200}
               className="input w-full"
               value={onboardingForm.max_files}
-              onChange={e => setOnboardingForm(f => ({ ...f, max_files: Number(e.target.value) || 1 }))}
+              onChange={e => setOnboardingForm(f => ({ ...f, max_files: e.target.value === '' ? '' : Number(e.target.value) || '' }))}
+              placeholder="留空表示导入全部 docs"
             />
+            <p className="mt-1 text-xs text-gray-500">默认导入根目录核心说明文档与 docs 下全部 Markdown；填写数字时才会截断。</p>
           </div>
         </div>
 

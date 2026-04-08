@@ -150,7 +150,7 @@ def _collect_standard_previews(
     project_id: str,
     full: bool,
     ingest_wiki: bool,
-    wiki_limit: int,
+    wiki_limit: int | None,
     doctor_report_fn: DoctorReportFn,
 ) -> tuple[list[str], list[str], list[str]]:
     # Collect preview data for registry, bridge, MCP, profile, doctor, and onboarding steps.
@@ -176,7 +176,7 @@ def _collect_standard_previews(
             dry_run=True,
         )
         if preview_result.sources:
-            caps.append(f"ingest up to {len(preview_result.sources)} project knowledge files into the shared wiki")
+            caps.append(f"ingest {len(preview_result.sources)} project knowledge files into the shared wiki")
             writes.extend(str(ctx.wiki_dir / f"{item.topic}.md") for item in preview_result.sources)
         else:
             skipped.append("project wiki ingest skipped: no markdown knowledge sources found")
@@ -190,7 +190,7 @@ def _preview_enable_actions(
     project_id: str,
     full: bool,
     ingest_wiki: bool,
-    wiki_limit: int,
+    wiki_limit: int | None,
     doctor_report_fn: DoctorReportFn,
 ) -> dict[str, object]:
     # Aggregate all planned capabilities and writes for a dry-run preview.
@@ -492,7 +492,7 @@ def cmd_enable(
     dry_run: bool = False,
     json_output: bool = False,
     ingest_wiki: bool = False,
-    wiki_limit: int = 24,
+    wiki_limit: int | None = None,
     doctor_report_fn: DoctorReportFn,
     doctor_command_fn: DoctorCommandFn,
     load_state_fn: LoadStateFn,

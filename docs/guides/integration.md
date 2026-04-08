@@ -106,6 +106,8 @@ amem bootstrap . --full
 amem bootstrap . --full --ingest-wiki
 ```
 
+默认会导入根目录核心说明文档与 `docs/` 下全部 Markdown。
+
 你也可以限制首轮导入规模：
 
 ```bash

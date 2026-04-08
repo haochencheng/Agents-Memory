@@ -134,7 +134,7 @@ def cmd_enable(
     dry_run: bool = False,
     json_output: bool = False,
     ingest_wiki: bool = False,
-    wiki_limit: int = 24,
+    wiki_limit: int | None = None,
 ) -> int:
     return run_enable_command(
         ctx,

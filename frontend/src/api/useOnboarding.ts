@@ -28,7 +28,7 @@ export function useProjectOnboarding() {
       project_root: string
       full: boolean
       ingest_wiki: boolean
-      max_files: number
+      max_files?: number | null
       dry_run?: boolean
     }) => {
       const { data } = await client.post('/onboarding/bootstrap', payload)

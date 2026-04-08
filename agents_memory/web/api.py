@@ -713,7 +713,7 @@ def onboarding_bootstrap(body: ProjectOnboardingRequest) -> ProjectOnboardingRes
             ctx,
             project_root,
             project_id=project_id,
-            max_files=max(1, body.max_files),
+            max_files=body.max_files,
             dry_run=body.dry_run,
         )
         discovered_files = ingest_result.discovered_files

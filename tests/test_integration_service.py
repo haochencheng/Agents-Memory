@@ -433,7 +433,7 @@ class IntegrationServiceTests(unittest.TestCase):
         self.assertFalse(dry_run)
         self.assertFalse(json_output)
         self.assertFalse(ingest_wiki)
-        self.assertEqual(wiki_limit, 24)
+        self.assertIsNone(wiki_limit)
 
     def test_parse_enable_args_supports_dry_run(self) -> None:
         project_id_or_path, full, dry_run, json_output, ingest_wiki, wiki_limit = _parse_enable_args(["demo-project", "--dry-run"])
@@ -443,7 +443,7 @@ class IntegrationServiceTests(unittest.TestCase):
         self.assertTrue(dry_run)
         self.assertFalse(json_output)
         self.assertFalse(ingest_wiki)
-        self.assertEqual(wiki_limit, 24)
+        self.assertIsNone(wiki_limit)
 
     def test_parse_enable_args_supports_json_output(self) -> None:
         project_id_or_path, full, dry_run, json_output, ingest_wiki, wiki_limit = _parse_enable_args(["demo-project", "--full", "--dry-run", "--json"])
@@ -453,7 +453,17 @@ class IntegrationServiceTests(unittest.TestCase):
         self.assertTrue(dry_run)
         self.assertTrue(json_output)
         self.assertFalse(ingest_wiki)
-        self.assertEqual(wiki_limit, 24)
+        self.assertIsNone(wiki_limit)
+
+    def test_parse_enable_args_supports_explicit_wiki_limit(self) -> None:
+        project_id_or_path, full, dry_run, json_output, ingest_wiki, wiki_limit = _parse_enable_args(["demo-project", "--ingest-wiki", "--wiki-limit", "12"])
+
+        self.assertEqual(project_id_or_path, "demo-project")
+        self.assertFalse(full)
+        self.assertFalse(dry_run)
+        self.assertFalse(json_output)
+        self.assertTrue(ingest_wiki)
+        self.assertEqual(wiki_limit, 12)
 
     def test_cmd_doctor_surfaces_planning_root_warning_for_applied_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -30,7 +30,13 @@ _IGNORED_PARTS = {
 
 _IGNORED_RELATIVE_PREFIXES = (
     ".github/instructions/agents-memory",
-    "docs/plans",
+)
+
+_ROOT_KNOWLEDGE_FILES = (
+    "README.md",
+    "AGENTS.md",
+    "DESIGN.md",
+    "CONTRIBUTING.md",
 )
 
 _PRIORITY_FILES = {
@@ -71,7 +77,53 @@ def _priority_key(path: Path, project_root: Path) -> tuple[int, int, str]:
     return priority, len(path.relative_to(project_root).parts), rel
 
 
-def discover_project_wiki_sources(project_root: Path, *, max_files: int = 24) -> list[Path]:
+def _limit_sources(paths: list[Path], *, max_files: int | None) -> list[Path]:
+    if max_files is None or max_files <= 0:
+        return paths
+    return paths[:max_files]
+
+
+def _discover_docs_corpus(project_root: Path) -> list[Path]:
+    docs_root = project_root / "docs"
+    if not docs_root.exists() or not docs_root.is_dir():
+        return []
+
+    selected: list[Path] = []
+    seen: set[Path] = set()
+
+    for relative_name in _ROOT_KNOWLEDGE_FILES:
+        candidate = project_root / relative_name
+        if not candidate.exists() or not candidate.is_file():
+            continue
+        if candidate.suffix.lower() != ".md":
+            continue
+        if _should_skip_path(candidate, project_root):
+            continue
+        selected.append(candidate)
+        seen.add(candidate)
+
+    docs_candidates: list[Path] = []
+    for path in docs_root.rglob("*.md"):
+        if not path.is_file():
+            continue
+        if _should_skip_path(path, project_root):
+            continue
+        docs_candidates.append(path)
+
+    for path in sorted(docs_candidates, key=lambda item: _priority_key(item, project_root)):
+        if path in seen:
+            continue
+        selected.append(path)
+        seen.add(path)
+
+    return selected
+
+
+def discover_project_wiki_sources(project_root: Path, *, max_files: int | None = None) -> list[Path]:
+    preferred_docs = _discover_docs_corpus(project_root)
+    if preferred_docs:
+        return _limit_sources(preferred_docs, max_files=max_files)
+
     candidates: list[Path] = []
     for path in project_root.rglob("*"):
         if not path.is_file():
@@ -82,7 +134,7 @@ def discover_project_wiki_sources(project_root: Path, *, max_files: int = 24) ->
             continue
         candidates.append(path)
     ordered = sorted(candidates, key=lambda item: _priority_key(item, project_root))
-    return ordered[:max_files]
+    return _limit_sources(ordered, max_files=max_files)
 
 
 def _topic_for_source(project_id: str, project_root: Path, source_path: Path) -> str:
@@ -111,7 +163,7 @@ def ingest_project_wiki_sources(
     project_root: Path,
     *,
     project_id: str | None = None,
-    max_files: int = 24,
+    max_files: int | None = None,
     dry_run: bool = False,
     source_paths: list[Path] | None = None,
 ) -> ProjectKnowledgeIngestResult:

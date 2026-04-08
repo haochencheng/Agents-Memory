@@ -59,14 +59,14 @@ def _run_onboarding_execute(ctx, args: list[str]) -> None:
     cmd_onboarding_execute(ctx, project_id_or_path, verify=verify, approve_unsafe=approve_unsafe)
 
 
-def _parse_enable_args(args: list[str]) -> tuple[str, bool, bool, bool, bool, int]:
+def _parse_enable_args(args: list[str]) -> tuple[str, bool, bool, bool, bool, int | None]:
     # Parse --full, --dry-run, --json, --ingest-wiki, --wiki-limit flags; first positional is target.
     project_id_or_path = "."
     full = False
     dry_run = False
     json_output = False
     ingest_wiki = False
-    wiki_limit = 24
+    wiki_limit: int | None = None
     index = 0
     while index < len(args):
         arg = args[index]

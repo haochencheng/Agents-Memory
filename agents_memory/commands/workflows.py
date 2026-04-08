@@ -5,14 +5,14 @@ from collections.abc import Callable
 from agents_memory.services.workflows import cmd_bootstrap, cmd_close_task, cmd_do_next, cmd_start_task, cmd_validate
 
 
-def _parse_bootstrap_args(args: list[str]) -> tuple[str, bool, bool, bool, bool, int]:
+def _parse_bootstrap_args(args: list[str]) -> tuple[str, bool, bool, bool, bool, int | None]:
     # Parse --full, --dry-run, --json, --ingest-wiki, --wiki-limit flags; first positional is target.
     project_id_or_path = "."
     full = False
     dry_run = False
     json_output = False
     ingest_wiki = False
-    wiki_limit = 24
+    wiki_limit: int | None = None
     index = 0
     while index < len(args):
         arg = args[index]

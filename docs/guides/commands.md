@@ -114,6 +114,8 @@ getting-started.md  = 本仓库本地启动与运维
 
 适合首次把旧项目纳入 Agents-Memory 时，同时建立项目级知识面。导入后，项目详情页与 ingest log 会出现对应统计。
 
+默认会导入根目录核心说明文档（如 `README.md`、`AGENTS.md`）以及 `docs/` 下全部 Markdown。只有显式传入 `--wiki-limit <n>` 时才会截断导入规模。
+
 ---
 
 ## Workflow Commands
@@ -121,6 +123,8 @@ getting-started.md  = 本仓库本地启动与运维
 ### `amem bootstrap [path] [--full] [--dry-run] [--json] [--ingest-wiki] [--wiki-limit <n>]`
 
 按用户意图组织的一键 bootstrap 入口。当前委托给 `enable` 实现，参数语义保持一致。
+
+如果项目存在 `docs/` 目录，默认会把 `docs/**/*.md` 作为主知识文档集整体导入。
 
 ### `amem start-task <task-name> [path] [--slug <task-slug>] [--wiki-context] [--dry-run]`
 

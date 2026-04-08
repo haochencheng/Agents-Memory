@@ -198,7 +198,7 @@ class ProjectOnboardingRequest(BaseModel):
     project_root: str
     full: bool = True
     ingest_wiki: bool = True
-    max_files: int = 24
+    max_files: int | None = Field(default=None, ge=1)
     dry_run: bool = False
 
 
