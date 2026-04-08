@@ -1,6 +1,6 @@
 ---
 created_at: 2026-04-07
-updated_at: 2026-04-07
+updated_at: 2026-04-08
 doc_status: active
 ---
 
@@ -13,7 +13,10 @@ doc_status: active
 - [BUG-001](BUG-001.md)
 - [BUG-002](BUG-002.md)
 - [BUG-003](BUG-003.md)：wiki-lint `--check=value` 等号格式解析 Bug
+- [BUG-004](BUG-004.md)：ingest 日志仍使用 `datetime.utcnow()`
+- [BUG-005](BUG-005.md)：plans 根目录分组创建后未补齐 planning bundle 必需文件
 - [REFACTOR-001](REFACTOR-001-complexity-watch-remaining.md)：复杂度 refactor-watch 遗留项
+
 
 ## 前端 Bug 记录
 

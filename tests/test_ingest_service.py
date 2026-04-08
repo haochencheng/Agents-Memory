@@ -21,11 +21,13 @@ from agents_memory.services.ingest import (
     _append_ingest_log,
     _apply_wiki_updates,
     _build_log_entry,
+    _execute_ingest,
     _ingest_log_path,
     _parse_ingest_args,
     _parse_llm_json,
     _print_ingest_result,
     _run_ingest_llm,
+    _validate_ingest_options,
     build_ingest_prompt,
     cmd_ingest,
     ingest_document,
@@ -461,6 +463,79 @@ class TestParseIngestArgs(unittest.TestCase):
         # Should not raise — unknown flags are silently skipped
         opts = _parse_ingest_args(["f.md", "--type", "meeting", "--unknown-flag"])
         self.assertEqual(opts["ingest_type"], "meeting")
+
+
+class TestValidateIngestOptions(unittest.TestCase):
+    def test_missing_type_returns_false(self):
+        opts = {
+            "source_path": "f.md",
+            "ingest_type": "",
+            "project": "",
+            "provider": None,
+            "model": None,
+            "dry_run": False,
+            "show_log": False,
+        }
+        self.assertFalse(_validate_ingest_options(opts))
+
+    def test_invalid_type_returns_false(self):
+        opts = {
+            "source_path": "f.md",
+            "ingest_type": "bad-type",
+            "project": "",
+            "provider": None,
+            "model": None,
+            "dry_run": False,
+            "show_log": False,
+        }
+        self.assertFalse(_validate_ingest_options(opts))
+
+    def test_valid_type_returns_true(self):
+        opts = {
+            "source_path": "f.md",
+            "ingest_type": "meeting",
+            "project": "",
+            "provider": None,
+            "model": None,
+            "dry_run": False,
+            "show_log": False,
+        }
+        self.assertTrue(_validate_ingest_options(opts))
+
+
+class TestExecuteIngest(unittest.TestCase):
+    def test_returns_1_when_ingest_document_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_ctx(root)
+            opts = {
+                "source_path": "f.md",
+                "ingest_type": "meeting",
+                "project": "",
+                "provider": None,
+                "model": None,
+                "dry_run": False,
+                "show_log": False,
+            }
+            with patch("agents_memory.services.ingest.ingest_document", side_effect=RuntimeError("boom")):
+                self.assertEqual(_execute_ingest(ctx, opts), 1)
+
+    def test_returns_1_when_result_contains_error(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_ctx(root)
+            opts = {
+                "source_path": "f.md",
+                "ingest_type": "meeting",
+                "project": "",
+                "provider": None,
+                "model": None,
+                "dry_run": False,
+                "show_log": False,
+            }
+            result = IngestResult("meeting", "f.md", "", "", error="bad")
+            with patch("agents_memory.services.ingest.ingest_document", return_value=result):
+                self.assertEqual(_execute_ingest(ctx, opts), 1)
 
 
 # ---------------------------------------------------------------------------

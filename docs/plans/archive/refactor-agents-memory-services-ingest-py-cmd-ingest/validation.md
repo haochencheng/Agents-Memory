@@ -1,6 +1,6 @@
 ---
 created_at: 2026-04-07
-updated_at: 2026-04-07
+updated_at: 2026-04-08
 doc_status: active
 ---
 
@@ -16,17 +16,19 @@ python3 scripts/memory.py docs-check .
 
 ## Task-Specific Checks
 
-- 写下本任务额外需要跑的命令
+- `python3.12 -m unittest discover -s tests -p 'test_ingest_service.py' -v`
+- `python3.12 scripts/memory.py doctor .`
+- `python3.12 scripts/memory.py plan-check .`
 
 ## Review Notes
 
-- docs diff:
-- code diff:
-- test diff:
+- docs diff: 计划分类增加 `deprecated/`，记录 `BUG-004`
+- code diff: `cmd_ingest` 拆分 helper，ingest log 改为 timezone-aware UTC
+- test diff: `tests/test_ingest_service.py` 新增 helper 单测
 
 ## Refactor Verification
 - primary verification command: `amem doctor .`
-- expected outcome: `agents_memory/services/ingest.py::cmd_ingest` is no longer the first hotspot, or its issue list is smaller.
+- expected outcome: `agents_memory/services/ingest.py::cmd_ingest` 不再出现在 hotspot 列表中。
 
 ## Hotspot Snapshot
 ```json

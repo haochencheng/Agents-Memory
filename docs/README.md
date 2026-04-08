@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-04-07
+updated_at: 2026-04-08
 doc_status: active
 ---
 
@@ -31,10 +31,11 @@ docs/
 │   ├── foundation-hardening.md          ← 工程约束与强化规则
 │   └── stale-cleanup.md                 ← 过期内容清理
 ├── frontend/                            ← 前端设计文档
-│   ├── 00-ui-design.md                  ← 前端 UI 设计方案
 │   └── 01~08-*.md                       ← 技术栈、架构、API、计划等
 ├── plans/                               ← 开发计划与任务追踪
-│   └── phase1~5-*.md / [task-slug]/
+│   ├── active/                          ← 正在执行 / 待执行
+│   ├── archive/                         ← 已完成归档
+│   └── deprecated/                      ← 已废弃计划
 └── maintenance/                         ← 维护记录
     ├── BUG-*.md
     └── frontend/
@@ -63,5 +64,5 @@ docs/
 - [架构决策（ADR）](architecture/overview.md)
 - [模块化结构](architecture/modular.md)
 - [前端产品设计](frontend/08-product-frontend-design.md)
-- [Planning Bundle Example](plans/planning-governance-gate/README.md)
-- [Onboarding Bundle Example](plans/onboarding-copilot-activation/README.md)
+- [Planning Bundle Example](plans/archive/planning-governance-gate/README.md)
+- [Onboarding Bundle Example](plans/active/onboarding-copilot-activation/README.md)

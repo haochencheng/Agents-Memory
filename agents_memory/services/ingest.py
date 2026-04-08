@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -262,7 +262,7 @@ def _build_log_entry(
     model: str,
 ) -> dict[str, Any]:
     return {
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "ingest_type": ingest_type,
         "source_path": source_path,
         "project": project,
@@ -352,35 +352,23 @@ def _print_ingest_result(result: "IngestResult", dry_run: bool, ctx: AppContext)
         print(f"   日志: {_ingest_log_path(ctx)}")
 
 
-def cmd_ingest(ctx: AppContext, args: list[str]) -> int:
-    """Ingest a document into the memory system.
-
-    Usage: amem ingest <file> --type <type> [--project <id>] [--provider anthropic|openai|ollama]
-                              [--model <name>] [--dry-run] [--log]
-
-    Types: pr-review, meeting, decision, code-review
-
-    # Dispatch: --log → show log; else parse type + call ingest_document + print result.
-    """
-    if not args or args[0].startswith("--"):
-        _print_ingest_usage()
-        return 1
-
-    opts = _parse_ingest_args(args)
-
-    if opts["show_log"]:
-        _cmd_show_log(ctx)
-        return 0
-
-    if not opts["ingest_type"]:
+def _validate_ingest_options(opts: dict[str, Any]) -> bool:
+    """Validate parsed ingest CLI options and print user-facing errors."""
+    ingest_type = opts["ingest_type"]
+    if not ingest_type:
         print("错误: 必须指定 --type 参数")
         _print_ingest_usage()
-        return 1
+        return False
 
-    if opts["ingest_type"] not in INGEST_TYPES:
-        print(f"错误: 不支持的类型 '{opts['ingest_type']}'。支持: {', '.join(INGEST_TYPES)}")
-        return 1
+    if ingest_type not in INGEST_TYPES:
+        print(f"错误: 不支持的类型 '{ingest_type}'。支持: {', '.join(INGEST_TYPES)}")
+        return False
 
+    return True
+
+
+def _execute_ingest(ctx: AppContext, opts: dict[str, Any]) -> int:
+    """Run ingest_document from parsed CLI options and print the final outcome."""
     try:
         result = ingest_document(
             ctx,
@@ -401,6 +389,33 @@ def cmd_ingest(ctx: AppContext, args: list[str]) -> int:
 
     _print_ingest_result(result, opts["dry_run"], ctx)
     return 0
+
+
+def cmd_ingest(ctx: AppContext, args: list[str]) -> int:
+    """Ingest a document into the memory system.
+
+    Usage: amem ingest <file> --type <type> [--project <id>] [--provider anthropic|openai|ollama]
+                              [--model <name>] [--dry-run] [--log]
+
+    Types: pr-review, meeting, decision, code-review
+
+    # Dispatch: --log → show log; else parse type + call ingest_document + print result.
+    """
+    # Keep the command surface simple: usage gate, log mode, validation, then execute.
+    if not args or args[0].startswith("--"):
+        _print_ingest_usage()
+        return 1
+
+    opts = _parse_ingest_args(args)
+
+    if opts["show_log"]:
+        _cmd_show_log(ctx)
+        return 0
+
+    if not _validate_ingest_options(opts):
+        return 1
+
+    return _execute_ingest(ctx, opts)
 
 
 def _print_ingest_usage() -> None:
