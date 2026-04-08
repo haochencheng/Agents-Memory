@@ -39,6 +39,10 @@ venv/
 *.egg-info/
 .pytest_cache/
 
+# Node.js
+node_modules/
+yarn-error.log*
+
 # MacOS
 .DS_Store
 .coverage
