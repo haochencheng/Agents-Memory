@@ -2,9 +2,11 @@
 # scripts/start.sh — Agents-Memory 一键启动脚本
 #
 # 用法:
-#   bash scripts/start.sh          # 启动全部服务
-#   bash scripts/start.sh --mcp    # 只启动 MCP Server（前台，用于调试）
-#   bash scripts/start.sh --qdrant # 只启动 Qdrant
+#   bash scripts/start.sh               # 检查依赖 + 启动 Qdrant + 打印验证提示
+#   bash scripts/start.sh --mcp         # 只启动 MCP Server（前台，用于调试）
+#   bash scripts/start.sh --qdrant      # 只启动 Qdrant
+#   bash scripts/start.sh --ollama      # 只启动 Ollama
+#   bash scripts/start.sh --with-ollama # 启动 Qdrant + Ollama
 #   bash scripts/start.sh status   # 检查所有服务状态
 #   bash scripts/start.sh stop     # 停止 Qdrant（MCP Server 由 VS Code 管理）
 #
@@ -21,12 +23,16 @@ DOCKER_DIR="$REPO_ROOT/docker"
 MCP_PID_FILE="$REPO_ROOT/.mcp_server.pid"
 LOG_FILE="$REPO_ROOT/logs/agents-memory.log"
 
+compose() {
+  docker-compose "$@"
+}
+
 # ─── 颜色 ────────────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
-ok()   { echo -e "${GREEN}✅  $*${NC}"; }
-warn() { echo -e "${YELLOW}⚠️   $*${NC}"; }
-err()  { echo -e "${RED}❌  $*${NC}"; }
-info() { echo -e "    $*"; }
+ok()   { printf "%b\n" "${GREEN}✅  $*${NC}"; }
+warn() { printf "%b\n" "${YELLOW}⚠️   $*${NC}"; }
+err()  { printf "%b\n" "${RED}❌  $*${NC}"; }
+info() { printf "    %s\n" "$*"; }
 
 # ─── 检查依赖 ─────────────────────────────────────────────────────────────────
 check_deps() {
@@ -71,10 +77,10 @@ start_qdrant() {
 
   mkdir -p "$DOCKER_DIR/data/qdrant"
   cd "$DOCKER_DIR"
-  docker-compose up -d
+  compose up -d qdrant
 
   # 等待健康检查
-  echo -n "    等待 Qdrant 就绪"
+  printf "    等待 Qdrant 就绪"
   for i in $(seq 1 30); do
     if curl -sf http://localhost:6333/readyz &>/dev/null; then
       echo ""
@@ -82,11 +88,40 @@ start_qdrant() {
       cd "$REPO_ROOT"
       return
     fi
-    echo -n "."
+    printf "."
     sleep 1
   done
   echo ""
   err "Qdrant 启动超时。查看日志: docker-compose logs qdrant"
+  cd "$REPO_ROOT"
+}
+
+# ─── 启动 Ollama ──────────────────────────────────────────────────────────────
+start_ollama() {
+  echo ""
+  echo "=== 启动 Ollama ==="
+  if [[ "$DOCKER_OK" != "true" ]]; then
+    warn "Docker 未就绪，跳过 Ollama。"
+    return
+  fi
+
+  mkdir -p "$DOCKER_DIR/data/ollama"
+  cd "$DOCKER_DIR"
+  compose up -d ollama
+
+  printf "    等待 Ollama 就绪"
+  for i in $(seq 1 45); do
+    if curl -sf http://localhost:11434/api/tags &>/dev/null; then
+      echo ""
+      ok "Ollama: http://localhost:11434"
+      cd "$REPO_ROOT"
+      return
+    fi
+    printf "."
+    sleep 1
+  done
+  echo ""
+  err "Ollama 启动超时。查看日志: docker-compose logs ollama"
   cd "$REPO_ROOT"
 }
 
@@ -141,6 +176,12 @@ show_status() {
     warn "Qdrant:     未运行。启动: cd docker && docker-compose up -d"
   fi
 
+  if curl -sf http://localhost:11434/api/tags &>/dev/null; then
+    ok "Ollama:     http://localhost:11434  (running)"
+  else
+    info "Ollama:     未运行。启动: bash scripts/start.sh --ollama"
+  fi
+
   # MCP Server
   if [[ -f "$MCP_PID_FILE" ]] && kill -0 "$(cat "$MCP_PID_FILE")" 2>/dev/null; then
     ok "MCP Server: 后台运行 (PID $(cat "$MCP_PID_FILE"))"
@@ -178,10 +219,17 @@ stop_services() {
 
   # Qdrant
   if curl -sf http://localhost:6333/readyz &>/dev/null; then
-    cd "$DOCKER_DIR" && docker-compose down && cd "$REPO_ROOT"
+    cd "$DOCKER_DIR" && compose stop qdrant && cd "$REPO_ROOT"
     ok "Qdrant 已停止。"
   else
     info "Qdrant 未在运行。"
+  fi
+
+  if curl -sf http://localhost:11434/api/tags &>/dev/null; then
+    cd "$DOCKER_DIR" && compose stop ollama && cd "$REPO_ROOT"
+    ok "Ollama 已停止。"
+  else
+    info "Ollama 未在运行。"
   fi
 }
 
@@ -213,6 +261,17 @@ case "${1:-all}" in
     check_deps
     start_qdrant
     ;;
+  --ollama)
+    check_deps
+    start_ollama
+    ;;
+  --with-ollama)
+    check_deps
+    start_qdrant
+    start_ollama
+    print_vscode_tip
+    show_status
+    ;;
   --mcp)
     check_deps
     start_mcp_debug
@@ -225,7 +284,7 @@ case "${1:-all}" in
     stop_services
     ;;
   *)
-    echo "用法: bash scripts/start.sh [all|--qdrant|--mcp|status|stop]"
+    echo "用法: bash scripts/start.sh [all|--qdrant|--ollama|--with-ollama|--mcp|status|stop]"
     exit 1
     ;;
 esac

@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-04-07
+updated_at: 2026-04-08
 doc_status: active
 ---
 
@@ -159,11 +159,13 @@ cd docker && docker-compose up -d qdrant
 ## 4. 一键启动（推荐）
 
 ```bash
-bash scripts/start.sh          # 检查依赖 + 启动 Qdrant + 打印验证提示
-bash scripts/start.sh status   # 检查所有服务运行状态
-bash scripts/start.sh stop     # 停止 Qdrant（MCP Server 由 VS Code 管理）
-bash scripts/start.sh --qdrant # 只启动 Qdrant
-bash scripts/start.sh --mcp    # 前台调试 MCP Server（stdio 交互模式）
+bash scripts/start.sh               # 检查依赖 + 启动 Qdrant + 打印验证提示
+bash scripts/start.sh status        # 检查所有服务运行状态
+bash scripts/start.sh stop          # 停止 Qdrant / Ollama（MCP Server 由 VS Code 管理）
+bash scripts/start.sh --qdrant      # 只启动 Qdrant
+bash scripts/start.sh --ollama      # 只启动 Ollama
+bash scripts/start.sh --with-ollama # 启动 Qdrant + Ollama
+bash scripts/start.sh --mcp         # 前台调试 MCP Server（stdio 交互模式）
 ```
 
 `start.sh` 会自动完成：
@@ -171,6 +173,8 @@ bash scripts/start.sh --mcp    # 前台调试 MCP Server（stdio 交互模式）
 - 创建 `docker/data/qdrant/` 目录并启动 Qdrant 容器
 - 等待 Qdrant 健康检查通过
 - 打印 VS Code 验证指引
+
+默认启动路径不会再顺带拉起 Ollama，避免在 Docker 代理配置异常时因为 `ollama/ollama` 镜像拉取失败而阻塞 Qdrant。只有显式传入 `--ollama` 或 `--with-ollama` 时才会启动本地 LLM 容器。
 
 ---
 
