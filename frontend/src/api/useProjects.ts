@@ -28,6 +28,42 @@ export interface ProjectStats {
   last_ingest: string
 }
 
+export interface ProjectWikiNavItem {
+  topic: string
+  title: string
+  source_path: string
+  nav_path: string
+  source_group: string
+  document_role: string
+  updated_at: string
+  word_count: number
+}
+
+export interface ProjectWikiNavNode {
+  key: string
+  label: string
+  path: string
+  depth: number
+  item_count: number
+  topics: ProjectWikiNavItem[]
+  children: ProjectWikiNavNode[]
+}
+
+export interface ProjectWikiNavGroup {
+  key: string
+  label: string
+  item_count: number
+  topics: ProjectWikiNavItem[]
+}
+
+export interface ProjectWikiNavResponse {
+  project_id: string
+  total_topics: number
+  items: ProjectWikiNavItem[]
+  tree: ProjectWikiNavNode[]
+  groups: ProjectWikiNavGroup[]
+}
+
 export function useProjects() {
   return useQuery<ProjectsResponse>({
     queryKey: ['projects'],
@@ -43,6 +79,17 @@ export function useProjectStats(id: string) {
     queryKey: ['projects', id, 'stats'],
     queryFn: async () => {
       const { data } = await client.get(`/projects/${id}/stats`)
+      return data
+    },
+    enabled: Boolean(id),
+  })
+}
+
+export function useProjectWikiNav(id: string) {
+  return useQuery<ProjectWikiNavResponse>({
+    queryKey: ['projects', id, 'wiki-nav'],
+    queryFn: async () => {
+      const { data } = await client.get(`/projects/${id}/wiki-nav`)
       return data
     },
     enabled: Boolean(id),

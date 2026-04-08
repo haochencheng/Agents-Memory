@@ -194,6 +194,42 @@ class ProjectStatsResponse(BaseModel):
     last_ingest: str = ""
 
 
+class ProjectWikiNavItem(BaseModel):
+    topic: str
+    title: str
+    source_path: str = ""
+    nav_path: str = ""
+    source_group: str = ""
+    document_role: str = "reference"
+    updated_at: str = ""
+    word_count: int = 0
+
+
+class ProjectWikiNavGroup(BaseModel):
+    key: str
+    label: str
+    item_count: int = 0
+    topics: list[ProjectWikiNavItem] = Field(default_factory=list)
+
+
+class ProjectWikiNavNode(BaseModel):
+    key: str
+    label: str
+    path: str
+    depth: int = 0
+    item_count: int = 0
+    topics: list[ProjectWikiNavItem] = Field(default_factory=list)
+    children: list["ProjectWikiNavNode"] = Field(default_factory=list)
+
+
+class ProjectWikiNavResponse(BaseModel):
+    project_id: str
+    total_topics: int = 0
+    items: list[ProjectWikiNavItem] = Field(default_factory=list)
+    tree: list[ProjectWikiNavNode] = Field(default_factory=list)
+    groups: list[ProjectWikiNavGroup] = Field(default_factory=list)
+
+
 class ProjectOnboardingRequest(BaseModel):
     project_root: str
     full: bool = True
@@ -303,3 +339,6 @@ class GraphEdge(BaseModel):
 class WikiGraphResponse(BaseModel):
     nodes: list[GraphNode]
     edges: list[GraphEdge]
+
+
+ProjectWikiNavNode.model_rebuild()

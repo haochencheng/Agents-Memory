@@ -12,7 +12,7 @@ import time
 from contextlib import redirect_stdout
 from datetime import datetime, timezone
 from io import StringIO
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
@@ -46,6 +46,10 @@ from agents_memory.web.models import (
     LintIssue,
     ProjectInfo,
     ProjectKnowledgeSourceResponse,
+    ProjectWikiNavGroup,
+    ProjectWikiNavItem,
+    ProjectWikiNavNode,
+    ProjectWikiNavResponse,
     ProjectOnboardingRequest,
     ProjectOnboardingResponse,
     ProjectStatsResponse,
@@ -204,6 +208,206 @@ def _error_stats_by_project(ctx: AppContext) -> tuple[dict[str, int], dict[str, 
     return counts, latest_error
 
 
+_ROOT_DOC_NAMES = {"README.md", "AGENTS.md", "DESIGN.md", "CONTRIBUTING.md"}
+_ROOT_DOC_LABEL = "Root Docs"
+_DOCS_ROOT_LABEL = "Docs Root"
+_CODE_ADJACENT_LABEL = "Code-Adjacent Docs"
+_OTHER_SOURCES_LABEL = "Other Sources"
+
+
+def _project_topic_metas(ctx: AppContext, project_id: str) -> list[TopicMeta]:
+    topics: list[TopicMeta] = []
+    for topic, raw, fm in _load_wiki_topic_entries(ctx):
+        if str(fm.get("project", "")).strip() != project_id:
+            continue
+        title = fm.get("topic", topic).replace("-", " ").title()
+        tags = fm.get("tags", [])
+        if isinstance(tags, str):
+            tags = [tags]
+        topics.append(
+            TopicMeta(
+                topic=topic,
+                title=title,
+                tags=tags,
+                word_count=_word_count(raw),
+                updated_at=str(fm.get("updated_at", "")),
+                project=project_id,
+                source_path=str(fm.get("source_path", "")),
+            )
+        )
+    return sorted(topics, key=lambda item: (item.source_path or item.topic, item.title.lower()))
+
+
+def _display_segment(segment: str) -> str:
+    if segment in {"docs", _ROOT_DOC_LABEL, _CODE_ADJACENT_LABEL, _OTHER_SOURCES_LABEL}:
+        return segment
+    return segment.replace("-", " ").replace("_", " ").title()
+
+
+def _document_role(source_path: str) -> str:
+    if not source_path:
+        return "reference"
+    parts = PurePosixPath(source_path).parts
+    if len(parts) == 1:
+        return "root-doc"
+    if parts[0] == "docs" and len(parts) == 2:
+        return "docs-root"
+    if parts[0] != "docs":
+        return "reference"
+    section = parts[1] if len(parts) > 1 else ""
+    if section == "plans":
+        return "plan"
+    if section == "ops":
+        return "ops"
+    if section == "guides":
+        return "guide"
+    if section == "architecture" and len(parts) > 2 and parts[2] == "workflows":
+        return "workflow"
+    if section == "architecture":
+        return "architecture"
+    if section == "maintenance":
+        return "maintenance"
+    if section == "frontend":
+        return "frontend"
+    if section == "product":
+        return "product"
+    return section or "reference"
+
+
+def _source_group(source_path: str) -> str:
+    if not source_path:
+        return _OTHER_SOURCES_LABEL
+    parts = PurePosixPath(source_path).parts
+    if len(parts) == 1:
+        return _ROOT_DOC_LABEL
+    if parts[0] == "docs" and len(parts) == 2:
+        return _DOCS_ROOT_LABEL
+    if parts[0] != "docs":
+        return _CODE_ADJACENT_LABEL
+    section = parts[1] if len(parts) > 1 else ""
+    if section == "architecture" and len(parts) > 2 and parts[2] == "workflows":
+        return "Architecture / Workflows"
+    mapping = {
+        "architecture": "Architecture",
+        "guides": "Guides",
+        "ops": "Ops",
+        "plans": "Plans",
+        "frontend": "Frontend",
+        "product": "Product",
+        "maintenance": "Maintenance",
+    }
+    return mapping.get(section, _display_segment(section or "docs"))
+
+
+def _nav_path(source_path: str) -> str:
+    if not source_path:
+        return _OTHER_SOURCES_LABEL
+    parts = tuple(part for part in PurePosixPath(source_path).parts if part and part != ".")
+    if not parts:
+        return _OTHER_SOURCES_LABEL
+    if len(parts) == 1:
+        return _ROOT_DOC_LABEL
+    if parts[0] == "docs":
+        return "/".join(parts[:-1])
+    return "/".join((_CODE_ADJACENT_LABEL, *parts[:-1]))
+
+
+def _nav_item(topic: TopicMeta) -> ProjectWikiNavItem:
+    source_path = topic.source_path or topic.topic
+    return ProjectWikiNavItem(
+        topic=topic.topic,
+        title=topic.title,
+        source_path=topic.source_path,
+        nav_path=_nav_path(source_path),
+        source_group=_source_group(source_path),
+        document_role=_document_role(source_path),
+        updated_at=topic.updated_at,
+        word_count=topic.word_count,
+    )
+
+
+def _tree_node_bucket(label: str, path: str, depth: int) -> dict[str, Any]:
+    return {
+        "key": path,
+        "label": _display_segment(label),
+        "path": path,
+        "depth": depth,
+        "item_count": 0,
+        "topics": [],
+        "children": {},
+    }
+
+
+def _build_nav_tree(items: list[ProjectWikiNavItem]) -> list[ProjectWikiNavNode]:
+    buckets: dict[str, dict[str, Any]] = {}
+    roots: dict[str, dict[str, Any]] = {}
+    for item in items:
+        parts = [part for part in item.nav_path.split("/") if part] or [_OTHER_SOURCES_LABEL]
+        parent_children = roots
+        current_path = ""
+        for depth, part in enumerate(parts):
+            current_path = part if not current_path else f"{current_path}/{part}"
+            node = buckets.get(current_path)
+            if node is None:
+                node = _tree_node_bucket(part, current_path, depth)
+                buckets[current_path] = node
+                parent_children[current_path] = node
+            node["item_count"] += 1
+            parent_children = node["children"]
+        node["topics"].append(item)
+
+    def finalize(nodes: dict[str, dict[str, Any]]) -> list[ProjectWikiNavNode]:
+        ordered: list[ProjectWikiNavNode] = []
+        for node in sorted(nodes.values(), key=lambda item: (item["depth"], item["label"].lower())):
+            topics = sorted(node["topics"], key=lambda topic: (topic.source_path or topic.topic, topic.title.lower()))
+            ordered.append(
+                ProjectWikiNavNode(
+                    key=node["key"],
+                    label=node["label"],
+                    path=node["path"],
+                    depth=node["depth"],
+                    item_count=node["item_count"],
+                    topics=topics,
+                    children=finalize(node["children"]),
+                )
+            )
+        return ordered
+
+    return finalize(roots)
+
+
+def _build_nav_groups(items: list[ProjectWikiNavItem]) -> list[ProjectWikiNavGroup]:
+    grouped: dict[str, list[ProjectWikiNavItem]] = {}
+    for item in items:
+        grouped.setdefault(item.source_group, []).append(item)
+    return [
+        ProjectWikiNavGroup(
+            key=group,
+            label=group,
+            item_count=len(sorted_items),
+            topics=sorted_items,
+        )
+        for group, sorted_items in sorted(
+            (
+                (group, sorted(values, key=lambda topic: (topic.source_path or topic.topic, topic.title.lower())))
+                for group, values in grouped.items()
+            ),
+            key=lambda item: item[0].lower(),
+        )
+    ]
+
+
+def _build_project_wiki_nav(project_id: str, topics: list[TopicMeta]) -> ProjectWikiNavResponse:
+    items = [_nav_item(topic) for topic in topics]
+    return ProjectWikiNavResponse(
+        project_id=project_id,
+        total_topics=len(items),
+        items=items,
+        tree=_build_nav_tree(items),
+        groups=_build_nav_groups(items),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Wiki lint (simple checks)
 # ---------------------------------------------------------------------------
@@ -300,6 +504,13 @@ def project_stats(project_id: str) -> ProjectStatsResponse:
         last_error=latest_error.get(project_id, ""),
         last_ingest=latest_ingest.get(project_id, ""),
     )
+
+
+@app.get("/api/projects/{project_id}/wiki-nav", response_model=ProjectWikiNavResponse)
+def project_wiki_nav(project_id: str) -> ProjectWikiNavResponse:
+    ctx = _get_ctx()
+    topics = _project_topic_metas(ctx, project_id)
+    return _build_project_wiki_nav(project_id, topics)
 
 
 # ---------------------------------------------------------------------------

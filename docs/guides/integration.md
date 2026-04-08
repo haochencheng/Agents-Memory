@@ -146,6 +146,57 @@ amem bootstrap . --full --dry-run --json
 3. 为导入后的 wiki 页面写入 `project` 与 `source_path` frontmatter
 4. 追加 `project_wiki` 类型的 ingest log，供 dashboard / project detail 统计
 
+### 大型文档仓库的接入建议（planned）
+
+当目标项目的知识源达到几十到上百篇时，不建议继续只把导入结果当作“一个平铺列表”展示，也不建议直接让 LLM 重新发明一套目录树。更稳妥的方案是三层结构并存：
+
+1. **物理树**：基于 `source_path` 生成确定性的目录树，保证稳定、可追溯。
+2. **规范索引**：在导入阶段额外生成项目级导航索引，把文档映射到更适合阅读的知识分组。
+3. **横切视图**：继续保留搜索、Graph、backlinks 处理跨目录关系。
+
+| 选择 | 适用性 | 风险 |
+|------|--------|------|
+| 只做目录树 | 适合作为基础导航 | 目录结构常是工程结构，不一定适合知识浏览 |
+| 只做 LLM 重组 | 适合作为辅助建议 | 分组不稳定，容易随模型漂移 |
+| 混合方案 | 最适合大项目 | 需要增加一个索引生成步骤 |
+
+**推荐导入流水线**：
+
+1. 先按当前规则导入根目录核心文档与 `docs/**/*.md`。
+2. 保留每篇文档的 `project`、`source_path` 作为真源。
+3. 额外生成一个项目级 `knowledge index`，至少包含：
+   - `nav_path`：树形路径
+   - `source_group`：规范分组
+   - `document_role`：如 `root-doc` / `architecture` / `workflow` / `ops` / `plan`
+   - `aliases`：可选别名入口
+   - `summary`：可选摘要
+4. 前端项目页优先渲染这个索引，而不是把所有 wiki topic 平铺到底。
+
+**LLM / Agent 在导入阶段的推荐职责**：
+
+1. 生成更易读的分组名称，例如把 `docs/architecture/workflows/*` 归并到 `Architecture / Workflows`。
+2. 为目录节点生成一句摘要，帮助用户快速判断是否展开。
+3. 给文档生成别名和排序建议，例如把 ADR、Runbook、Bootstrap Checklist 放到更靠前位置。
+
+**LLM / Agent 不应直接负责**：
+
+1. 取代 `source_path` 成为唯一目录真源。
+2. 随意移动文档所属组而不保留回链。
+3. 把一篇文档拆成多个虚构节点，导致用户找不到真实来源。
+
+**建议的运行时产物（planned）**：
+
+```text
+memory/project-nav/
+  synapse-network.tree.json      # 基于 source_path 的稳定物理树
+  synapse-network.domain.json    # 规范知识分组索引
+```
+
+其中：
+- `*.tree.json` 由规则直接生成，不依赖模型。
+- `*.domain.json` 可由规则生成初版，再由 LLM/agent 给出更适合阅读的分组名和排序建议。
+- 当前 `/api/onboarding/bootstrap` 仍只负责导入 wiki 页面；上述导航索引属于下一阶段增强，不应伪装成已实现能力。
+
 如果你仍然想逐项确认或手动控制每一步，也可以继续使用交互式 `amem register`：
 
 ```bash

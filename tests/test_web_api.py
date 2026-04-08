@@ -514,6 +514,42 @@ class TestProjectOnboardingApi(unittest.TestCase):
         self.assertIn("docs/plans/plan.md", payload["discovered_files"])
         self.assertNotIn("services/gateway/README.md", payload["discovered_files"])
 
+    def test_project_wiki_nav_returns_tree_and_domain_groups(self) -> None:
+        project_root = self._root / "Synapse-Network"
+        project_root.mkdir()
+        _write(project_root / "README.md", "# Synapse Network\n")
+        _write(project_root / "AGENTS.md", "# AGENTS\n")
+        _write(project_root / "docs" / "AGENTS.md", "# Docs Agents\n")
+        _write(project_root / "docs" / "architecture" / "README.md", "# Architecture\n")
+        _write(project_root / "docs" / "plans" / "plan.md", "# Plan\n")
+
+        response = self._client.post(
+            "/api/onboarding/bootstrap",
+            json={
+                "project_root": str(project_root),
+                "full": False,
+                "ingest_wiki": True,
+                "dry_run": False,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+
+        nav = self._client.get("/api/projects/synapse-network/wiki-nav")
+        self.assertEqual(nav.status_code, 200)
+        payload = nav.json()
+
+        self.assertEqual(payload["project_id"], "synapse-network")
+        self.assertGreaterEqual(payload["total_topics"], 4)
+        self.assertTrue(any(item["source_group"] == "Root Docs" for item in payload["items"]))
+        self.assertTrue(any(group["label"] == "Docs Root" for group in payload["groups"]))
+        self.assertTrue(any(group["label"] == "Architecture" for group in payload["groups"]))
+        self.assertTrue(any(group["label"] == "Plans" for group in payload["groups"]))
+        self.assertFalse(any(group["label"] == "Readme.Md" for group in payload["groups"]))
+        self.assertTrue(any(node["label"] == "Root Docs" for node in payload["tree"]))
+        docs_node = next(node for node in payload["tree"] if node["label"] == "docs")
+        self.assertTrue(any(child["label"] == "Architecture" for child in docs_node["children"]))
+        self.assertTrue(any(child["label"] == "Plans" for child in docs_node["children"]))
+
 
 # ---------------------------------------------------------------------------
 # Renderer unit tests
