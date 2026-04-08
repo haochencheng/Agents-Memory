@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
-# scripts/web-start.sh — Agents-Memory Web UI 启动脚本
+# scripts/web-start.sh — Agents-Memory Web 服务启动脚本
 #
 # 用法:
-#   bash scripts/web-start.sh            # 启动 API + Streamlit UI
+#   bash scripts/web-start.sh            # 启动 API + React 前端
 #   bash scripts/web-start.sh api        # 只启动 FastAPI 后端
-#   bash scripts/web-start.sh ui         # 只启动 Streamlit UI
+#   bash scripts/web-start.sh ui         # 只启动 React 前端 (Vite dev)
 #   bash scripts/web-start.sh stop       # 停止所有 Web 服务
 #   bash scripts/web-start.sh status     # 检查服务状态
 #   bash scripts/web-start.sh health     # 调用健康检查接口并打印结果
 #   bash scripts/web-start.sh restart    # 重启所有 Web 服务
 #
+# 架构:
+#   FastAPI  :10100  — REST API 后端
+#   React    :10000  — Vite 开发服务器 (SPA 前端)
+#
 # 依赖:
-#   python3.12, pip (fastapi, uvicorn, streamlit, requests)
+#   python3.12, pip (fastapi, uvicorn, requests)
+#   node >= 18, npm
 
 set -euo pipefail
 
@@ -23,6 +28,7 @@ API_LOG="$REPO_ROOT/logs/web-api.log"
 UI_LOG="$REPO_ROOT/logs/web-ui.log"
 API_PORT="${AGENTS_MEMORY_API_PORT:-10100}"
 UI_PORT="${AGENTS_MEMORY_UI_PORT:-10000}"
+FRONTEND_DIR="$REPO_ROOT/frontend"
 API_BASE="http://localhost:$API_PORT"
 
 # ─── 颜色 ─────────────────────────────────────────────────────────────────────
@@ -71,8 +77,17 @@ _check_deps() {
   fi
   ok "Python: $($PYTHON --version)"
 
+  if ! command -v node &>/dev/null; then
+    err "Node.js 未找到。请安装 Node >= 18"
+  fi
+  if ! command -v npm &>/dev/null; then
+    err "npm 未找到。请安装 npm"
+  fi
+  ok "Node: $(node --version)"
+  ok "npm: $(npm --version)"
+
   local missing=()
-  for pkg in fastapi uvicorn streamlit requests; do
+  for pkg in fastapi uvicorn requests; do
     if ! $PYTHON -c "import ${pkg//-/_}" 2>/dev/null; then
       missing+=("$pkg")
     fi
@@ -115,28 +130,34 @@ start_api() {
 
 start_ui() {
   if _pid_running "$UI_PID_FILE"; then
-    warn "Streamlit 已在运行 (PID $(cat "$UI_PID_FILE"))"
+    warn "React 前端已在运行 (PID $(cat "$UI_PID_FILE"))"
     return 0
   fi
   if _port_in_use "$UI_PORT"; then
-    warn "端口 $UI_PORT 已被占用（可能已有 UI 运行）"
+    warn "端口 $UI_PORT 已被占用（可能已有前端运行）"
     return 0
   fi
-  info "启动 Streamlit UI → http://localhost:$UI_PORT ..."
-  cd "$REPO_ROOT"
-  AGENTS_MEMORY_API="$API_BASE" \
-  nohup $PYTHON -m streamlit run agents_memory/ui/streamlit_app.py \
-    --server.port "$UI_PORT" \
-    --server.address 0.0.0.0 \
-    --server.headless true \
-    --browser.gatherUsageStats false \
+  if [[ ! -d "$FRONTEND_DIR" ]]; then
+    err "frontend/ 目录不存在"
+  fi
+  if [[ ! -f "$FRONTEND_DIR/package.json" ]]; then
+    err "frontend/package.json 不存在"
+  fi
+  if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
+    warn "frontend/node_modules 不存在，正在安装前端依赖..."
+    cd "$FRONTEND_DIR"
+    npm install > "$UI_LOG" 2>&1
+  fi
+  info "启动 React 前端 → http://localhost:$UI_PORT ..."
+  cd "$FRONTEND_DIR"
+  nohup npm run dev -- --host 0.0.0.0 --port "$UI_PORT" \
     > "$UI_LOG" 2>&1 &
   echo $! > "$UI_PID_FILE"
-  _wait_for_port "$UI_PORT" "Streamlit" 30 || {
-    warn "Streamlit 启动失败，查看日志: $UI_LOG"
+  _wait_for_port "$UI_PORT" "React 前端" 30 || {
+    warn "React 前端启动失败，查看日志: $UI_LOG"
     return 1
   }
-  ok "Streamlit 已启动 (PID $(cat "$UI_PID_FILE"))"
+  ok "React 前端已启动 (PID $(cat "$UI_PID_FILE"))"
   info "UI: http://localhost:$UI_PORT"
 }
 
@@ -164,11 +185,11 @@ cmd_status() {
   fi
 
   if _pid_running "$UI_PID_FILE"; then
-    ok "Streamlit ── 运行中 (PID $(cat "$UI_PID_FILE")) → http://localhost:$UI_PORT"
+    ok "React UI  ── 运行中 (PID $(cat "$UI_PID_FILE")) → http://localhost:$UI_PORT"
   elif _port_in_use "$UI_PORT"; then
-    warn "Streamlit ── 端口 $UI_PORT 被占用（不由本脚本管理）"
+    warn "React UI  ── 端口 $UI_PORT 被占用（不由本脚本管理）"
   else
-    echo -e "${RED}❌  Streamlit ── 未运行${NC}"
+    echo -e "${RED}❌  React UI  ── 未运行${NC}"
   fi
   echo ""
 }
@@ -220,13 +241,13 @@ except Exception as e:
     return 1
   fi
 
-  # Streamlit UI ping
+  # React UI ping
   local ui_status
   ui_status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://localhost:$UI_PORT" 2>/dev/null || echo "000")
   if [[ "$ui_status" == "200" ]]; then
-    ok "Streamlit UI → $ui_status"
+    ok "React UI → $ui_status"
   else
-    warn "Streamlit UI → $ui_status（可能还在启动）"
+    warn "React UI → $ui_status（可能还在启动）"
   fi
 }
 
@@ -251,12 +272,12 @@ case "$CMD" in
     ;;
   stop)
     stop_service "$API_PID_FILE" "FastAPI"
-    stop_service "$UI_PID_FILE" "Streamlit"
+    stop_service "$UI_PID_FILE" "React 前端"
     cmd_status
     ;;
   restart)
     stop_service "$API_PID_FILE" "FastAPI"
-    stop_service "$UI_PID_FILE" "Streamlit"
+    stop_service "$UI_PID_FILE" "React 前端"
     sleep 1
     _check_deps
     start_api

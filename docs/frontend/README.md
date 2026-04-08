@@ -24,24 +24,27 @@ doc_status: active
 | [03-api-contract.md](03-api-contract.md) | REST API 完整接口规范（请求/响应格式）|
 | [04-plans.md](04-plans.md) | 实施 Plan（阶段任务拆解）|
 | [05-test-strategy.md](05-test-strategy.md) | 自动化测试策略 |
+| [06-ops.md](06-ops.md) | 启停、健康检查、故障排查 |
+| [08-product-frontend-design.md](08-product-frontend-design.md) | 当前 React 前端产品设计 |
 
 ## 快速启动
 
 ```bash
-# 启动 FastAPI 后端
+# 一键启动前后端
 cd /Users/cliff/workspace/agent/Agents-Memory
-python3.12 -m uvicorn agents_memory.web.api:app --reload --port 10100
+bash scripts/web-start.sh restart
 
-# 启动 Streamlit MVP UI（另一个终端）
-python3.12 -m streamlit run agents_memory/ui/streamlit_app.py --server.port 10000
+# 前端构建验证
+cd frontend && npm run build
 
-# 运行后端 API 测试
-python3.12 -m pytest tests/test_web_api.py -v
+# 前端测试
+cd frontend && npm test -- --run
 ```
 
 ## 目录规范
 
 - 后端代码：`agents_memory/web/`
-- UI 代码：`agents_memory/ui/`
-- 测试：`tests/test_web_api.py`
+- 前端代码：`frontend/`
+- 后端测试：`tests/test_web_api.py`
+- 前端测试：`frontend/src/test/`、`frontend/tests/`
 - Bugfix 记录：`docs/bugfix/frontend/`

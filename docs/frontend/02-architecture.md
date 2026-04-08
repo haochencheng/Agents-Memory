@@ -10,9 +10,8 @@ doc_status: active
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│              浏览器 / Streamlit UI                   │
-│         http://localhost:10000 (Streamlit)           │
-│         http://localhost:5173 (React, 未来)          │
+│                浏览器 / React SPA                    │
+│         http://localhost:10000 (Vite Dev)            │
 └──────────────────────┬──────────────────────────────┘
                        │ HTTP JSON
 ┌──────────────────────▼──────────────────────────────┐
@@ -51,9 +50,14 @@ agents_memory/
     models.py       ← Pydantic 请求/响应模型
     renderer.py     ← Markdown → safe HTML
 
-  ui/
-    __init__.py
-    streamlit_app.py  ← Streamlit MVP（5 页面）
+frontend/
+  src/
+    api/            ← TanStack Query hooks
+    components/     ← 共享 UI 组件
+    layouts/        ← 根布局 / 侧边栏布局
+    pages/          ← Dashboard + Wiki 页面
+    store/          ← Zustand 状态管理
+    lib/            ← axios client / utils
 
 tests/
   test_web_api.py     ← httpx TestClient 测试（覆盖所有端点）
@@ -73,19 +77,19 @@ docs/
 ## 数据流（Wiki 详情请求）
 
 ```
-1. 浏览器 GET /api/wiki/synapse-architecture
+1. React 页面发起 GET /api/wiki/synapse-architecture
 2. FastAPI api.py：wiki_detail("synapse-architecture")
 3. 调用 read_wiki_page(ctx.wiki_dir, "synapse-architecture")
 4. 返回原始 Markdown
 5. renderer.py 转换为 sanitized HTML
 6. JSON 响应：{topic, content_html, frontmatter, word_count}
-7. 浏览器渲染 HTML
+7. 前端渲染详情页
 ```
 
 ## 数据流（全文搜索请求）
 
 ```
-1. 浏览器 GET /api/search?q=JWT+auth&mode=hybrid&limit=10
+1. React 搜索框触发 GET /api/search?q=JWT+auth&mode=hybrid&limit=10
 2. FastAPI：调用 hybrid_search(ctx, "JWT auth", limit=10)
 3. 同时调用 search_wiki(ctx.wiki_dir, "JWT auth", limit=5)
 4. 合并结果，加 type 字段区分 error/wiki
@@ -113,10 +117,10 @@ GET /api/tasks/:task_id
 # 开发环境
 uvicorn agents_memory.web.api:app --reload --port 10100
 
-# Streamlit（独立进程，调用 services 直接读文件）
-streamlit run agents_memory/ui/streamlit_app.py --server.port 10000
+# React 前端（独立进程，通过 REST API 访问后端）
+cd frontend && npm run dev -- --host 0.0.0.0 --port 10000
 
-# 两者共享同一份磁盘数据，无冲突（read-heavy，write 追加）
+# 前后端共享同一份磁盘数据来源，写操作统一经 API 执行
 ```
 
 ## CORS 配置
@@ -124,6 +128,6 @@ streamlit run agents_memory/ui/streamlit_app.py --server.port 10000
 仅允许 localhost（v1 本地工具，不对外）：
 
 ```python
-origins = ["http://localhost:5173", "http://localhost:10000", "http://127.0.0.1:5173"]
+origins = ["http://localhost:10000", "http://127.0.0.1:10000"]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["*"])
 ```

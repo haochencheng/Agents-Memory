@@ -12,10 +12,12 @@ doc_status: active
 |----|------|------|------|
 | 后端框架 | **FastAPI** | ≥0.11 | 异步、自动 OpenAPI 文档、Pydantic 类型安全 |
 | 后端服务器 | **uvicorn** | ≥0.30 | ASGI，支持 `--reload` 热重载 |
-| Markdown 渲染 | **markdown** (Python) | ≥3.6 | 轻量，无额外依赖，服务端渲染为 HTML |
+| 前端框架 | **Vite + React 18 + TypeScript** | Vite 6 / React 18 | SPA 架构，组件化、类型安全、开发体验更好 |
+| UI 样式 | **TailwindCSS** | 3.x | 快速构建控制台 UI，样式一致性高 |
+| 路由 | **React Router v6** | 6.x | 前端多页面路由管理 |
+| 状态管理 | **Zustand** | 5.x | 轻量、低样板代码 |
+| 数据请求 | **TanStack Query** | 5.x | 缓存、状态同步、重试和请求管理 |
 | 测试客户端 | **httpx** + **pytest** | ≥0.27 | FastAPI 推荐 TestClient，asyncio 友好 |
-| MVP UI | **Streamlit** | ≥1.32 | 纯 Python，零前端构建，验证快 |
-| 未来前端 | **Vite + React 18 + TailwindCSS** | — | 生产级，VS Code Simple Browser 可嵌入 |
 | 图谱可视化 | **D3.js** v7 | — | 力导向图，Wiki 交叉链接可视化 |
 
 ## 为什么不选 Flask / Django
@@ -24,12 +26,12 @@ doc_status: active
 - Django 过重，Agents-Memory 业务逻辑已在 `services/` 层，无需 ORM
 - FastAPI 自动生成 `/docs` OpenAPI UI，方便手动探索
 
-## 为什么先做 Streamlit 而非直接 React
+## 当前前端决策
 
-- 复用现有 Python 服务层，无需额外进程
-- `amem wiki-list` / `hybrid_search` 等可直接调用
-- 验证 UX 后再决定是否需要完整 React 版
-- 当前团队是开发者，Streamlit 对内使用足够
+- 已采用 React SPA 作为唯一前端实现，不再保留 Python UI 双轨维护
+- 前端运行在 `frontend/`，通过 Vite 开发服务器监听 `:10000`
+- 所有页面通过 REST API 访问 `agents_memory/web/api.py`
+- 控制台、Wiki、Scheduler、Checks 等页面统一在 React 中维护
 
 ## 约束
 
@@ -37,14 +39,18 @@ doc_status: active
 - **只读操作默认开放**，写操作（wiki-update、ingest）需在 API 中标注 `# WRITE`
 - **无认证（v1）**：仅本地 localhost 使用，不对外暴露
 - **Python 3.12 only**：与 `agents_memory` 主包保持一致
+- **前端端口固定为 `10000`**：与当前运维脚本和测试配置保持一致
 
 ## 依赖清单
 
 ```
-# requirements-web.txt（追加到 requirements.txt）
+# Python 依赖（追加到 requirements.txt）
 fastapi>=0.110.0
 uvicorn>=0.29.0
 markdown>=3.6
 httpx>=0.27.0          # 测试用
-streamlit>=1.32.0      # MVP UI
+
+# 前端依赖（frontend/package.json 管理）
+# react, react-dom, vite, tailwindcss, @tanstack/react-query,
+# react-router-dom, zustand, vitest, playwright
 ```

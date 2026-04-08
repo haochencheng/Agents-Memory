@@ -1,13 +1,13 @@
 #!/usr/bin/env python3.12
 """scripts/web-health.py — Agents-Memory Web UI 健康检查与端到端冒烟测试
 
-可直接运行（不需要 pytest），逐一验证每个 API 端点和 Streamlit UI 页面可达性。
+可直接运行（不需要 pytest），逐一验证每个 API 端点和 React UI 页面可达性。
 退出码：0 = 全部通过，1 = 有失败项。
 
 用法:
     python3.12 scripts/web-health.py                  # 默认检查 localhost:10100
     python3.12 scripts/web-health.py --api http://localhost:10100
-    python3.12 scripts/web-health.py --ui  http://localhost:8501
+    python3.12 scripts/web-health.py --ui  http://localhost:10000
     python3.12 scripts/web-health.py --json            # JSON 格式输出（CI 友好）
 """
 
@@ -216,32 +216,31 @@ def suite_api(api_base: str) -> list[CheckResult]:
 
 
 def suite_ui(ui_base: str) -> list[CheckResult]:
-    """验证 Streamlit UI 是否可达（HTTP 200）。"""
+    """验证 React UI 是否可达（HTTP 200）。"""
     results: list[CheckResult] = []
     t0 = time.perf_counter()
     code, body = _http_get(ui_base, timeout=10)
     latency_ms = round((time.perf_counter() - t0) * 1000, 1)
-    # Streamlit returns 200 with HTML
-    passed = code == 200 and b"<!DOCTYPE html>" in body.lower() or b"streamlit" in body.lower()
+    body_lower = body.lower()
+    passed = code == 200 and (b"<!doctype html>" in body_lower or b"<html" in body_lower)
     results.append(CheckResult(
-        name="Streamlit UI / (HTTP 200 + HTML)",
-        passed=code == 200,
+        name="React UI / (HTTP 200 + HTML)",
+        passed=passed,
         status_code=code,
         latency_ms=latency_ms,
-        detail="" if code == 200 else f"Streamlit UI 未响应（code={code}）",
+        detail="" if passed else f"React UI 未响应（code={code}）",
     ))
 
-    # Static asset
+    # Vite dev client probe
     t0 = time.perf_counter()
-    asset_code, _ = _http_get(f"{ui_base}/healthz", timeout=5)
+    asset_code, _ = _http_get(f"{ui_base}/@vite/client", timeout=5)
     latency_ms = round((time.perf_counter() - t0) * 1000, 1)
-    # Streamlit doesn't have /healthz natively; accept 200 or 404 (UI is alive either way)
     results.append(CheckResult(
-        name="Streamlit UI reachable (/healthz probe)",
-        passed=asset_code in (200, 404),
+        name="React UI reachable (/@vite/client probe)",
+        passed=asset_code == 200,
         status_code=asset_code,
         latency_ms=latency_ms,
-        detail="" if asset_code in (200, 404) else f"Streamlit 未响应（code={asset_code}）",
+        detail="" if asset_code == 200 else f"React UI 未响应（code={asset_code}）",
     ))
     return results
 
@@ -272,8 +271,8 @@ def _print_results(results: list[CheckResult], suite_name: str, json_mode: bool)
 def main() -> int:
     parser = argparse.ArgumentParser(description="Agents-Memory Web 健康检查")
     parser.add_argument("--api", default="http://localhost:10100", help="FastAPI base URL")
-    parser.add_argument("--ui", default="http://localhost:8501", help="Streamlit UI URL")
-    parser.add_argument("--skip-ui", action="store_true", help="跳过 Streamlit UI 检查")
+    parser.add_argument("--ui", default="http://localhost:10000", help="React UI URL")
+    parser.add_argument("--skip-ui", action="store_true", help="跳过 React UI 检查")
     parser.add_argument("--json", action="store_true", dest="json_mode", help="JSON 格式输出")
     args = parser.parse_args()
 
@@ -289,7 +288,7 @@ def main() -> int:
         print(_info(f"UI: {args.ui}") if not args.json_mode else "")
         ui_results = suite_ui(args.ui)
         all_results.extend(ui_results)
-        ui_fails = _print_results(ui_results, "Streamlit UI 验证", args.json_mode)
+        ui_fails = _print_results(ui_results, "React UI 验证", args.json_mode)
 
     total_pass = sum(1 for r in all_results if r.passed)
     total_fail = sum(1 for r in all_results if not r.passed)
