@@ -19,6 +19,17 @@ export interface WikiTopicDetail extends WikiTopic {
 
 export interface WikiListResponse {
   topics: WikiTopic[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+  query: string
+}
+
+export interface WikiListQuery {
+  query?: string
+  page?: number
+  pageSize?: number
 }
 
 export interface LintIssue {
@@ -38,11 +49,21 @@ export interface GraphResponse {
   edges: Array<{ source: string; target: string; type?: string }>
 }
 
-export function useWikiList() {
+export function useWikiList(params: WikiListQuery = {}) {
+  const query = params.query ?? ''
+  const page = params.page ?? 1
+  const pageSize = params.pageSize ?? 20
+
   return useQuery<WikiListResponse>({
-    queryKey: ['wiki'],
+    queryKey: ['wiki', { query, page, pageSize }],
     queryFn: async () => {
-      const { data } = await client.get('/wiki')
+      const { data } = await client.get('/wiki', {
+        params: {
+          q: query || undefined,
+          page,
+          page_size: pageSize,
+        },
+      })
       return data
     },
   })

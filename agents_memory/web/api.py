@@ -622,16 +622,20 @@ def wiki_graph() -> WikiGraphResponse:
 
 
 @app.get("/api/wiki", response_model=WikiListResponse)
-def list_wiki() -> WikiListResponse:
+def list_wiki(
+    q: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+) -> WikiListResponse:
     ctx = _get_ctx()
-    topics_result: list[TopicMeta] = []
+    query = (q or "").strip().lower()
+    topics_result: list[tuple[TopicMeta, str]] = []
     for topic, raw, fm in _load_wiki_topic_entries(ctx):
         title = fm.get("topic", topic).replace("-", " ").title()
         tags = fm.get("tags", [])
         if isinstance(tags, str):
             tags = [tags]
-        topics_result.append(
-            TopicMeta(
+        meta = TopicMeta(
                 topic=topic,
                 title=title,
                 tags=tags,
@@ -640,8 +644,36 @@ def list_wiki() -> WikiListResponse:
                 project=str(fm.get("project", "")),
                 source_path=str(fm.get("source_path", "")),
             )
+        haystack = "\n".join(
+            [
+                topic,
+                title,
+                " ".join(tags),
+                str(fm.get("project", "")),
+                str(fm.get("source_path", "")),
+                raw,
+            ]
         )
-    return WikiListResponse(topics=topics_result)
+        if query and query not in haystack.lower():
+            continue
+        topics_result.append((meta, haystack))
+
+    topics_result.sort(key=lambda item: ((item[0].updated_at or ""), item[0].title.lower(), item[0].topic), reverse=True)
+
+    total = len(topics_result)
+    total_pages = (total + page_size - 1) // page_size if total else 0
+    start = (page - 1) * page_size
+    end = start + page_size
+    page_topics = [meta for meta, _ in topics_result[start:end]]
+
+    return WikiListResponse(
+        topics=page_topics,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        query=q or "",
+    )
 
 
 @app.get("/api/wiki/{topic}", response_model=WikiDetailResponse)

@@ -91,6 +91,11 @@ class StatsResponse(BaseModel):
 
 class WikiListResponse(BaseModel):
     topics: list[TopicMeta]
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
+    total_pages: int = 0
+    query: str = ""
 
 
 class WikiDetailResponse(BaseModel):

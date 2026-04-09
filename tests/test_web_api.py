@@ -66,6 +66,22 @@ def _build_env(root: Path) -> None:
             Microservices communicate via gRPC.
         """),
     )
+    _write(
+        root / "memory" / "wiki" / "billing-recharge.md",
+        textwrap.dedent("""\
+            ---
+            topic: billing-recharge
+            updated_at: 2026-04-08
+            tags: [billing, recharge]
+            project: synapse-network
+            source_path: docs/billing/recharge.md
+            ---
+
+            # Billing Recharge
+
+            用户完成充值后，系统会写入充值成功事件，并更新账户余额。
+        """),
+    )
 
     # Error records
     _write(
@@ -142,7 +158,7 @@ class TestPhase1(unittest.TestCase):
         self.assertIn("wiki_count", data)
         self.assertIn("error_count", data)
         self.assertIn("ingest_count", data)
-        self.assertEqual(data["wiki_count"], 2)
+        self.assertEqual(data["wiki_count"], 3)
         self.assertEqual(data["error_count"], 1)
 
     def test_stats_has_projects(self) -> None:
@@ -157,15 +173,38 @@ class TestPhase1(unittest.TestCase):
         slugs = [t["topic"] for t in topics]
         self.assertIn("auth-design", slugs)
         self.assertIn("synapse-architecture", slugs)
+        self.assertIn("billing-recharge", slugs)
 
     def test_wiki_list_has_required_fields(self) -> None:
         r = self._client.get("/api/wiki")
+        self.assertIn("total", r.json())
+        self.assertIn("page", r.json())
+        self.assertIn("page_size", r.json())
+        self.assertIn("total_pages", r.json())
         for t in r.json()["topics"]:
             self.assertIn("topic", t)
             self.assertIn("title", t)
             self.assertIn("word_count", t)
             self.assertIn("project", t)
             self.assertIsInstance(t["word_count"], int)
+
+    def test_wiki_list_supports_pagination(self) -> None:
+        r = self._client.get("/api/wiki?page=2&page_size=2")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertEqual(data["page"], 2)
+        self.assertEqual(data["page_size"], 2)
+        self.assertEqual(data["total"], 3)
+        self.assertEqual(data["total_pages"], 2)
+        self.assertEqual(len(data["topics"]), 1)
+
+    def test_wiki_list_supports_full_text_query(self) -> None:
+        r = self._client.get("/api/wiki?q=充值")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertEqual(data["query"], "充值")
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["topics"][0]["topic"], "billing-recharge")
 
     def test_wiki_detail_ok(self) -> None:
         r = self._client.get("/api/wiki/auth-design")
