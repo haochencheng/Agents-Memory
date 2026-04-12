@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-04-07
+updated_at: 2026-04-12
 doc_status: active
 ---
 
@@ -145,6 +145,26 @@ python3 scripts/memory.py ingest dummy --log
 
 支持类型：`pr-review`、`meeting`、`decision`、`code-review`
 摄取日志存储于：`memory/ingest_log.jsonl`
+
+### Legacy Workflow 迁移
+
+当旧版本把 `task_completion` / `requirement_completion` 错写进 `errors/` 后，可用一次性迁移脚本把它们物理搬到 `memory/workflow_records/`：
+
+```bash
+# 先预览本次会迁哪些文件
+python3 scripts/migrate_workflow_records.py --dry-run
+
+# 正式迁移全部 legacy workflow records
+python3 scripts/migrate_workflow_records.py
+
+# 只迁前 20 条，适合分批处理
+python3 scripts/migrate_workflow_records.py --limit 20
+```
+
+说明：
+- 只会处理 `source_type` 属于 workflow 的 legacy 文件
+- 真正的 `error_record` 不会被移动
+- 重复执行是安全的；已迁过的记录会自动跳过
 
 ### Wiki 维护
 
@@ -327,6 +347,7 @@ docker-compose down -v        # 清除所有向量数据（危险！）
 | 用途 | 存储方式 |
 |------|----------|
 | 错误记录（结构化文本）| `errors/*.md`（本地运行数据，默认不进入公开仓库）|
+| Workflow 记录 | `memory/workflow_records/*.md`（完成 task / requirement 的执行证据）|
 | Wiki 知识库 | `memory/wiki/*.md`（编译真相 + 时间线）|
 | 向量索引（本地）| `vectors/` LanceDB（gitignored）|
 | FTS 全文索引 | `vectors/fts.db` SQLite（自动维护）|

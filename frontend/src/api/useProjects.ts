@@ -9,6 +9,7 @@ export interface Project {
   health?: 'ok' | 'warn' | 'fail'
   wiki_count?: number
   error_count?: number
+  workflow_count?: number
   rule_count?: number
   last_ingest?: string
 }
@@ -22,6 +23,7 @@ export interface ProjectStats {
   health: 'ok' | 'warn' | 'fail' | 'unknown'
   wiki_count: number
   error_count: number
+  workflow_count: number
   checklist_done: number
   ingest_count: number
   last_error: string
@@ -31,6 +33,8 @@ export interface ProjectStats {
 export interface ProjectWikiNavItem {
   topic: string
   title: string
+  tags: string[]
+  project: string
   source_path: string
   nav_path: string
   source_group: string

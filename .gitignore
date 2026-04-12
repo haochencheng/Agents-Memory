@@ -15,6 +15,7 @@ memory/projects.md
 memory/rules.md
 memory/ingest_log.jsonl
 memory/wiki/
+memory/workflow_records/
 errors/*.md
 errors/archive/
 .agents-memory/

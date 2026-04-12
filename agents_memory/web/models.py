@@ -33,7 +33,7 @@ class ErrorMeta(BaseModel):
 
 
 class SearchResult(BaseModel):
-    type: Literal["error", "wiki"]
+    type: Literal["error", "wiki", "workflow"]
     id: str
     title: str
     snippet: str = ""
@@ -59,6 +59,7 @@ class IngestLogEntry(BaseModel):
     project: str = ""
     id: str = ""
     status: str = ""
+    storage_kind: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +139,7 @@ class IngestResponse(BaseModel):
     ingested: bool
     id: str = ""
     dry_run: bool
+    storage_kind: str = ""
 
 
 class IngestLogResponse(BaseModel):
@@ -180,6 +182,7 @@ class ProjectInfo(BaseModel):
     health: str = "unknown"
     wiki_count: int = 0
     error_count: int = 0
+    workflow_count: int = 0
     rule_count: int = 0
     last_ingest: str = ""
 
@@ -193,15 +196,45 @@ class ProjectStatsResponse(BaseModel):
     health: str = "unknown"
     wiki_count: int = 0
     error_count: int = 0
+    workflow_count: int = 0
     checklist_done: int = 0
     ingest_count: int = 0
     last_error: str = ""
     last_ingest: str = ""
 
 
+class WorkflowRecordMeta(BaseModel):
+    id: str
+    title: str = ""
+    source_type: str = ""
+    project: str = ""
+    status: str = ""
+    created_at: str = ""
+    storage_kind: str = ""
+
+
+class WorkflowListResponse(BaseModel):
+    records: list[WorkflowRecordMeta]
+    total: int = 0
+
+
+class WorkflowDetailResponse(BaseModel):
+    id: str
+    title: str = ""
+    source_type: str = ""
+    project: str = ""
+    status: str = ""
+    created_at: str = ""
+    storage_kind: str = ""
+    content_html: str
+    raw: str
+
+
 class ProjectWikiNavItem(BaseModel):
     topic: str
     title: str
+    tags: list[str] = Field(default_factory=list)
+    project: str = ""
     source_path: str = ""
     nav_path: str = ""
     source_group: str = ""

@@ -1,6 +1,6 @@
 ---
 created_at: 2026-04-07
-updated_at: 2026-04-07
+updated_at: 2026-04-12
 doc_status: active
 ---
 
@@ -174,7 +174,7 @@ Base URL: `http://localhost:10100`
 
 ## GET /api/search
 
-全文混合搜索（wiki + 错误记录）。
+全文混合搜索（wiki + 错误记录 + workflow 记录）。
 
 **查询参数:**
 - `q` — 搜索词（必填）
@@ -196,7 +196,7 @@ Base URL: `http://localhost:10100`
     },
     {
       "type": "wiki",
-      "topic": "auth-design",
+      "id": "auth-design",
       "title": "Auth Design",
       "snippet": "...JWT best practices...",
       "score": 0.87
@@ -208,9 +208,62 @@ Base URL: `http://localhost:10100`
 
 ---
 
+## GET /api/workflow
+
+列出 workflow 记录（完成 task / requirement 的执行证据，不计入错误记录）。
+
+**查询参数:**
+- `project` — 项目名过滤（可选）
+- `source_type` — `task_completion` | `requirement_completion` 等（可选）
+- `limit` — 返回条数，默认 50
+
+**响应 200:**
+```json
+{
+  "records": [
+    {
+      "id": "TASK-42",
+      "title": "Apply planned changes",
+      "source_type": "task_completion",
+      "project": "synapse-network-growing",
+      "status": "completed",
+      "created_at": "2026-04-12T10:00:00Z",
+      "storage_kind": "workflow"
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+## GET /api/workflow/{id}
+
+获取单条 workflow 记录详情。
+
+**响应 200:**
+```json
+{
+  "id": "TASK-42",
+  "title": "Apply planned changes",
+  "source_type": "task_completion",
+  "project": "synapse-network-growing",
+  "status": "completed",
+  "created_at": "2026-04-12T10:00:00Z",
+  "storage_kind": "workflow",
+  "content_html": "<h2>执行结果</h2>...",
+  "raw": "---\nid: TASK-42\n..."
+}
+```
+
+---
+
 ## POST /api/ingest
 
 摄入文档到记忆系统。**写操作 # WRITE**
+
+- `error_record` → 写入 `errors/`
+- 其他类型（如 `task_completion` / `requirement_completion`）→ 写入 `memory/workflow_records/`
 
 **请求体:**
 ```json
@@ -224,7 +277,7 @@ Base URL: `http://localhost:10100`
 
 **响应 200:**
 ```json
-{"ingested": true, "id": "ERR-2026-0407-003", "dry_run": false}
+{"ingested": true, "id": "ERR-2026-0407-003", "dry_run": false, "storage_kind": "error"}
 ```
 
 ---
@@ -244,7 +297,8 @@ Base URL: `http://localhost:10100`
       "source_type": "error_record",
       "project": "synapse-network",
       "id": "ERR-2026-0407-003",
-      "status": "ok"
+      "status": "ok",
+      "storage_kind": "error"
     }
   ],
   "total": 50

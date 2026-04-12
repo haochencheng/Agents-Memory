@@ -21,6 +21,7 @@ from agents_memory.constants import (
 )
 from agents_memory.logging_utils import log_file_update
 from agents_memory.runtime import AppContext
+from agents_memory.services.workflow_records import is_error_record_meta, normalize_project_id
 
 
 def parse_frontmatter(filepath: Path) -> dict:
@@ -59,8 +60,13 @@ def collect_errors(ctx: AppContext, status_filter: list[str] | None = None) -> l
         meta = parse_frontmatter(filepath)
         if not meta:
             continue
+        if not is_error_record_meta(meta):
+            continue
         if status_filter and meta.get("status") not in status_filter:
             continue
+        normalized_project = normalize_project_id(meta.get("project", ""))
+        if normalized_project:
+            meta["project"] = normalized_project
         meta["_file"] = str(filepath)
         records.append(meta)
     return records

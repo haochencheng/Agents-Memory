@@ -1,64 +1,75 @@
-import { useProjects } from '@/api/useProjects'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorAlert from '@/components/ErrorAlert'
-import WorkflowStepper from '@/components/WorkflowStepper'
-
-const WORKFLOW_STEPS = [
-  { key: 'ingest', label: '摄入' },
-  { key: 'parse', label: '解析' },
-  { key: 'lint', label: 'Lint' },
-  { key: 'check', label: 'Check' },
-  { key: 'store', label: '存储' },
-]
-
-// Derive step status from project data (mocked as complete for now)
-function getStepStatus(step: string): 'done' | 'active' | 'pending' | 'failed' {
-  // In a real scenario, this would check actual workflow state
-  const doneSteps = ['ingest', 'parse']
-  const activeSteps = ['lint']
-  if (doneSteps.includes(step)) return 'done'
-  if (activeSteps.includes(step)) return 'active'
-  return 'pending'
-}
+import { type WorkflowRecord, useWorkflowRecords } from '@/api/useWorkflow'
+import { formatDate } from '@/lib/utils'
 
 export default function Workflow() {
-  const { data: projects, isLoading, error } = useProjects()
+  const { data, isLoading, error } = useWorkflowRecords({ limit: 100 })
 
-  const steps = WORKFLOW_STEPS.map(s => ({ ...s, status: getStepStatus(s.key) }))
+  const grouped = (data?.records ?? []).reduce<Record<string, WorkflowRecord[]>>((acc, record) => {
+    const key = record.project || 'unknown'
+    if (!acc[key]) {
+      acc[key] = []
+    }
+    acc[key].push(record)
+    return acc
+  }, {})
+
+  const projects = Object.entries(grouped).sort((a, b) => b[1].length - a[1].length)
 
   return (
     <div className="space-y-6" data-testid="workflow-page">
-      <h1 className="page-title">Workflow 状态</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="page-title">Workflow 状态</h1>
+        <span className="text-sm text-gray-500">{data?.total ?? 0} 条记录</span>
+      </div>
 
-      {isLoading && <LoadingSpinner text="加载工作流状态..." />}
+      {isLoading && <LoadingSpinner text="加载工作流记录..." />}
       {error && <ErrorAlert message="工作流数据加载失败" />}
 
-      {!isLoading && !error && (!projects?.projects || projects.projects.length === 0) && (
+      {!isLoading && !error && projects.length === 0 && (
         <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
           <div className="text-4xl mb-3">🔄</div>
           <p className="text-gray-500">暂无工作流记录</p>
         </div>
       )}
-      {!isLoading && !error && projects?.projects && projects.projects.length > 0 && (
+
+      {!isLoading && !error && projects.length > 0 && (
         <div className="space-y-4">
-          {projects.projects.map(p => (
-            <div key={p.name} className="bg-white rounded-xl border border-gray-100 p-5">
-              <h3 className="font-semibold text-gray-700 mb-4 font-mono">{p.name}</h3>
-              <WorkflowStepper steps={steps} />
+          {projects.map(([project, records]) => (
+            <div key={project} className="bg-white rounded-xl border border-gray-100 p-5">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <h3 className="font-semibold text-gray-700 font-mono">{project}</h3>
+                <span className="badge badge-blue">{records.length} records</span>
+              </div>
+              <div className="space-y-3">
+                {records.slice(0, 6).map(record => (
+                  <div key={`${project}-${record.id}`} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">{record.title || record.id}</p>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          <span className="badge badge-blue">{record.source_type}</span>
+                          <span className="badge badge-gray">{record.status || 'recorded'}</span>
+                          <span className="badge badge-gray">{record.storage_kind}</span>
+                        </div>
+                      </div>
+                      <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(record.created_at)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Workflow description */}
       <div className="bg-blue-50 rounded-xl border border-blue-100 p-5">
         <h2 className="section-title text-blue-800">工作流说明</h2>
         <ol className="list-decimal list-inside space-y-1 text-sm text-blue-700 mt-2">
-          <li><strong>摄入</strong>：读取项目文件，识别文档/错误/规则等资产</li>
-          <li><strong>解析</strong>：提取 Markdown 结构，关联引用</li>
-          <li><strong>Lint</strong>：检查文档质量，生成 issue 列表</li>
-          <li><strong>Check</strong>：执行 docs/profile/plan 合规检查</li>
-          <li><strong>存储</strong>：写入 wiki 和记忆文件</li>
+          <li><strong>项目文档</strong>：通过 onboarding 导入到 wiki，作为长期知识。</li>
+          <li><strong>失败任务</strong>：写入错误记录，继续参与错误统计与 wiki compile。</li>
+          <li><strong>完成任务/需求</strong>：写入 workflow records，保留执行证据但不污染错误面板。</li>
         </ol>
       </div>
     </div>
