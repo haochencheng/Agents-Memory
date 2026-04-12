@@ -38,6 +38,7 @@ Agents-Memory/
 ├── memory/                         # WARM runtime dir: local rules + project registry
 │   ├── rules.md                    # local generated rules file, gitignored
 │   └── projects.md                 # local project registry, gitignored
+├── memory/wiki/                    # WARM runtime dir: ingested wiki knowledge pages (gitignored)
 ├── memory/workflow_records/        # WARM runtime dir: completed task / requirement execution evidence (gitignored)
 │
 ├── logs/                           # RUNTIME LOGS (gitignored)
@@ -121,6 +122,7 @@ Agents-Memory/
 └── scripts/
   ├── memory.py                   # thin CLI wrapper → agents_memory.app
   ├── amem                        # convenience launcher
+  ├── backfill_wiki_metadata.py   # one-shot historical wiki metadata / links backfill
   ├── install-cli.sh              # install CLI shim into local environment
   ├── migrate_workflow_records.py # one-shot migration of legacy workflow records out of errors/
   ├── start.sh                    # local startup helper
@@ -143,12 +145,15 @@ Agents-Memory/
 | `pyproject.toml` | Packaging, Python version, and tool config | Human / test runner |
 | `requirements.txt` | Minimal install requirements | Human / bootstrap |
 | `scripts/memory.py` | Thin CLI wrapper → `agents_memory.app` | Human / CI |
+| `scripts/backfill_wiki_metadata.py` | One-shot wiki metadata / links backfill for historical pages | Human / repo maintenance |
 | `scripts/migrate_workflow_records.py` | One-shot legacy data migration from `errors/` to `memory/workflow_records/` | Human / repo maintenance |
 | `scripts/mcp_server.py` | Thin MCP wrapper → `agents_memory.mcp_app` | AI Agent via tool calls |
 | `agents_memory/app.py` | CLI command registry entrypoint | Human / CI |
 | `agents_memory/mcp_app.py` | MCP tool registry entrypoint | AI Agent via tool calls |
 | `agents_memory/runtime.py` | Shared repo context and paths | CLI / MCP / services |
 | `agents_memory/services/*` | Business logic by capability | CLI / MCP / future UIs |
+| `agents_memory/services/wiki_backfill.py` | Historical wiki metadata / candidate-link backfill logic | CLI / repo maintenance |
+| `agents_memory/services/wiki_knowledge.py` | Concept extraction from wiki body/title/headings/tags | Web API / search / graph |
 | `agents_memory/commands/*` | CLI argument parsing and command dispatch adapters | CLI |
 | `profiles/*.yaml` | Installable project contracts | `profile-list/show/apply` |
 | `.github/instructions/agents-memory/project-facts.json` | Deterministic facts generated from profile detectors | `profile-apply`, `standards-sync`, `profile-check`, `profile-render` |
@@ -210,6 +215,7 @@ python3 scripts/memory.py docs-touch [path] [--date YYYY-MM-DD] [--dry-run] # re
 python3 scripts/memory.py archive                      # archive old records
 python3 scripts/memory.py to-qdrant                    # migrate to shared Qdrant
 python3 scripts/memory.py update-index                 # regenerate index.md stats
+python3 scripts/backfill_wiki_metadata.py --dry-run    # preview wiki metadata / links backfill
 ```
 
 ## MCP Server Tools (for AI Agents)

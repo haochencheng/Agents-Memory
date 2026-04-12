@@ -24,6 +24,8 @@ from typing import Any
 
 from agents_memory.runtime import AppContext
 from agents_memory.services.records import collect_errors, parse_frontmatter, read_body
+from agents_memory.services.workflow_records import collect_workflow_records
+from agents_memory.services.wiki import list_wiki_topics, read_wiki_page
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +78,23 @@ def _create_fts_schema(conn: sqlite3.Connection) -> None:
             key TEXT PRIMARY KEY,
             value TEXT
         );
+        CREATE TABLE IF NOT EXISTS knowledge_docs (
+            id TEXT PRIMARY KEY,
+            source_kind TEXT,
+            project TEXT,
+            title TEXT,
+            doc_type TEXT,
+            source_type TEXT,
+            tags TEXT,
+            filepath TEXT,
+            content TEXT
+        );
+        CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_docs_fts USING fts5(
+            id, source_kind, project, title, doc_type, source_type, tags, content,
+            content='knowledge_docs',
+            content_rowid='rowid',
+            tokenize='unicode61'
+        );
     """)
     conn.commit()
 
@@ -103,6 +122,120 @@ def _fts_file_to_row(filepath: Path) -> tuple | None:
         meta.get("domain", ""), meta.get("severity", ""), meta.get("status", ""),
         meta.get("date", ""), str(filepath), content,
     )
+
+
+def _knowledge_doc_count(conn: sqlite3.Connection) -> int:
+    try:
+        row = conn.execute("SELECT COUNT(*) FROM knowledge_docs").fetchone()
+        return row[0] if row else 0
+    except sqlite3.OperationalError:
+        return 0
+
+
+def _parse_wiki_frontmatter(raw: str) -> dict[str, Any]:
+    meta: dict[str, Any] = {}
+    in_frontmatter = False
+    for line in raw.splitlines():
+        stripped = line.rstrip()
+        if stripped == "---":
+            if not in_frontmatter:
+                in_frontmatter = True
+                continue
+            break
+        if in_frontmatter and ": " in stripped:
+            key, value = stripped.split(": ", 1)
+            value = value.strip()
+            if value.startswith("[") and value.endswith("]"):
+                inner = value[1:-1]
+                meta[key.strip()] = [item.strip() for item in inner.split(",") if item.strip()]
+            else:
+                meta[key.strip()] = value.strip('"')
+    return meta
+
+
+def _wiki_doc_type(source_path: str, frontmatter: dict[str, Any]) -> str:
+    explicit = str(frontmatter.get("doc_type", "")).strip()
+    if explicit:
+        return explicit
+    parts = [part for part in Path(source_path).parts if part]
+    if not parts:
+        return "reference"
+    if len(parts) == 1:
+        return "root-doc"
+    if parts[0] == "docs":
+        if len(parts) == 2:
+            return "docs-root"
+        mapping = {
+            "architecture": "architecture",
+            "guides": "guide",
+            "ops": "ops",
+            "plans": "plan",
+            "frontend": "frontend",
+            "product": "product",
+            "maintenance": "maintenance",
+        }
+        return mapping.get(parts[1], parts[1].replace("_", "-"))
+    return "reference"
+
+
+def _wiki_rows(ctx: AppContext) -> list[tuple]:
+    rows: list[tuple] = []
+    for topic in list_wiki_topics(ctx.wiki_dir):
+        raw = read_wiki_page(ctx.wiki_dir, topic)
+        if raw is None:
+            continue
+        frontmatter = _parse_wiki_frontmatter(raw)
+        title = str(frontmatter.get("topic", topic)).replace("-", " ").title()
+        tags = frontmatter.get("tags", [])
+        if isinstance(tags, str):
+            tags = [tags]
+        source_path = str(frontmatter.get("source_path", ctx.wiki_dir / f"{topic}.md"))
+        doc_type = _wiki_doc_type(source_path, frontmatter)
+        rows.append(
+            (
+                topic,
+                "wiki",
+                str(frontmatter.get("project", "")),
+                title,
+                doc_type,
+                "",
+                " ".join(str(tag) for tag in tags if str(tag)),
+                str(ctx.wiki_dir / f"{topic}.md"),
+                " ".join([topic, title, doc_type, " ".join(str(tag) for tag in tags), raw]),
+            )
+        )
+    return rows
+
+
+def _workflow_rows(ctx: AppContext) -> list[tuple]:
+    rows: list[tuple] = []
+    for record in collect_workflow_records(ctx):
+        filepath = str(record.get("_file", ""))
+        if not filepath:
+            continue
+        body = read_body(Path(filepath))
+        rows.append(
+            (
+                str(record.get("id", "")),
+                "workflow",
+                str(record.get("project", "")),
+                str(record.get("title", "") or record.get("id", "")),
+                "",
+                str(record.get("source_type", "")),
+                "",
+                filepath,
+                " ".join(
+                    [
+                        str(record.get("id", "")),
+                        str(record.get("title", "")),
+                        str(record.get("project", "")),
+                        str(record.get("source_type", "")),
+                        body,
+                    ]
+                ),
+            )
+        )
+    return rows
 
 
 def _fts_full_rebuild(conn: sqlite3.Connection, all_files: list[Path]) -> int:
@@ -142,6 +275,91 @@ def build_fts_index(ctx: AppContext, force: bool = False) -> int:
     count = _fts_full_rebuild(conn, all_files)
     conn.close()
     return count
+
+
+def build_knowledge_fts_index(ctx: AppContext, force: bool = False) -> int:
+    """Build FTS index for wiki + workflow documents."""
+    db_path = _fts_db_path(ctx)
+    conn = _open_fts_db(db_path)
+    _create_fts_schema(conn)
+    rows = _wiki_rows(ctx) + _workflow_rows(ctx)
+    if not force and _knowledge_doc_count(conn) == len(rows):
+        conn.close()
+        return len(rows)
+
+    conn.execute("DELETE FROM knowledge_docs")
+    conn.execute("DELETE FROM knowledge_docs_fts")
+    conn.commit()
+    conn.executemany(
+        "INSERT OR REPLACE INTO knowledge_docs (id, source_kind, project, title, doc_type, source_type, tags, filepath, content) VALUES (?,?,?,?,?,?,?,?,?)",
+        rows,
+    )
+    conn.execute("INSERT INTO knowledge_docs_fts(knowledge_docs_fts) VALUES('rebuild')")
+    conn.execute("INSERT OR REPLACE INTO fts_meta(key,value) VALUES('knowledge_built_at', ?)", (date.today().isoformat(),))
+    conn.commit()
+    conn.close()
+    return len(rows)
+
+
+def search_knowledge_fts(ctx: AppContext, query: str, limit: int = 20, source_kind: str | None = None) -> list[dict[str, Any]]:
+    """Full-text search over wiki/workflow documents using SQLite FTS5."""
+    db_path = _fts_db_path(ctx)
+    if not db_path.exists():
+        build_fts_index(ctx)
+        build_knowledge_fts_index(ctx)
+
+    conn = _open_fts_db(db_path)
+    _create_fts_schema(conn)
+    current_count = len(_wiki_rows(ctx)) + len(_workflow_rows(ctx))
+    if _knowledge_doc_count(conn) != current_count:
+        conn.close()
+        build_knowledge_fts_index(ctx, force=True)
+        conn = _open_fts_db(db_path)
+
+    where_sql = "WHERE knowledge_docs_fts MATCH ?"
+    params: list[Any] = [query]
+    if source_kind:
+        where_sql += " AND kd.source_kind = ?"
+        params.append(source_kind)
+    params.append(limit)
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT kd.id, kd.source_kind, kd.project, kd.title, kd.doc_type,
+                   kd.source_type, kd.tags, kd.filepath, -bm25(knowledge_docs_fts) AS raw_score
+            FROM knowledge_docs_fts
+            JOIN knowledge_docs kd ON knowledge_docs_fts.rowid = kd.rowid
+            {where_sql}
+            ORDER BY raw_score DESC
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        conn.close()
+        return []
+
+    if not rows:
+        conn.close()
+        return []
+
+    max_score = max(row["raw_score"] for row in rows) or 1.0
+    results = [
+        {
+            "id": row["id"],
+            "source_kind": row["source_kind"],
+            "project": row["project"],
+            "title": row["title"],
+            "doc_type": row["doc_type"],
+            "source_type": row["source_type"],
+            "tags": row["tags"],
+            "filepath": row["filepath"],
+            "fts_score": row["raw_score"] / max_score,
+        }
+        for row in rows
+    ]
+    conn.close()
+    return results
 
 
 def search_fts(ctx: AppContext, query: str, limit: int = 20) -> list[dict[str, Any]]:

@@ -16,6 +16,11 @@ export interface WorkflowResponse {
   total: number
 }
 
+export interface WorkflowDetail extends WorkflowRecord {
+  content_html: string
+  raw: string
+}
+
 export function useWorkflowRecords(params?: { project?: string; source_type?: string; limit?: number }) {
   return useQuery<WorkflowResponse>({
     queryKey: ['workflow', params],
@@ -23,5 +28,16 @@ export function useWorkflowRecords(params?: { project?: string; source_type?: st
       const { data } = await client.get('/workflow', { params })
       return data
     },
+  })
+}
+
+export function useWorkflowRecord(id: string) {
+  return useQuery<WorkflowDetail>({
+    queryKey: ['workflow-detail', id],
+    queryFn: async () => {
+      const { data } = await client.get(`/workflow/${id}`)
+      return data
+    },
+    enabled: Boolean(id?.trim()),
   })
 }

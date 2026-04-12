@@ -30,6 +30,11 @@ Base URL: `http://localhost:10100`
 
 列出所有 wiki 话题。
 
+**查询参数:**
+- `q` — 标题 / 标签 / 项目 / 路径 / 正文全文检索（可选）
+- `page` — 页码，默认 `1`
+- `page_size` — 每页条数，默认 `20`，最大 `100`
+
 **响应 200:**
 ```json
 {
@@ -38,10 +43,18 @@ Base URL: `http://localhost:10100`
       "topic": "synapse-architecture",
       "title": "Synapse Architecture",
       "tags": ["backend", "design"],
+      "doc_type": "architecture",
       "word_count": 420,
-      "updated_at": "2026-03-14"
+      "updated_at": "2026-03-14",
+      "project": "synapse-network",
+      "source_path": "docs/architecture/overview.md"
     }
-  ]
+  ],
+  "total": 12,
+  "page": 1,
+  "page_size": 20,
+  "total_pages": 1,
+  "query": ""
 }
 ```
 
@@ -79,10 +92,28 @@ Base URL: `http://localhost:10100`
 {
   "topic": "synapse-architecture",
   "title": "Synapse Architecture",
+  "tags": ["backend", "design"],
+  "doc_type": "architecture",
+  "updated_at": "2026-03-14",
+  "project": "synapse-network",
+  "source_path": "docs/architecture/overview.md",
   "frontmatter": {"tags": ["backend"], "updated_at": "2026-03-14"},
   "content_html": "<h1>Synapse Architecture</h1>...",
   "raw": "# Synapse Architecture\n...",
-  "word_count": 420
+  "word_count": 420,
+  "links": [
+    {
+      "topic": "billing-recharge",
+      "title": "Billing Recharge",
+      "relation": "explicit",
+      "reason": "显式 wiki 链接",
+      "score": 3.0,
+      "project": "synapse-network",
+      "tags": ["billing", "recharge"]
+    }
+  ],
+  "backlinks": [],
+  "related_topics": []
 }
 ```
 
@@ -116,6 +147,55 @@ Base URL: `http://localhost:10100`
 **响应 202:**
 ```json
 {"task_id": "compile-synapse-architecture-20260407", "status": "pending"}
+```
+
+---
+
+## GET /api/wiki/graph
+
+返回 wiki 关系图。
+
+- `type=explicit` 表示 frontmatter `links` 里的显式引用
+- `type=inferred` 表示基于同项目 / 共享标签 / 主题词做的轻量推断关系
+- `type=contains` 表示项目节点到 concept 节点的归属边
+- `type=mentions` 表示同一页面内主概念到次级概念的正文提及边
+
+**响应 200:**
+```json
+{
+  "nodes": [
+    {
+      "id": "decision:synapse-architecture",
+      "title": "Synapse Architecture",
+      "node_type": "decision",
+      "project": "synapse-network",
+      "word_count": 420,
+      "tags": ["backend", "design"],
+      "primary_topic": "synapse-architecture",
+      "topic_count": 1
+    }
+  ],
+  "edges": [
+    {
+      "source": "module:auth-design",
+      "target": "decision:synapse-architecture",
+      "type": "explicit",
+      "weight": 3.0
+    },
+    {
+      "source": "decision:synapse-architecture",
+      "target": "module:billing-recharge",
+      "type": "inferred",
+      "weight": 2.4
+    },
+    {
+      "source": "project:synapse-network",
+      "target": "decision:synapse-architecture",
+      "type": "contains",
+      "weight": 1.0
+    }
+  ]
+}
 ```
 
 ---
@@ -176,6 +256,9 @@ Base URL: `http://localhost:10100`
 
 全文混合搜索（wiki + 错误记录 + workflow 记录）。
 
+- 基础召回：errors 走 FTS5 + vector，wiki/workflow 走 FTS5
+- 统一排序：会叠加 concept graph rerank，把 query 命中的概念沿 `explicit / inferred / mentions / contains` 关系向相关结果传播
+
 **查询参数:**
 - `q` — 搜索词（必填）
 - `mode` — `keyword` | `semantic` | `hybrid`，默认 `hybrid`
@@ -192,14 +275,38 @@ Base URL: `http://localhost:10100`
       "id": "ERR-2026-0312-001",
       "title": "Token validation fails on refresh",
       "snippet": "...refresh token lifecycle...",
-      "score": 0.92
+      "score": 0.92,
+      "rerank_boost": 0.18,
+      "rerank_reasons": ["命中概念: JWT Refresh", "命中概念: synapse-network"],
+      "matched_concepts": [
+        {
+          "id": "module:jwt-refresh",
+          "title": "JWT Refresh",
+          "node_type": "module",
+          "score": 0.72,
+          "primary_topic": "auth-design",
+          "project": "synapse-network"
+        }
+      ]
     },
     {
       "type": "wiki",
       "id": "auth-design",
       "title": "Auth Design",
       "snippet": "...JWT best practices...",
-      "score": 0.87
+      "score": 0.87,
+      "rerank_boost": 0.24,
+      "rerank_reasons": ["命中概念: JWT Refresh", "命中概念: Auth Design"],
+      "matched_concepts": [
+        {
+          "id": "decision:auth-design",
+          "title": "Auth Design",
+          "node_type": "decision",
+          "score": 1.35,
+          "primary_topic": "auth-design",
+          "project": "synapse-network"
+        }
+      ]
     }
   ],
   "total": 2

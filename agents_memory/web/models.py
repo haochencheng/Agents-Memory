@@ -16,6 +16,7 @@ class TopicMeta(BaseModel):
     topic: str
     title: str
     tags: list[str] = Field(default_factory=list)
+    doc_type: str = ""
     word_count: int
     updated_at: str = ""
     project: str = ""
@@ -32,12 +33,24 @@ class ErrorMeta(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
+class SearchMatchedConcept(BaseModel):
+    id: str
+    title: str
+    node_type: str = ""
+    score: float = 0.0
+    primary_topic: str = ""
+    project: str = ""
+
+
 class SearchResult(BaseModel):
     type: Literal["error", "wiki", "workflow"]
     id: str
     title: str
     snippet: str = ""
     score: float = 0.0
+    rerank_boost: float = 0.0
+    rerank_reasons: list[str] = Field(default_factory=list)
+    matched_concepts: list[SearchMatchedConcept] = Field(default_factory=list)
 
 
 class LintIssue(BaseModel):
@@ -102,10 +115,18 @@ class WikiListResponse(BaseModel):
 class WikiDetailResponse(BaseModel):
     topic: str
     title: str
+    tags: list[str] = Field(default_factory=list)
+    doc_type: str = ""
+    updated_at: str = ""
+    project: str = ""
+    source_path: str = ""
     frontmatter: dict[str, Any]
     content_html: str
     raw: str
     word_count: int
+    links: list["TopicRelation"] = Field(default_factory=list)
+    backlinks: list["TopicRelation"] = Field(default_factory=list)
+    related_topics: list["TopicRelation"] = Field(default_factory=list)
 
 
 class WikiLintResponse(BaseModel):
@@ -364,14 +385,29 @@ class ChecksSummary(BaseModel):
 class GraphNode(BaseModel):
     id: str
     title: str = ""
+    node_type: str = "entity"
     project: str = ""
     word_count: int = 0
+    tags: list[str] = Field(default_factory=list)
+    primary_topic: str = ""
+    topic_count: int = 1
 
 
 class GraphEdge(BaseModel):
     source: str
     target: str
     type: str = "reference"
+    weight: float = 1.0
+
+
+class TopicRelation(BaseModel):
+    topic: str
+    title: str = ""
+    relation: str = "related"
+    reason: str = ""
+    score: float = 0.0
+    project: str = ""
+    tags: list[str] = Field(default_factory=list)
 
 
 class WikiGraphResponse(BaseModel):
@@ -380,3 +416,4 @@ class WikiGraphResponse(BaseModel):
 
 
 ProjectWikiNavNode.model_rebuild()
+WikiDetailResponse.model_rebuild()

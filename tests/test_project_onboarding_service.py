@@ -74,11 +74,36 @@ class ProjectOnboardingServiceTests(unittest.TestCase):
             assert readme_page is not None
             self.assertIn("project: synapse-network", readme_page)
             self.assertIn("source_path: README.md", readme_page)
+            self.assertIn("doc_type: root-doc", readme_page)
+            self.assertIn("tags: [synapse-network]", readme_page)
+
+            architecture_page = read_wiki_page(ctx.wiki_dir, "synapse-network-docs-architecture")
+            self.assertIsNotNone(architecture_page)
+            assert architecture_page is not None
+            self.assertIn("doc_type: docs-root", architecture_page)
+            self.assertIn("tags: [synapse-network]", architecture_page)
 
             log_path = root / "memory" / "ingest_log.jsonl"
             lines = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
             self.assertEqual(lines[0]["source_type"], "project_wiki")
             self.assertEqual(lines[0]["project"], "synapse-network")
+
+    def test_ingest_project_wiki_sources_generates_candidate_links_for_related_docs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_context(root)
+            project_root = root / "Synapse-Network"
+            project_root.mkdir(parents=True)
+            _write_text(project_root / "docs" / "billing" / "recharge.md", "# Recharge\n")
+            _write_text(project_root / "docs" / "billing" / "refund.md", "# Refund\n")
+
+            ingest_project_wiki_sources(ctx, project_root, max_files=10)
+
+            refund_page = read_wiki_page(ctx.wiki_dir, "synapse-network-docs-billing-refund")
+            self.assertIsNotNone(refund_page)
+            assert refund_page is not None
+            self.assertIn("links:", refund_page)
+            self.assertIn("topic: synapse-network-docs-billing-recharge", refund_page)
 
     def test_discover_project_wiki_sources_applies_optional_limit_to_docs_corpus(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
