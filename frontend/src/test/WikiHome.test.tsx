@@ -115,7 +115,7 @@ describe('WikiHome page', () => {
     await user.click(screen.getByRole('button', { name: '下一页' }))
 
     expect(screen.getByText('Topic 21')).toBeInTheDocument()
-    expect(screen.getByTestId('wiki-pagination-controls')).toHaveTextContent('第 2 页')
+    expect(screen.getByTestId('wiki-pagination-summary')).toHaveTextContent('第 2 / 2 页，每页 20 条')
   })
 
   it('uses server-side query for wiki search', async () => {
@@ -123,6 +123,9 @@ describe('WikiHome page', () => {
     renderPage()
 
     await user.type(screen.getByTestId('wiki-search-input'), '充值')
+    expect(useWikiListMock).toHaveBeenLastCalledWith({ query: '', page: 1, pageSize: 20 })
+
+    await user.click(screen.getByTestId('wiki-search-submit'))
 
     expect(screen.getByText('Billing Recharge')).toBeInTheDocument()
     expect(useWikiListMock).toHaveBeenLastCalledWith({ query: '充值', page: 1, pageSize: 20 })

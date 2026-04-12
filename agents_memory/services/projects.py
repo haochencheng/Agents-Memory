@@ -8,12 +8,25 @@ from agents_memory.constants import DEFAULT_BRIDGE_INSTRUCTION_REL, DOMAIN_HINTS
 from agents_memory.logging_utils import log_file_update
 from agents_memory.runtime import AppContext
 
+_REGISTRATION_MARKER = "## 注册新项目"
+
+
+def _is_placeholder_project_id(project_id: str) -> bool:
+    normalized = project_id.strip().lower()
+    return (
+        not normalized
+        or normalized.startswith("<")
+        or normalized.endswith(">")
+        or "<" in normalized
+        or ">" in normalized
+    )
+
 
 def _process_header_line(line: str, current: dict, projects: list[dict]) -> dict:
     project_id = re.match(r"^## (.+)", line).group(1).strip()
     if current.get("id"):
         projects.append(current)
-    if any(char > "\u4e00" for char in project_id):
+    if any(char > "\u4e00" for char in project_id) or _is_placeholder_project_id(project_id):
         return {}
     return {"id": project_id}
 
@@ -31,6 +44,8 @@ def parse_projects(ctx: AppContext) -> list[dict]:
     projects: list[dict] = []
     current: dict = {}
     for line in ctx.projects_file.read_text(encoding="utf-8").splitlines():
+        if line.strip() == _REGISTRATION_MARKER:
+            break
         if re.match(r"^## (.+)", line):
             current = _process_header_line(line, current, projects)
         elif current:

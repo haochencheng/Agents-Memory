@@ -222,7 +222,7 @@ export default function MemoryRecords() {
             }`}
             onClick={() => setTab(t)}
           >
-            {t === 'errors' ? '🐛 错误记录' : '📋 规则'}
+            {t === 'errors' ? '错误记录' : '规则'}
           </button>
         ))}
       </div>

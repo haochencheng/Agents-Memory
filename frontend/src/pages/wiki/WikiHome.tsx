@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useWikiList } from '@/api/useWiki'
 import LoadingSpinner from '@/components/LoadingSpinner'
@@ -21,6 +21,7 @@ export default function WikiHome() {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialQuery = searchParams.get('q') ?? ''
   const initialPage = Number.parseInt(searchParams.get('page') ?? '1', 10)
+  const [draftQuery, setDraftQuery] = useState(initialQuery)
   const [query, setQuery] = useState(initialQuery)
   const [page, setPage] = useState(Number.isFinite(initialPage) && initialPage > 0 ? initialPage : 1)
   const { data: topics, isLoading, error } = useWikiList({ query, page, pageSize: PAGE_SIZE })
@@ -33,6 +34,12 @@ export default function WikiHome() {
     setSearchParams(nextParams, { replace: true })
   }, [page, query, setSearchParams])
 
+  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setQuery(draftQuery.trim())
+    setPage(1)
+  }
+
   return (
     <div className="space-y-6" data-testid="wiki-home-page">
       <div className="flex items-center justify-between">
@@ -43,19 +50,21 @@ export default function WikiHome() {
         <span className="text-sm text-gray-500">{topics?.total ?? 0} 篇</span>
       </div>
 
-      <div className="relative">
-        <input
-          className="input w-full pl-9"
-          placeholder="搜索标题、标签、项目、路径或正文内容..."
-          value={query}
-          onChange={e => {
-            setQuery(e.target.value)
-            setPage(1)
-          }}
-          data-testid="wiki-search-input"
-        />
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-      </div>
+      <form className="flex flex-col gap-3 sm:flex-row" onSubmit={handleSearchSubmit}>
+        <div className="relative flex-1">
+          <input
+            className="input w-full pl-9"
+            placeholder="搜索标题、标签、项目、路径或正文内容..."
+            value={draftQuery}
+            onChange={e => setDraftQuery(e.target.value)}
+            data-testid="wiki-search-input"
+          />
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+        </div>
+        <button type="submit" className="btn whitespace-nowrap" data-testid="wiki-search-submit">
+          搜索
+        </button>
+      </form>
 
       {isLoading && <LoadingSpinner text="加载 Wiki 列表..." />}
       {error && <ErrorAlert message="Wiki 列表加载失败" />}

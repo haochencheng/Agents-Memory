@@ -21,7 +21,13 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from agents_memory.runtime import AppContext, build_context
-from agents_memory.services.records import collect_errors, parse_frontmatter, read_body
+from agents_memory.services.records import (
+    collect_errors,
+    dedupe_error_records,
+    find_error_record,
+    parse_frontmatter,
+    read_body,
+)
 from agents_memory.services.integration import cmd_enable as run_enable_command
 from agents_memory.services.project_onboarding import ingest_project_wiki_sources
 from agents_memory.services.projects import parse_projects, resolve_project_target
@@ -702,19 +708,12 @@ def get_stats() -> StatsResponse:
     wiki_topics = list_wiki_topics(ctx.wiki_dir)
     errors = collect_errors(ctx)
     ingest_log = _read_ingest_log(ctx, limit=10000)
-    projects: set[str] = set(_registered_project_ids(ctx))
-    projects.update(normalize_project_id(e.get("project", "")) for e in errors if e.get("project"))
-    projects.update(normalize_project_id(e.get("project", "")) for e in ingest_log if e.get("project"))
-    projects.update(normalize_project_id(e.get("project", "")) for e in collect_workflow_records(ctx) if e.get("project"))
-    for _topic, _raw, fm in _load_wiki_topic_entries(ctx):
-        project_id = normalize_project_id(fm.get("project", ""))
-        if project_id:
-            projects.add(project_id)
+    projects = sorted(project_id for project_id in _registered_project_ids(ctx) if project_id)
     return StatsResponse(
         wiki_count=len(wiki_topics),
         error_count=len(errors),
         ingest_count=len(ingest_log),
-        projects=sorted(project for project in projects if project),
+        projects=projects,
     )
 
 
@@ -1050,6 +1049,8 @@ def list_errors(
     normalized_project = normalize_project_id(project or "")
     if project:
         records = [r for r in records if normalize_project_id(r.get("project", "")) == normalized_project]
+    records = dedupe_error_records(records)
+    total = len(records)
     records = records[:limit]
     error_metas = [
         ErrorMeta(
@@ -1062,20 +1063,18 @@ def list_errors(
         )
         for r in records
     ]
-    return ErrorListResponse(errors=error_metas, total=len(error_metas))
+    return ErrorListResponse(errors=error_metas, total=total)
 
 
 @app.get("/api/errors/{error_id}", response_model=ErrorDetailResponse)
 def error_detail(error_id: str) -> ErrorDetailResponse:
     ctx = _get_ctx()
-    # Search through errors dir
-    path = ctx.errors_dir / f"{error_id}.md"
+    record = find_error_record(ctx, error_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Error '{error_id}' not found")
+    path = Path(str(record.get("_file", "")))
     if not path.exists():
-        # Try substring match
-        matches = list(ctx.errors_dir.glob(f"*{error_id}*.md"))
-        if not matches:
-            raise HTTPException(status_code=404, detail=f"Error '{error_id}' not found")
-        path = matches[0]
+        raise HTTPException(status_code=404, detail=f"Error '{error_id}' not found")
     raw = path.read_text(encoding="utf-8")
     fm = parse_frontmatter(path)
     body = read_body(path)

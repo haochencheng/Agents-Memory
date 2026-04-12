@@ -125,6 +125,26 @@ def _build_env(root: Path) -> None:
             "status": "ok",
         }) + "\n",
     )
+    _write(
+        root / "memory" / "projects.md",
+        textwrap.dedent("""\
+            # Project Registry
+
+            ## synapse-network
+
+            - **id**: synapse-network
+            - **root**: /tmp/synapse-network
+            - **active**: true
+
+            ## 注册新项目
+
+            ### <project-id>
+
+            - **id**: <project-id>
+            - **root**: /tmp/template
+            - **active**: true
+        """),
+    )
 
 
 def _make_client(root: Path) -> TestClient:
@@ -170,6 +190,7 @@ class TestPhase1(unittest.TestCase):
         r = self._client.get("/api/stats")
         data = r.json()
         self.assertIsInstance(data["projects"], list)
+        self.assertEqual(data["projects"], ["synapse-network"])
 
     def test_wiki_list_all_topics(self) -> None:
         r = self._client.get("/api/wiki")
@@ -307,6 +328,80 @@ class TestPhase1(unittest.TestCase):
     def test_errors_detail_not_found(self) -> None:
         r = self._client.get("/api/errors/ERR-9999-0000-999")
         self.assertEqual(r.status_code, 404)
+
+    def test_errors_list_dedupes_duplicate_frontmatter_ids(self) -> None:
+        _write(
+            self._root / "errors" / "ERR-2026-0313-001.md",
+            textwrap.dedent("""\
+                ---
+                id: TASK-24-FAIL
+                title: Duplicate failure
+                status: open
+                project: synapse-network
+                severity: high
+                date: 2026-03-13
+                category: auth
+                domain: backend
+                source_type: error_record
+                ---
+
+                ## Problem
+                Duplicate failure newer.
+            """),
+        )
+        _write(
+            self._root / "errors" / "ERR-2026-0312-002.md",
+            textwrap.dedent("""\
+                ---
+                id: TASK-24-FAIL
+                title: Duplicate failure
+                status: open
+                project: synapse-network
+                severity: high
+                date: 2026-03-12
+                category: auth
+                domain: backend
+                source_type: error_record
+                ---
+
+                ## Problem
+                Duplicate failure older.
+            """),
+        )
+
+        r = self._client.get("/api/errors?project=synapse-network&limit=20")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        matched = [item for item in data["errors"] if item["id"] == "TASK-24-FAIL"]
+        self.assertEqual(len(matched), 1)
+        self.assertEqual(matched[0]["created_at"], "2026-03-13")
+
+    def test_errors_detail_resolves_frontmatter_id_when_filename_differs(self) -> None:
+        _write(
+            self._root / "errors" / "ERR-2026-0312-044.md",
+            textwrap.dedent("""\
+                ---
+                id: TASK-24-FAIL
+                title: Task failure
+                status: open
+                project: synapse-network
+                severity: high
+                date: 2026-03-12
+                category: auth
+                domain: backend
+                source_type: error_record
+                ---
+
+                ## Problem
+                Legacy file name does not match frontmatter id.
+            """),
+        )
+
+        r = self._client.get("/api/errors/TASK-24-FAIL")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertEqual(data["id"], "TASK-24-FAIL")
+        self.assertIn("Legacy file name does not match frontmatter id.", data["raw"])
 
     def test_rules_ok(self) -> None:
         r = self._client.get("/api/rules")

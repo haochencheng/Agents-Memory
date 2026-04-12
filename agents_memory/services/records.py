@@ -72,6 +72,45 @@ def collect_errors(ctx: AppContext, status_filter: list[str] | None = None) -> l
     return records
 
 
+def _error_sort_key(record: dict) -> tuple[str, str, str]:
+    filepath = Path(str(record.get("_file", "")))
+    return (
+        str(record.get("date", record.get("created_at", ""))),
+        filepath.stem,
+        str(record.get("id", "")),
+    )
+
+
+def sort_error_records(records: list[dict], *, newest_first: bool = True) -> list[dict]:
+    return sorted(records, key=_error_sort_key, reverse=newest_first)
+
+
+def dedupe_error_records(records: list[dict]) -> list[dict]:
+    deduped: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for record in sort_error_records(records):
+        project = normalize_project_id(record.get("project", ""))
+        record_id = str(record.get("id", "")).strip()
+        title = str(record.get("title", "")).strip()
+        key = (project, record_id or title)
+        if not key[1] or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(record)
+    return deduped
+
+
+def find_error_record(ctx: AppContext, error_id: str) -> dict | None:
+    normalized = error_id.strip()
+    if not normalized:
+        return None
+    for record in sort_error_records(collect_errors(ctx)):
+        filepath = Path(str(record.get("_file", "")))
+        if record.get("id") == normalized or filepath.stem == normalized or normalized in filepath.stem:
+            return record
+    return None
+
+
 def total_error_count(ctx: AppContext) -> int:
     return len(list(ctx.errors_dir.glob("*.md")))
 

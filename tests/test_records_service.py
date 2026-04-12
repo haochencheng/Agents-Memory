@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from agents_memory.runtime import build_context
-from agents_memory.services.records import cmd_update_index, collect_errors, total_error_count
+from agents_memory.services.records import cmd_update_index, collect_errors, dedupe_error_records, find_error_record, total_error_count
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -85,3 +85,67 @@ rule two
             self.assertIn("| 错误模式 (errors) | 2 | `errors/` |", index_content)
             self.assertIn("2026-03-26-other-002", index_content)
             self.assertIn("`build-error`", index_content)
+
+    def test_dedupe_error_records_keeps_latest_duplicate_per_project_and_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            _write_text(
+                ctx.errors_dir / "ERR-20260411-001.md",
+                """---
+id: TASK-24-FAIL
+date: 2026-04-11
+project: synapse-network-growing
+title: repeated failure
+source_type: error_record
+status: new
+---
+
+older
+""",
+            )
+            _write_text(
+                ctx.errors_dir / "ERR-20260412-002.md",
+                """---
+id: TASK-24-FAIL
+date: 2026-04-12
+project: synapse-network-growing
+title: repeated failure
+source_type: error_record
+status: new
+---
+
+newer
+""",
+            )
+
+            deduped = dedupe_error_records(collect_errors(ctx))
+
+            self.assertEqual(len(deduped), 1)
+            self.assertEqual(deduped[0]["id"], "TASK-24-FAIL")
+            self.assertTrue(deduped[0]["_file"].endswith("ERR-20260412-002.md"))
+
+    def test_find_error_record_matches_frontmatter_id_when_filename_differs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            _write_text(
+                ctx.errors_dir / "ERR-20260411-044.md",
+                """---
+id: TASK-24-FAIL
+date: 2026-04-11
+project: synapse-network-growing
+title: repeated failure
+source_type: error_record
+status: new
+---
+
+body
+""",
+            )
+
+            record = find_error_record(ctx, "TASK-24-FAIL")
+
+            self.assertIsNotNone(record)
+            assert record is not None
+            self.assertTrue(record["_file"].endswith("ERR-20260411-044.md"))

@@ -57,6 +57,34 @@ class ProjectsServiceTests(unittest.TestCase):
 
             self.assertEqual([project["id"] for project in projects], ["active-project"])
 
+    def test_parse_projects_ignores_template_entries_after_registration_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = self._build_context(root)
+            ctx.projects_file.write_text(
+                """# Project Registry
+
+## active-project
+
+- **id**: active-project
+- **root**: /tmp/active-project
+- **active**: true
+
+## 注册新项目
+
+## <project-id>
+
+- **id**: <project-id>
+- **root**: /tmp/template
+- **active**: true
+""",
+                encoding="utf-8",
+            )
+
+            projects = parse_projects(ctx)
+
+            self.assertEqual([project["id"] for project in projects], ["active-project"])
+
     def test_resolve_project_target_prefers_registered_project_id(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

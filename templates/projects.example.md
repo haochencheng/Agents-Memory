@@ -26,7 +26,7 @@ python3 scripts/memory.py sync
 
 模板：
 ```text
-## <project-id>
+### <project-id>
 
 - **id**: <project-id>
 - **root**: /absolute/path/to/project
