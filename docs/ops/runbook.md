@@ -174,7 +174,17 @@ python3 scripts/memory.py wiki-lint
 
 # 生成 wiki 合成摘要（调用 LLM）
 python3 scripts/memory.py wiki-compile python --dry-run
+
+# 为历史 wiki 页面补 metadata / candidate links
+python3 scripts/backfill_wiki_metadata.py --dry-run
+python3 scripts/backfill_wiki_metadata.py --project synapse-network
+python3 scripts/backfill_wiki_metadata.py --json
 ```
+
+说明：
+- backfill 会补齐 `project / source_path / doc_type / tags / links`
+- 历史页面若存在旧 frontmatter `sources:`，会优先复用它推断 `source_path`
+- 重复执行是安全的；已经具备 metadata 且无新增 links 的页面会自动跳过
 
 ---
 

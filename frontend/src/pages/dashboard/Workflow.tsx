@@ -2,6 +2,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorAlert from '@/components/ErrorAlert'
 import { type WorkflowRecord, useWorkflowRecords } from '@/api/useWorkflow'
 import { formatDate } from '@/lib/utils'
+import { Link } from 'react-router-dom'
 
 export default function Workflow() {
   const { data, isLoading, error } = useWorkflowRecords({ limit: 100 })
@@ -44,7 +45,11 @@ export default function Workflow() {
               </div>
               <div className="space-y-3">
                 {records.slice(0, 6).map(record => (
-                  <div key={`${project}-${record.id}`} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <Link
+                    key={`${project}-${record.id}`}
+                    to={`/workflow/${encodeURIComponent(record.id)}`}
+                    className="block rounded-lg border border-gray-100 bg-gray-50 p-3 transition hover:border-blue-200 hover:bg-white"
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-medium text-gray-800">{record.title || record.id}</p>
@@ -56,7 +61,7 @@ export default function Workflow() {
                       </div>
                       <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(record.created_at)}</span>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </div>

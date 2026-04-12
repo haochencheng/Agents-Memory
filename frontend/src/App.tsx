@@ -4,7 +4,9 @@ import Overview from '@/pages/dashboard/Overview'
 import ProjectList from '@/pages/dashboard/ProjectList'
 import ProjectDetail from '@/pages/dashboard/ProjectDetail'
 import MemoryRecords from '@/pages/dashboard/MemoryRecords'
+import ErrorDetail from '@/pages/dashboard/ErrorDetail'
 import Workflow from '@/pages/dashboard/Workflow'
+import WorkflowDetail from '@/pages/dashboard/WorkflowDetail'
 import Checks from '@/pages/dashboard/Checks'
 import Scheduler from '@/pages/dashboard/Scheduler'
 import WikiHome from '@/pages/wiki/WikiHome'
@@ -22,7 +24,9 @@ export default function App() {
         <Route path="projects" element={<ProjectList />} />
         <Route path="projects/:id" element={<ProjectDetail />} />
         <Route path="memory" element={<MemoryRecords />} />
+        <Route path="memory/errors/:id" element={<ErrorDetail />} />
         <Route path="workflow" element={<Workflow />} />
+        <Route path="workflow/:id" element={<WorkflowDetail />} />
         <Route path="checks" element={<Checks />} />
         <Route path="scheduler" element={<Scheduler />} />
         <Route path="wiki" element={<WikiHome />} />

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useWikiList } from '@/api/useWiki'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorAlert from '@/components/ErrorAlert'
@@ -6,10 +7,31 @@ import WikiCard from '@/components/WikiCard'
 
 const PAGE_SIZE = 20
 
+function buildPageNumbers(currentPage: number, totalPages: number): number[] {
+  const start = Math.max(1, currentPage - 2)
+  const end = Math.min(totalPages, currentPage + 2)
+  const pages: number[] = []
+  for (let page = start; page <= end; page += 1) {
+    pages.push(page)
+  }
+  return pages
+}
+
 export default function WikiHome() {
-  const [query, setQuery] = useState('')
-  const [page, setPage] = useState(1)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialQuery = searchParams.get('q') ?? ''
+  const initialPage = Number.parseInt(searchParams.get('page') ?? '1', 10)
+  const [query, setQuery] = useState(initialQuery)
+  const [page, setPage] = useState(Number.isFinite(initialPage) && initialPage > 0 ? initialPage : 1)
   const { data: topics, isLoading, error } = useWikiList({ query, page, pageSize: PAGE_SIZE })
+  const pageNumbers = buildPageNumbers(topics?.page ?? page, topics?.total_pages ?? 1)
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams()
+    if (query.trim()) nextParams.set('q', query.trim())
+    if (page > 1) nextParams.set('page', String(page))
+    setSearchParams(nextParams, { replace: true })
+  }, [page, query, setSearchParams])
 
   return (
     <div className="space-y-6" data-testid="wiki-home-page">
@@ -73,9 +95,38 @@ export default function WikiHome() {
               </button>
 
               <div className="flex items-center gap-2 text-sm text-gray-500" data-testid="wiki-pagination-controls">
-                <span>第 {topics?.page ?? 1} 页</span>
-                <span>/</span>
-                <span>{topics?.total_pages ?? 1} 页</span>
+                {pageNumbers[0] > 1 && (
+                  <>
+                    <button type="button" className="btn btn-outline" onClick={() => setPage(1)}>
+                      1
+                    </button>
+                    {pageNumbers[0] > 2 && <span>…</span>}
+                  </>
+                )}
+
+                {pageNumbers.map(pageNumber => (
+                  <button
+                    key={pageNumber}
+                    type="button"
+                    className={pageNumber === (topics?.page ?? page) ? 'btn' : 'btn btn-outline'}
+                    onClick={() => setPage(pageNumber)}
+                  >
+                    {pageNumber}
+                  </button>
+                ))}
+
+                {(pageNumbers[pageNumbers.length - 1] ?? 1) < (topics?.total_pages ?? 1) && (
+                  <>
+                    {(pageNumbers[pageNumbers.length - 1] ?? 1) < (topics?.total_pages ?? 1) - 1 && <span>…</span>}
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      onClick={() => setPage(topics?.total_pages ?? 1)}
+                    >
+                      {topics?.total_pages ?? 1}
+                    </button>
+                  </>
+                )}
               </div>
 
               <button

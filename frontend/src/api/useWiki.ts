@@ -5,6 +5,7 @@ export interface WikiTopic {
   topic: string
   title: string
   tags: string[]
+  doc_type?: string
   word_count: number
   updated_at: string
   project: string
@@ -15,6 +16,9 @@ export interface WikiTopicDetail extends WikiTopic {
   content_html: string
   raw: string
   frontmatter: Record<string, unknown>
+  links: TopicRelation[]
+  backlinks: TopicRelation[]
+  related_topics: TopicRelation[]
 }
 
 export interface WikiListResponse {
@@ -45,8 +49,18 @@ export interface LintResponse {
 }
 
 export interface GraphResponse {
-  nodes: Array<{ id: string; title: string; project?: string; word_count?: number }>
-  edges: Array<{ source: string; target: string; type?: string }>
+  nodes: Array<{ id: string; title: string; node_type?: string; project?: string; word_count?: number; tags?: string[]; primary_topic?: string; topic_count?: number }>
+  edges: Array<{ source: string; target: string; type?: string; weight?: number }>
+}
+
+export interface TopicRelation {
+  topic: string
+  title: string
+  relation: string
+  reason: string
+  score: number
+  project: string
+  tags: string[]
 }
 
 export function useWikiList(params: WikiListQuery = {}) {
@@ -70,13 +84,17 @@ export function useWikiList(params: WikiListQuery = {}) {
 }
 
 export function useWikiTopic(topic: string) {
+  return useWikiTopicWithOptions(topic)
+}
+
+export function useWikiTopicWithOptions(topic: string, options?: { enabled?: boolean }) {
   return useQuery<WikiTopicDetail>({
     queryKey: ['wiki', topic],
     queryFn: async () => {
       const { data } = await client.get(`/wiki/${topic}`)
       return data
     },
-    enabled: Boolean(topic),
+    enabled: Boolean(topic) && (options?.enabled ?? true),
   })
 }
 

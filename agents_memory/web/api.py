@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from contextlib import redirect_stdout
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path, PurePosixPath
@@ -32,10 +34,16 @@ from agents_memory.services.workflow_records import (
     write_workflow_record,
 )
 from agents_memory.services.wiki import (
+    get_wiki_links,
     list_wiki_topics,
     parse_wiki_sections,
     read_wiki_page,
     update_compiled_truth,
+)
+from agents_memory.services.wiki_knowledge import (
+    build_concept_graph_context,
+    graph_rerank_explanation_for_search_record,
+    score_query_concepts,
 )
 from agents_memory.web.models import (
     CheckResult,
@@ -71,6 +79,7 @@ from agents_memory.web.models import (
     StatsResponse,
     TaskStatus,
     TopicMeta,
+    TopicRelation,
     WorkflowDetailResponse,
     WorkflowListResponse,
     WorkflowRecordMeta,
@@ -105,6 +114,15 @@ import uuid
 _task_store: dict[str, dict[str, Any]] = {}
 # In-memory scheduler tasks store
 _scheduler_tasks: list[dict[str, Any]] = []
+
+
+@dataclass(frozen=True)
+class _SearchCandidate:
+    result: SearchResult
+    project: str = ""
+    topic: str = ""
+    doc_type: str = ""
+    source_type: str = ""
 
 
 def _get_ctx() -> AppContext:
@@ -175,6 +193,218 @@ def _load_wiki_topic_entries(ctx: AppContext) -> list[tuple[str, str, dict[str, 
             continue
         entries.append((topic, raw, _parse_frontmatter_str(raw)))
     return entries
+
+
+_RELATION_TOKEN_STOPWORDS = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "from",
+    "into",
+    "page",
+    "wiki",
+    "topic",
+    "docs",
+    "doc",
+    "guide",
+    "notes",
+    "note",
+    "overview",
+    "design",
+    "plan",
+    "task",
+    "spec",
+}
+
+
+def _normalize_topic_tags(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+
+def _topic_title(topic: str, fm: dict[str, Any]) -> str:
+    return str(fm.get("topic", topic)).replace("-", " ").title()
+
+
+def _topic_doc_type(fm: dict[str, Any]) -> str:
+    source_path = str(fm.get("source_path", ""))
+    doc_type = str(fm.get("doc_type", "")).strip()
+    if doc_type:
+        return doc_type
+    if not source_path:
+        return "reference"
+    parts = tuple(part for part in PurePosixPath(source_path).parts if part)
+    if not parts:
+        return "reference"
+    if len(parts) == 1:
+        return "root-doc"
+    if parts[0] == "docs":
+        if len(parts) == 2:
+            return "docs-root"
+        mapping = {
+            "architecture": "architecture",
+            "guides": "guide",
+            "ops": "ops",
+            "plans": "plan",
+            "frontend": "frontend",
+            "product": "product",
+            "maintenance": "maintenance",
+        }
+        return mapping.get(parts[1], parts[1].replace("_", "-"))
+    return "reference"
+
+
+def _topic_tokens(topic: str, fm: dict[str, Any]) -> set[str]:
+    raw_parts = [topic, str(fm.get("topic", "")), " ".join(_normalize_topic_tags(fm.get("tags", [])))]
+    tokens = {
+        token
+        for token in re.findall(r"[a-z0-9]+", " ".join(raw_parts).lower())
+        if len(token) >= 3 and token not in _RELATION_TOKEN_STOPWORDS
+    }
+    return tokens
+
+
+def _wiki_page_catalog(ctx: AppContext) -> dict[str, dict[str, Any]]:
+    catalog: dict[str, dict[str, Any]] = {}
+    for topic, raw, fm in _load_wiki_topic_entries(ctx):
+        catalog[topic] = {
+            "topic": topic,
+            "raw": raw,
+            "frontmatter": fm,
+            "title": _topic_title(topic, fm),
+            "tags": _normalize_topic_tags(fm.get("tags", [])),
+            "doc_type": _topic_doc_type(fm),
+            "project": normalize_project_id(fm.get("project", "")),
+            "word_count": _word_count(raw),
+            "updated_at": str(fm.get("updated_at", "")),
+            "source_path": str(fm.get("source_path", "")),
+            "tokens": _topic_tokens(topic, fm),
+        }
+    return catalog
+
+
+def _relation_payload(page: dict[str, Any], *, relation: str, reason: str, score: float) -> TopicRelation:
+    return TopicRelation(
+        topic=str(page["topic"]),
+        title=str(page["title"]),
+        relation=relation,
+        reason=reason,
+        score=round(score, 2),
+        project=str(page["project"]),
+        tags=list(page["tags"]),
+    )
+
+
+def _build_wiki_relationships(ctx: AppContext) -> tuple[dict[str, dict[str, Any]], dict[str, list[TopicRelation]], dict[str, list[TopicRelation]], list[GraphEdge]]:
+    catalog = _wiki_page_catalog(ctx)
+    explicit_outbound: dict[str, list[TopicRelation]] = {topic: [] for topic in catalog}
+    inbound: dict[str, list[TopicRelation]] = {topic: [] for topic in catalog}
+    graph_edges: list[GraphEdge] = []
+    seen_edge_keys: set[tuple[str, str, str]] = set()
+
+    for topic, page in catalog.items():
+        for link in get_wiki_links(str(page["raw"])):
+            target = str(link.get("topic", "")).strip()
+            if not target or target == topic or target not in catalog:
+                continue
+            context = str(link.get("context", "")).strip()
+            target_page = catalog[target]
+            explicit_outbound[topic].append(
+                _relation_payload(
+                    target_page,
+                    relation="explicit",
+                    reason=context or "显式 wiki 链接",
+                    score=3.0,
+                )
+            )
+            inbound[target].append(
+                _relation_payload(
+                    page,
+                    relation="backlink",
+                    reason=context or f"{topic} 显式引用了当前页面",
+                    score=3.0,
+                )
+            )
+            edge_key = (topic, target, "explicit")
+            if edge_key not in seen_edge_keys:
+                seen_edge_keys.add(edge_key)
+                graph_edges.append(GraphEdge(source=topic, target=target, type="explicit", weight=3.0))
+
+    for topic, page in catalog.items():
+        explicit_targets = {relation.topic for relation in explicit_outbound[topic]}
+        candidates: list[tuple[float, str, str]] = []
+        for other_topic, other_page in catalog.items():
+            if other_topic == topic or other_topic in explicit_targets:
+                continue
+            shared_tags = sorted(set(page["tags"]) & set(other_page["tags"]))
+            shared_tokens = sorted(page["tokens"] & other_page["tokens"])
+            same_project = bool(page["project"]) and page["project"] == other_page["project"]
+            score = 0.0
+            reasons: list[str] = []
+            if shared_tags:
+                score += min(len(shared_tags), 3) * 1.4
+                reasons.append(f"共享标签: {', '.join(shared_tags[:3])}")
+            if same_project:
+                score += 1.0
+                reasons.append(f"同项目: {page['project']}")
+            if shared_tokens:
+                score += min(len(shared_tokens), 2) * 0.35
+                reasons.append(f"共享关键词: {', '.join(shared_tokens[:2])}")
+            if score < 1.4:
+                continue
+            candidates.append((score, other_topic, "；".join(reasons)))
+
+        for score, other_topic, reason in sorted(candidates, key=lambda item: (-item[0], item[1]))[:3]:
+            edge_key = (topic, other_topic, "inferred")
+            if edge_key not in seen_edge_keys:
+                seen_edge_keys.add(edge_key)
+                graph_edges.append(GraphEdge(source=topic, target=other_topic, type="inferred", weight=round(score, 2)))
+
+    explicit_outbound = {
+        topic: sorted(relations, key=lambda relation: (-relation.score, relation.topic))
+        for topic, relations in explicit_outbound.items()
+    }
+    inbound = {
+        topic: sorted(relations, key=lambda relation: (-relation.score, relation.topic))
+        for topic, relations in inbound.items()
+    }
+    return catalog, explicit_outbound, inbound, graph_edges
+
+
+def _inferred_related_topics(topic: str, catalog: dict[str, dict[str, Any]], edges: list[GraphEdge], *, limit: int = 6) -> list[TopicRelation]:
+    inferred = [
+        edge
+        for edge in edges
+        if edge.type == "inferred" and edge.source == topic and edge.target in catalog
+    ]
+    return [
+        _relation_payload(
+            catalog[edge.target],
+            relation="inferred",
+            reason="基于同项目 / 标签 / 主题词自动推断",
+            score=edge.weight,
+        )
+        for edge in sorted(inferred, key=lambda item: (-item.weight, item.target))[:limit]
+    ]
+
+
+def _get_concept_graph_context(ctx: AppContext):
+    catalog, _, _, page_edges = _build_wiki_relationships(ctx)
+    return build_concept_graph_context(catalog, page_edges)
+
+
+def _build_concept_graph(ctx: AppContext) -> tuple[list[GraphNode], list[GraphEdge]]:
+    graph_context = _get_concept_graph_context(ctx)
+    nodes = [
+        GraphNode(**node)
+        for node in sorted(graph_context.nodes_by_id.values(), key=lambda item: str(item["id"]))
+    ]
+    edges = [GraphEdge(**edge) for edge in graph_context.edges]
+    return nodes, edges
 
 
 def _registered_project_ids(ctx: AppContext) -> list[str]:
@@ -669,44 +899,9 @@ def wiki_lint() -> WikiLintResponse:
 
 @app.get("/api/wiki/graph", response_model=WikiGraphResponse)
 def wiki_graph() -> WikiGraphResponse:
-    """Build a reference graph from wiki topics.
-    
-    Nodes = all wiki topics; edges = cross-references between pages.
-    """
+    """Build a typed concept graph for wiki knowledge."""
     ctx = _get_ctx()
-    nodes: list[GraphNode] = []
-    edges: list[GraphEdge] = []
-    topic_ids: set[str] = set()
-
-    for topic in list_wiki_topics(ctx.wiki_dir):
-        raw = read_wiki_page(ctx.wiki_dir, topic)
-        if raw is None:
-            continue
-        fm = _parse_frontmatter_str(raw)
-        title = fm.get("topic", topic).replace("-", " ").title()
-        nodes.append(GraphNode(
-            id=topic,
-            title=title,
-            project=normalize_project_id(fm.get("project", "")),
-            word_count=_word_count(raw),
-        ))
-        topic_ids.add(topic)
-
-    # Build edges from [[topic]] or [text](topic) links in wiki pages
-    import re as _re
-    for topic in topic_ids:
-        raw = read_wiki_page(ctx.wiki_dir, topic)
-        if raw is None:
-            continue
-        # Match markdown links and wiki-style [[links]]
-        links = _re.findall(r"\[\[([^\]]+)\]\]|\[.+?\]\(([^)]+)\)", raw)
-        for match in links:
-            target = match[0] or match[1]
-            # Normalise: strip extension, lowercase
-            target = target.split("/")[-1].replace(".md", "").strip()
-            if target and target in topic_ids and target != topic:
-                edges.append(GraphEdge(source=topic, target=target))
-
+    nodes, edges = _build_concept_graph(ctx)
     return WikiGraphResponse(nodes=nodes, edges=edges)
 
 
@@ -728,6 +923,7 @@ def list_wiki(
                 topic=topic,
                 title=title,
                 tags=tags,
+                doc_type=_topic_doc_type(fm),
                 word_count=_word_count(raw),
                 updated_at=fm.get("updated_at", ""),
                 project=normalize_project_id(fm.get("project", "")),
@@ -772,14 +968,25 @@ def wiki_detail(topic: str) -> WikiDetailResponse:
     if raw is None:
         raise HTTPException(status_code=404, detail=f"Topic '{topic}' not found")
     fm = _parse_frontmatter_str(raw)
-    title = fm.get("topic", topic).replace("-", " ").title()
+    title = _topic_title(topic, fm)
+    tags = _normalize_topic_tags(fm.get("tags", []))
+    catalog, links_map, backlinks_map, edges = _build_wiki_relationships(ctx)
+    related_topics = _inferred_related_topics(topic, catalog, edges)
     return WikiDetailResponse(
         topic=topic,
         title=title,
+        tags=tags,
+        doc_type=_topic_doc_type(fm),
+        updated_at=str(fm.get("updated_at", "")),
+        project=normalize_project_id(fm.get("project", "")),
+        source_path=str(fm.get("source_path", "")),
         frontmatter=fm,
         content_html=md_to_html(raw),
         raw=raw,
         word_count=_word_count(raw),
+        links=links_map.get(topic, []),
+        backlinks=backlinks_map.get(topic, []),
+        related_topics=related_topics,
     )
 
 
@@ -900,87 +1107,148 @@ def _extract_snippet(filepath: str, q: str) -> str:
         return ""
 
 
-def _search_errors(ctx, q: str, mode: str, limit: int) -> list[SearchResult]:
-    """Run FTS or hybrid search over error records and return SearchResult list.
-
-    # Guard mode → import search → map raw rows to SearchResult via _extract_snippet.
-    """
+def _search_error_candidates(ctx, q: str, mode: str, limit: int) -> list[_SearchCandidate]:
+    candidates: list[_SearchCandidate] = []
     if mode not in ("hybrid", "keyword"):
-        return []
+        return candidates
     try:
         from agents_memory.services.search import hybrid_search, search_fts  # noqa: PLC0415
         raw = hybrid_search(ctx, q, limit=limit) if mode == "hybrid" else search_fts(ctx, q, limit=limit)
-        results: list[SearchResult] = []
         for row in raw:
             filepath = str(row.get("filepath", ""))
             if filepath and not is_error_record_meta(parse_frontmatter(Path(filepath))):
                 continue
-            results.append(
-                SearchResult(
+            meta = parse_frontmatter(Path(filepath)) if filepath else {}
+            candidate = _SearchCandidate(
+                result=SearchResult(
                     type="error",
                     id=row.get("id", ""),
                     title=row.get("id", row.get("category", "")),
                     snippet=_extract_snippet(filepath, q),
                     score=row.get("combined_score", row.get("fts_score", 0.0)),
-                )
+                ),
+                project=normalize_project_id(meta.get("project", "")),
+                source_type=str(meta.get("source_type", "")),
+                doc_type=str(meta.get("category", "")),
             )
-        return results
+            candidates.append(candidate)
     except Exception:
         return []
+    return candidates
+
+
+def _search_errors(ctx, q: str, mode: str, limit: int) -> list[SearchResult]:
+    return [candidate.result for candidate in _search_error_candidates(ctx, q, mode, limit)]
+
+
+def _search_wiki_candidates(ctx, q: str, mode: str, limit: int = 40) -> list[_SearchCandidate]:
+    candidates: list[_SearchCandidate] = []
+    if mode not in ("hybrid", "keyword", "semantic"):
+        return candidates
+    try:
+        from agents_memory.services.search import search_knowledge_fts  # noqa: PLC0415
+        for row in search_knowledge_fts(ctx, q, limit=limit, source_kind="wiki"):
+            filepath = str(row.get("filepath", ""))
+            candidates.append(
+                _SearchCandidate(
+                    result=SearchResult(
+                        type="wiki",
+                        id=str(row.get("id", "")),
+                        title=str(row.get("title", "") or row.get("id", "")),
+                        snippet=_extract_snippet(filepath, q),
+                        score=round(float(row.get("fts_score", 0.0)), 4),
+                    ),
+                    project=normalize_project_id(row.get("project", "")),
+                    topic=str(row.get("id", "")),
+                    doc_type=str(row.get("doc_type", "")),
+                )
+            )
+    except Exception:
+        return []
+    return candidates
 
 
 def _search_wiki(ctx, q: str, mode: str) -> list[SearchResult]:
-    """Simple text-match search over wiki pages; available in all modes."""
-    results: list[SearchResult] = []
+    return [candidate.result for candidate in _search_wiki_candidates(ctx, q, mode)]
+
+
+def _search_workflow_candidates(ctx, q: str, mode: str, limit: int) -> list[_SearchCandidate]:
     if mode not in ("hybrid", "keyword", "semantic"):
-        return results
-    for topic in list_wiki_topics(ctx.wiki_dir):
-        raw = read_wiki_page(ctx.wiki_dir, topic)
-        if raw is None or q.lower() not in raw.lower():
-            continue
-        fm = _parse_frontmatter_str(raw)
-        title = fm.get("topic", topic).replace("-", " ").title()
-        snippet = next(
-            (line.strip()[:200] for line in raw.splitlines() if q.lower() in line.lower()),
-            "",
+        return []
+    try:
+        from agents_memory.services.search import search_knowledge_fts  # noqa: PLC0415
+        rows = search_knowledge_fts(ctx, q, limit=limit * 2, source_kind="workflow")
+    except Exception:
+        return []
+    return [
+        _SearchCandidate(
+            result=SearchResult(
+                type="workflow",
+                id=str(row.get("id", "")),
+                title=str(row.get("title", "") or row.get("id", "")),
+                snippet=_extract_snippet(str(row.get("filepath", "")), q),
+                score=round(float(row.get("fts_score", 0.0)), 4),
+            ),
+            project=normalize_project_id(row.get("project", "")),
+            source_type=str(row.get("source_type", "")),
         )
-        results.append(SearchResult(type="wiki", id=topic, title=title, snippet=snippet, score=0.5))
-    return results
+        for row in rows[:limit]
+    ]
 
 
 def _search_workflow(ctx, q: str, mode: str, limit: int) -> list[SearchResult]:
-    if mode not in ("hybrid", "keyword"):
+    return [candidate.result for candidate in _search_workflow_candidates(ctx, q, mode, limit)]
+
+
+def _rerank_candidates_with_concept_graph(ctx: AppContext, q: str, candidates: list[_SearchCandidate]) -> list[_SearchCandidate]:
+    if not candidates:
         return []
-    lowered = q.lower()
-    results: list[SearchResult] = []
-    for record in collect_workflow_records(ctx):
-        path = str(record.get("_file", ""))
-        if not path:
-            continue
-        body = read_body(Path(path))
-        haystack = "\n".join(
-            [
-                str(record.get("id", "")),
-                str(record.get("title", "")),
-                str(record.get("project", "")),
-                str(record.get("source_type", "")),
-                body,
-            ]
+    try:
+        graph_context = _get_concept_graph_context(ctx)
+        concept_scores = score_query_concepts(q, graph_context)
+    except Exception:
+        return candidates
+    if not concept_scores:
+        return candidates
+
+    reranked: list[_SearchCandidate] = []
+    for candidate in candidates:
+        explanation = graph_rerank_explanation_for_search_record(
+            {
+                "type": candidate.result.type,
+                "id": candidate.result.id,
+                "title": candidate.result.title,
+                "snippet": candidate.result.snippet,
+                "project": candidate.project,
+                "topic": candidate.topic,
+                "doc_type": candidate.doc_type,
+                "source_type": candidate.source_type,
+            },
+            query=q,
+            context=graph_context,
+            concept_scores=concept_scores,
         )
-        if lowered not in haystack.lower():
-            continue
-        results.append(
-            SearchResult(
-                type="workflow",
-                id=str(record.get("id", "")),
-                title=str(record.get("title", "") or record.get("id", "")),
-                snippet=_extract_snippet(path, q),
-                score=0.4,
+        boost = float(explanation["boost"])
+        reranked.append(
+            _SearchCandidate(
+                result=SearchResult(
+                    type=candidate.result.type,
+                    id=candidate.result.id,
+                    title=candidate.result.title,
+                    snippet=candidate.result.snippet,
+                    score=round(candidate.result.score + boost, 4),
+                    rerank_boost=boost,
+                    rerank_reasons=[str(reason) for reason in explanation["reasons"]],
+                    matched_concepts=list(explanation["matched_concepts"]),
+                ),
+                project=candidate.project,
+                topic=candidate.topic,
+                doc_type=candidate.doc_type,
+                source_type=candidate.source_type,
             )
         )
-        if len(results) >= limit:
-            break
-    return results
+    reranked.sort(key=lambda item: item.result.score, reverse=True)
+    return reranked
 
 
 @app.get("/api/search", response_model=SearchResponse)
@@ -994,11 +1262,13 @@ def search(
     # Two sub-searches run in sequence: _search_errors (FTS/hybrid) then _search_wiki (text-match).
     """
     ctx = _get_ctx()
-    results: list[SearchResult] = _search_errors(ctx, q, mode, limit)
-    results += _search_workflow(ctx, q, mode, limit)
-    results += _search_wiki(ctx, q, mode)
-    results.sort(key=lambda x: x.score, reverse=True)
-    results = results[:limit]
+    candidate_limit = max(limit * 3, 20)
+    candidates: list[_SearchCandidate] = []
+    candidates += _search_error_candidates(ctx, q, mode, candidate_limit)
+    candidates += _search_workflow_candidates(ctx, q, mode, candidate_limit)
+    candidates += _search_wiki_candidates(ctx, q, mode, limit=max(candidate_limit, 40))
+    candidates = _rerank_candidates_with_concept_graph(ctx, q, candidates)
+    results = [candidate.result for candidate in candidates[:limit]]
     return SearchResponse(query=q, mode=mode, results=results, total=len(results))
 
 

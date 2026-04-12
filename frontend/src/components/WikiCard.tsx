@@ -19,6 +19,9 @@ export default function WikiCard({ topic }: WikiCardProps) {
         <HealthBadge status="active" label="active" />
       </div>
       <div className="flex flex-wrap gap-1 mb-3">
+        {topic.doc_type && topic.doc_type !== 'reference' && (
+          <span className="badge badge-gray">{topic.doc_type}</span>
+        )}
         {(topic.tags ?? []).map(tag => (
           <span key={tag} className="badge badge-blue">{tag}</span>
         ))}

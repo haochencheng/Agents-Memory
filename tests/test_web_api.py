@@ -44,6 +44,9 @@ def _build_env(root: Path) -> None:
             topic: auth-design
             updated_at: 2026-03-01
             tags: [auth, jwt]
+            links:
+              - topic: synapse-architecture
+                context: "认证设计依赖系统总体架构"
             ---
 
             # Auth Design
@@ -58,7 +61,9 @@ def _build_env(root: Path) -> None:
             ---
             topic: synapse-architecture
             updated_at: 2026-04-01
-            tags: [backend, design]
+            tags: [backend, design, billing]
+            project: synapse-network
+            source_path: docs/architecture/overview.md
             ---
 
             # Synapse Architecture
@@ -226,6 +231,15 @@ class TestPhase1(unittest.TestCase):
         self.assertIsInstance(data["frontmatter"], dict)
         self.assertIn("updated_at", data["frontmatter"])
 
+    def test_wiki_detail_returns_relationships(self) -> None:
+        r = self._client.get("/api/wiki/synapse-architecture")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertEqual(data["project"], "synapse-network")
+        self.assertEqual(data["source_path"], "docs/architecture/overview.md")
+        self.assertTrue(any(link["topic"] == "auth-design" for link in data["backlinks"]))
+        self.assertTrue(any(link["topic"] == "billing-recharge" for link in data["related_topics"]))
+
     def test_wiki_lint_returns_list(self) -> None:
         r = self._client.get("/api/wiki/lint")
         self.assertEqual(r.status_code, 200)
@@ -256,6 +270,18 @@ class TestPhase1(unittest.TestCase):
         self.assertIn("errors", data)
         self.assertIsInstance(data["errors"], list)
         self.assertGreaterEqual(len(data["errors"]), 1)
+
+    def test_wiki_graph_returns_explicit_and_inferred_edges(self) -> None:
+        r = self._client.get("/api/wiki/graph")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        edges = data["edges"]
+        nodes = {node["id"]: node for node in data["nodes"]}
+        self.assertIn("entity:synapse-network", nodes)
+        self.assertEqual(nodes["decision:synapse-architecture"]["node_type"], "decision")
+        self.assertEqual(nodes["decision:synapse-architecture"]["primary_topic"], "synapse-architecture")
+        self.assertTrue(any(edge["type"] == "explicit" and edge["source"] == "decision:auth-design" and edge["target"] == "decision:synapse-architecture" for edge in edges))
+        self.assertTrue(any(edge["type"] == "inferred" and edge["source"] == "decision:synapse-architecture" and edge["target"] == "module:billing-recharge" for edge in edges))
 
     def test_errors_list_status_filter(self) -> None:
         r = self._client.get("/api/errors?status=open")
@@ -349,6 +375,10 @@ class TestPhase2(unittest.TestCase):
         self.assertIn("mode", data)
         self.assertIn("results", data)
         self.assertIn("total", data)
+        if data["results"]:
+            self.assertIn("rerank_boost", data["results"][0])
+            self.assertIn("rerank_reasons", data["results"][0])
+            self.assertIn("matched_concepts", data["results"][0])
 
     def test_ingest_dry_run(self) -> None:
         payload = {
