@@ -8,6 +8,7 @@ from pathlib import Path
 from agents_memory.runtime import AppContext
 from agents_memory.services.planning_core import slugify_task_name
 from agents_memory.services.projects import detect_project_id
+from agents_memory.services.workflow_records import normalize_project_id
 from agents_memory.services.wiki import write_wiki_page
 
 
@@ -167,7 +168,7 @@ def ingest_project_wiki_sources(
     dry_run: bool = False,
     source_paths: list[Path] | None = None,
 ) -> ProjectKnowledgeIngestResult:
-    resolved_project_id = project_id or detect_project_id(project_root)
+    resolved_project_id = normalize_project_id(project_id or detect_project_id(project_root))
     selected_paths = source_paths or discover_project_wiki_sources(project_root, max_files=max_files)
     discovered_files = [path.relative_to(project_root).as_posix() for path in selected_paths]
     sources: list[ProjectKnowledgeSource] = []

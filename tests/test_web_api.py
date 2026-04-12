@@ -382,6 +382,37 @@ class TestPhase2(unittest.TestCase):
         # File should exist on disk
         record_path = self._root / "errors" / f"{data['id']}.md"
         self.assertTrue(record_path.exists())
+        self.assertEqual(data["storage_kind"], "error")
+
+    def test_ingest_task_completion_writes_workflow_record_instead_of_error(self) -> None:
+        payload = {
+            "content": textwrap.dedent("""\
+                ---
+                id: TASK-42
+                title: "Apply planned changes"
+                project: Synapse-Network-Growing
+                source_type: task_completion
+                status: completed
+                created_at: 2026-04-12T10:00:00Z
+                ---
+
+                ## 执行结果
+
+                已完成。
+            """),
+            "source_type": "task_completion",
+            "project": "Synapse-Network-Growing",
+            "dry_run": False,
+        }
+        r = self._client.post("/api/ingest", json=payload)
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertEqual(data["id"], "TASK-42")
+        self.assertEqual(data["storage_kind"], "workflow")
+        self.assertTrue((self._root / "memory" / "workflow_records" / "TASK-42.md").exists())
+        self.assertFalse((self._root / "errors" / "TASK-42.md").exists())
+        errors = self._client.get("/api/errors").json()["errors"]
+        self.assertFalse(any(item["id"] == "TASK-42" for item in errors))
 
     def test_ingest_appends_log(self) -> None:
         payload = {
@@ -421,6 +452,52 @@ class TestPhase2(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertLessEqual(len(data["entries"]), 1)
+
+    def test_workflow_endpoint_returns_new_and_legacy_records(self) -> None:
+        legacy_content = textwrap.dedent("""\
+            ---
+            id: REQ-9
+            title: Legacy workflow summary
+            project: Synapse-Network-Growing
+            source_type: requirement_completion
+            status: completed
+            created_at: 2026-04-10T08:00:00Z
+            ---
+
+            已完成遗留需求总结。
+        """)
+        _write(self._root / "errors" / "ERR-legacy-workflow.md", legacy_content)
+        payload = {
+            "content": textwrap.dedent("""\
+                ---
+                id: TASK-77
+                title: "Review output"
+                project: Synapse-Network-Growing
+                source_type: task_completion
+                status: completed
+                created_at: 2026-04-12T10:00:00Z
+                ---
+
+                完成 review。
+            """),
+            "source_type": "task_completion",
+            "project": "Synapse-Network-Growing",
+            "dry_run": False,
+        }
+        self._client.post("/api/ingest", json=payload)
+
+        r = self._client.get("/api/workflow?project=synapse-network-growing")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        ids = [item["id"] for item in data["records"]]
+        self.assertIn("TASK-77", ids)
+        self.assertIn("REQ-9", ids)
+        record = next(item for item in data["records"] if item["id"] == "REQ-9")
+        self.assertEqual(record["storage_kind"], "legacy-error")
+
+        detail = self._client.get("/api/workflow/TASK-77")
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["project"], "synapse-network-growing")
 
 
 # ---------------------------------------------------------------------------

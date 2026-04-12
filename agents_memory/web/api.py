@@ -23,6 +23,14 @@ from agents_memory.services.records import collect_errors, parse_frontmatter, re
 from agents_memory.services.integration import cmd_enable as run_enable_command
 from agents_memory.services.project_onboarding import ingest_project_wiki_sources
 from agents_memory.services.projects import parse_projects, resolve_project_target
+from agents_memory.services.workflow_records import (
+    collect_workflow_records,
+    is_error_record_meta,
+    normalize_project_id,
+    read_workflow_record,
+    write_error_record,
+    write_workflow_record,
+)
 from agents_memory.services.wiki import (
     list_wiki_topics,
     parse_wiki_sections,
@@ -63,6 +71,9 @@ from agents_memory.web.models import (
     StatsResponse,
     TaskStatus,
     TopicMeta,
+    WorkflowDetailResponse,
+    WorkflowListResponse,
+    WorkflowRecordMeta,
     WikiDetailResponse,
     WikiGraphResponse,
     WikiLintResponse,
@@ -167,14 +178,14 @@ def _load_wiki_topic_entries(ctx: AppContext) -> list[tuple[str, str, dict[str, 
 
 
 def _registered_project_ids(ctx: AppContext) -> list[str]:
-    return [item.get("id", "") for item in parse_projects(ctx) if item.get("id")]
+    return [normalize_project_id(item.get("id", "")) for item in parse_projects(ctx) if item.get("id")]
 
 
 def _wiki_stats_by_project(ctx: AppContext) -> tuple[dict[str, int], dict[str, list[tuple[str, str, dict[str, Any]]]]]:
     counts: dict[str, int] = {}
     grouped: dict[str, list[tuple[str, str, dict[str, Any]]]] = {}
     for topic, raw, fm in _load_wiki_topic_entries(ctx):
-        project_id = str(fm.get("project", "")).strip()
+        project_id = normalize_project_id(fm.get("project", ""))
         if not project_id:
             continue
         counts[project_id] = counts.get(project_id, 0) + 1
@@ -186,7 +197,7 @@ def _ingest_stats_by_project(ctx: AppContext) -> tuple[dict[str, int], dict[str,
     counts: dict[str, int] = {}
     latest: dict[str, str] = {}
     for entry in _read_ingest_log(ctx, limit=10000):
-        project_id = str(entry.get("project", "")).strip()
+        project_id = normalize_project_id(entry.get("project", ""))
         if not project_id:
             continue
         counts[project_id] = counts.get(project_id, 0) + 1
@@ -200,12 +211,26 @@ def _error_stats_by_project(ctx: AppContext) -> tuple[dict[str, int], dict[str, 
     counts: dict[str, int] = {}
     latest_error: dict[str, str] = {}
     for error in collect_errors(ctx):
-        project_id = str(error.get("project", "")).strip()
+        project_id = normalize_project_id(error.get("project", ""))
         if not project_id:
             continue
         counts[project_id] = counts.get(project_id, 0) + 1
         latest_error[project_id] = str(error.get("id", latest_error.get(project_id, "")))
     return counts, latest_error
+
+
+def _workflow_stats_by_project(ctx: AppContext) -> tuple[dict[str, int], dict[str, str]]:
+    counts: dict[str, int] = {}
+    latest: dict[str, str] = {}
+    for record in collect_workflow_records(ctx):
+        project_id = normalize_project_id(record.get("project", ""))
+        if not project_id:
+            continue
+        counts[project_id] = counts.get(project_id, 0) + 1
+        created_at = str(record.get("completed_at") or record.get("created_at") or record.get("date") or "")
+        if created_at and created_at > latest.get(project_id, ""):
+            latest[project_id] = created_at
+    return counts, latest
 
 
 _ROOT_DOC_NAMES = {"README.md", "AGENTS.md", "DESIGN.md", "CONTRIBUTING.md"}
@@ -217,8 +242,9 @@ _OTHER_SOURCES_LABEL = "Other Sources"
 
 def _project_topic_metas(ctx: AppContext, project_id: str) -> list[TopicMeta]:
     topics: list[TopicMeta] = []
+    normalized_project_id = normalize_project_id(project_id)
     for topic, raw, fm in _load_wiki_topic_entries(ctx):
-        if str(fm.get("project", "")).strip() != project_id:
+        if normalize_project_id(fm.get("project", "")) != normalized_project_id:
             continue
         title = fm.get("topic", topic).replace("-", " ").title()
         tags = fm.get("tags", [])
@@ -231,7 +257,7 @@ def _project_topic_metas(ctx: AppContext, project_id: str) -> list[TopicMeta]:
                 tags=tags,
                 word_count=_word_count(raw),
                 updated_at=str(fm.get("updated_at", "")),
-                project=project_id,
+                project=normalized_project_id,
                 source_path=str(fm.get("source_path", "")),
             )
         )
@@ -317,6 +343,8 @@ def _nav_item(topic: TopicMeta) -> ProjectWikiNavItem:
     return ProjectWikiNavItem(
         topic=topic.topic,
         title=topic.title,
+        tags=topic.tags,
+        project=topic.project,
         source_path=topic.source_path,
         nav_path=_nav_path(source_path),
         source_group=_source_group(source_path),
@@ -445,10 +473,11 @@ def get_stats() -> StatsResponse:
     errors = collect_errors(ctx)
     ingest_log = _read_ingest_log(ctx, limit=10000)
     projects: set[str] = set(_registered_project_ids(ctx))
-    projects.update(str(e.get("project", "")).strip() for e in errors if e.get("project"))
-    projects.update(str(e.get("project", "")).strip() for e in ingest_log if e.get("project"))
+    projects.update(normalize_project_id(e.get("project", "")) for e in errors if e.get("project"))
+    projects.update(normalize_project_id(e.get("project", "")) for e in ingest_log if e.get("project"))
+    projects.update(normalize_project_id(e.get("project", "")) for e in collect_workflow_records(ctx) if e.get("project"))
     for _topic, _raw, fm in _load_wiki_topic_entries(ctx):
-        project_id = str(fm.get("project", "")).strip()
+        project_id = normalize_project_id(fm.get("project", ""))
         if project_id:
             projects.add(project_id)
     return StatsResponse(
@@ -470,16 +499,18 @@ def list_projects() -> ProjectsResponse:
     raw_projects = parse_projects(ctx)
     error_counts, _latest_error = _error_stats_by_project(ctx)
     wiki_counts, _grouped_wiki = _wiki_stats_by_project(ctx)
+    workflow_counts, _latest_workflow = _workflow_stats_by_project(ctx)
     _, latest_ingest = _ingest_stats_by_project(ctx)
     projects = [
         ProjectInfo(
-            id=p.get("id", ""),
-            name=p.get("id", ""),
+            id=normalize_project_id(p.get("id", "")),
+            name=normalize_project_id(p.get("id", "")),
             description=p.get("description", ""),
-            health="ok" if error_counts.get(p.get("id", ""), 0) == 0 else "warn",
-            wiki_count=wiki_counts.get(p.get("id", ""), 0),
-            error_count=error_counts.get(p.get("id", ""), 0),
-            last_ingest=latest_ingest.get(p.get("id", ""), ""),
+            health="ok" if error_counts.get(normalize_project_id(p.get("id", "")), 0) == 0 else "warn",
+            wiki_count=wiki_counts.get(normalize_project_id(p.get("id", "")), 0),
+            error_count=error_counts.get(normalize_project_id(p.get("id", "")), 0),
+            workflow_count=workflow_counts.get(normalize_project_id(p.get("id", "")), 0),
+            last_ingest=latest_ingest.get(normalize_project_id(p.get("id", "")), ""),
         )
         for p in raw_projects
     ]
@@ -489,28 +520,86 @@ def list_projects() -> ProjectsResponse:
 @app.get("/api/projects/{project_id}/stats", response_model=ProjectStatsResponse)
 def project_stats(project_id: str) -> ProjectStatsResponse:
     ctx = _get_ctx()
+    normalized_project_id = normalize_project_id(project_id)
     error_counts, latest_error = _error_stats_by_project(ctx)
     wiki_counts, _grouped_wiki = _wiki_stats_by_project(ctx)
+    workflow_counts, _latest_workflow = _workflow_stats_by_project(ctx)
     ingest_counts, latest_ingest = _ingest_stats_by_project(ctx)
-    err_count = error_counts.get(project_id, 0)
+    err_count = error_counts.get(normalized_project_id, 0)
     health = "ok" if err_count == 0 else "warn"
     return ProjectStatsResponse(
-        id=project_id,
+        id=normalized_project_id,
         health=health,
-        wiki_count=wiki_counts.get(project_id, 0),
+        wiki_count=wiki_counts.get(normalized_project_id, 0),
         error_count=err_count,
+        workflow_count=workflow_counts.get(normalized_project_id, 0),
         checklist_done=0,
-        ingest_count=ingest_counts.get(project_id, 0),
-        last_error=latest_error.get(project_id, ""),
-        last_ingest=latest_ingest.get(project_id, ""),
+        ingest_count=ingest_counts.get(normalized_project_id, 0),
+        last_error=latest_error.get(normalized_project_id, ""),
+        last_ingest=latest_ingest.get(normalized_project_id, ""),
     )
 
 
 @app.get("/api/projects/{project_id}/wiki-nav", response_model=ProjectWikiNavResponse)
 def project_wiki_nav(project_id: str) -> ProjectWikiNavResponse:
     ctx = _get_ctx()
-    topics = _project_topic_metas(ctx, project_id)
-    return _build_project_wiki_nav(project_id, topics)
+    normalized_project_id = normalize_project_id(project_id)
+    topics = _project_topic_metas(ctx, normalized_project_id)
+    return _build_project_wiki_nav(normalized_project_id, topics)
+
+
+# ---------------------------------------------------------------------------
+# Routes — Workflow Records
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/workflow", response_model=WorkflowListResponse)
+def list_workflow_records(
+    project: str | None = Query(None),
+    source_type: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=500),
+) -> WorkflowListResponse:
+    ctx = _get_ctx()
+    records = collect_workflow_records(ctx, project=project)
+    if source_type:
+        lowered = source_type.strip().lower()
+        records = [item for item in records if str(item.get("source_type", "")).strip().lower() == lowered]
+    records = records[:limit]
+    return WorkflowListResponse(
+        records=[
+            WorkflowRecordMeta(
+                id=str(item.get("id", "")),
+                title=str(item.get("title", "") or item.get("id", "")),
+                source_type=str(item.get("source_type", "")),
+                project=normalize_project_id(item.get("project", "")),
+                status=str(item.get("status", "")),
+                created_at=str(item.get("completed_at") or item.get("created_at") or item.get("date") or ""),
+                storage_kind=str(item.get("_storage_kind", "")),
+            )
+            for item in records
+        ],
+        total=len(records),
+    )
+
+
+@app.get("/api/workflow/{record_id}", response_model=WorkflowDetailResponse)
+def workflow_record_detail(record_id: str) -> WorkflowDetailResponse:
+    ctx = _get_ctx()
+    resolved = read_workflow_record(ctx, record_id)
+    if resolved is None:
+        raise HTTPException(status_code=404, detail=f"Workflow record '{record_id}' not found")
+    meta, raw, body = resolved
+    return WorkflowDetailResponse(
+        id=str(meta.get("id", "")),
+        title=str(meta.get("title", "") or meta.get("id", "")),
+        source_type=str(meta.get("source_type", "")),
+        project=normalize_project_id(meta.get("project", "")),
+        status=str(meta.get("status", "")),
+        created_at=str(meta.get("completed_at") or meta.get("created_at") or meta.get("date") or ""),
+        storage_kind=str(meta.get("_storage_kind", "")),
+        content_html=md_to_html(body),
+        raw=raw,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -598,7 +687,7 @@ def wiki_graph() -> WikiGraphResponse:
         nodes.append(GraphNode(
             id=topic,
             title=title,
-            project=str(fm.get("project", "")),
+            project=normalize_project_id(fm.get("project", "")),
             word_count=_word_count(raw),
         ))
         topic_ids.add(topic)
@@ -641,7 +730,7 @@ def list_wiki(
                 tags=tags,
                 word_count=_word_count(raw),
                 updated_at=fm.get("updated_at", ""),
-                project=str(fm.get("project", "")),
+                project=normalize_project_id(fm.get("project", "")),
                 source_path=str(fm.get("source_path", "")),
             )
         haystack = "\n".join(
@@ -649,7 +738,7 @@ def list_wiki(
                 topic,
                 title,
                 " ".join(tags),
-                str(fm.get("project", "")),
+                normalize_project_id(fm.get("project", "")),
                 str(fm.get("source_path", "")),
                 raw,
             ]
@@ -751,15 +840,16 @@ def list_errors(
     ctx = _get_ctx()
     status_filter = [status] if status else None
     records = collect_errors(ctx, status_filter=status_filter)
+    normalized_project = normalize_project_id(project or "")
     if project:
-        records = [r for r in records if r.get("project") == project]
+        records = [r for r in records if normalize_project_id(r.get("project", "")) == normalized_project]
     records = records[:limit]
     error_metas = [
         ErrorMeta(
             id=r.get("id", ""),
             title=r.get("title", r.get("id", "")),
             status=r.get("status", ""),
-            project=r.get("project", ""),
+            project=normalize_project_id(r.get("project", "")),
             created_at=r.get("date", r.get("created_at", "")),
             severity=r.get("severity", ""),
         )
@@ -820,16 +910,21 @@ def _search_errors(ctx, q: str, mode: str, limit: int) -> list[SearchResult]:
     try:
         from agents_memory.services.search import hybrid_search, search_fts  # noqa: PLC0415
         raw = hybrid_search(ctx, q, limit=limit) if mode == "hybrid" else search_fts(ctx, q, limit=limit)
-        return [
-            SearchResult(
-                type="error",
-                id=r.get("id", ""),
-                title=r.get("id", r.get("category", "")),
-                snippet=_extract_snippet(r.get("filepath", ""), q),
-                score=r.get("combined_score", r.get("fts_score", 0.0)),
+        results: list[SearchResult] = []
+        for row in raw:
+            filepath = str(row.get("filepath", ""))
+            if filepath and not is_error_record_meta(parse_frontmatter(Path(filepath))):
+                continue
+            results.append(
+                SearchResult(
+                    type="error",
+                    id=row.get("id", ""),
+                    title=row.get("id", row.get("category", "")),
+                    snippet=_extract_snippet(filepath, q),
+                    score=row.get("combined_score", row.get("fts_score", 0.0)),
+                )
             )
-            for r in raw
-        ]
+        return results
     except Exception:
         return []
 
@@ -853,6 +948,41 @@ def _search_wiki(ctx, q: str, mode: str) -> list[SearchResult]:
     return results
 
 
+def _search_workflow(ctx, q: str, mode: str, limit: int) -> list[SearchResult]:
+    if mode not in ("hybrid", "keyword"):
+        return []
+    lowered = q.lower()
+    results: list[SearchResult] = []
+    for record in collect_workflow_records(ctx):
+        path = str(record.get("_file", ""))
+        if not path:
+            continue
+        body = read_body(Path(path))
+        haystack = "\n".join(
+            [
+                str(record.get("id", "")),
+                str(record.get("title", "")),
+                str(record.get("project", "")),
+                str(record.get("source_type", "")),
+                body,
+            ]
+        )
+        if lowered not in haystack.lower():
+            continue
+        results.append(
+            SearchResult(
+                type="workflow",
+                id=str(record.get("id", "")),
+                title=str(record.get("title", "") or record.get("id", "")),
+                snippet=_extract_snippet(path, q),
+                score=0.4,
+            )
+        )
+        if len(results) >= limit:
+            break
+    return results
+
+
 @app.get("/api/search", response_model=SearchResponse)
 def search(
     q: str = Query(..., min_length=1),
@@ -865,6 +995,7 @@ def search(
     """
     ctx = _get_ctx()
     results: list[SearchResult] = _search_errors(ctx, q, mode, limit)
+    results += _search_workflow(ctx, q, mode, limit)
     results += _search_wiki(ctx, q, mode)
     results.sort(key=lambda x: x.score, reverse=True)
     results = results[:limit]
@@ -880,35 +1011,31 @@ def search(
 def ingest(body: IngestRequest) -> IngestResponse:  # WRITE
     ctx = _get_ctx()
     if body.dry_run:
-        return IngestResponse(ingested=False, id="", dry_run=True)
+        return IngestResponse(ingested=False, id="", dry_run=True, storage_kind="")
 
-    # Write as error record if source_type == error_record
-    from datetime import date  # noqa: PLC0415
-    today = date.today().strftime("%Y%m%d")
-    existing = list(ctx.errors_dir.glob(f"*{today}*.md"))
-    seq = len(existing) + 1
-    record_id = f"ERR-{today}-{seq:03d}"
-    project_tag = body.project or "unknown"
-    content = body.content
-    if not content.lstrip().startswith("---"):
-        fm = f"---\nid: {record_id}\nproject: {project_tag}\nsource_type: {body.source_type}\nstatus: new\ndate: {date.today().isoformat()}\n---\n\n"
-        content = fm + content
-    path = ctx.errors_dir / f"{record_id}.md"
-    path.write_text(content, encoding="utf-8")
+    source_type = str(body.source_type or "").strip().lower() or "error_record"
+    project_tag = normalize_project_id(body.project or "unknown") or "unknown"
+    if source_type == "error_record":
+        stored = write_error_record(ctx, content=body.content, project=project_tag, source_type=source_type)
+        storage_kind = "error"
+    else:
+        stored = write_workflow_record(ctx, content=body.content, project=project_tag, source_type=source_type)
+        storage_kind = "workflow"
 
     # Append to ingest log
     log_path = _ingest_log_path(ctx)
     log_entry = {
         "ts": datetime.now(timezone.utc).isoformat(),
-        "source_type": body.source_type,
+        "source_type": source_type,
         "project": project_tag,
-        "id": record_id,
+        "id": stored.record_id,
         "status": "ok",
+        "storage_kind": storage_kind,
     }
     with log_path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(log_entry) + "\n")
 
-    return IngestResponse(ingested=True, id=record_id, dry_run=False)
+    return IngestResponse(ingested=True, id=stored.record_id, dry_run=False, storage_kind=storage_kind)
 
 
 @app.get("/api/ingest/log", response_model=IngestLogResponse)
@@ -919,9 +1046,10 @@ def ingest_log(limit: int = Query(50, ge=1, le=1000)) -> IngestLogResponse:
         IngestLogEntry(
             ts=e.get("ts", ""),
             source_type=e.get("source_type", ""),
-            project=e.get("project", ""),
+            project=normalize_project_id(e.get("project", "")),
             id=e.get("id", ""),
             status=e.get("status", ""),
+            storage_kind=e.get("storage_kind", ""),
         )
         for e in entries_raw
     ]
