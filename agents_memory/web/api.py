@@ -34,13 +34,22 @@ from agents_memory.services.project_onboarding import ingest_project_wiki_source
 from agents_memory.services.projects import parse_projects, resolve_project_target
 from agents_memory.services.scheduler import (
     SCHEDULER_CHECK_TYPES,
+    SchedulerRunBatchRecord,
     SchedulerRuntime,
-    create_scheduler_task_bundle,
-    delete_scheduler_task as delete_scheduler_task_record,
-    list_scheduler_tasks as load_scheduler_task_records,
+    create_task_group,
+    delete_task_group,
+    execute_task_group_now,
+    flatten_groups_to_legacy_tasks,
+    get_task_group,
     load_check_runs,
-    run_due_scheduler_tasks,
+    load_scheduler_run_batches,
+    list_task_groups,
+    latest_batch_for_task_group,
+    recent_results_for_task_group,
+    run_due_task_groups,
+    set_task_group_status,
     summarize_check_runs,
+    update_task_group,
     validate_cron_expr,
 )
 from agents_memory.services.workflow_records import (
@@ -91,7 +100,15 @@ from agents_memory.web.models import (
     RulesResponse,
     SchedulerTask,
     SchedulerTaskCreate,
+    SchedulerTaskGroup,
+    SchedulerTaskGroupCreate,
+    SchedulerTaskGroupDetailResponse,
+    SchedulerTaskGroupUpdate,
+    SchedulerTaskGroupsResponse,
     SchedulerTasksResponse,
+    SchedulerRunBatch,
+    SchedulerRunListResponse,
+    SchedulerRunStep,
     SearchResponse,
     SearchResult,
     StatsResponse,
@@ -109,8 +126,6 @@ from agents_memory.web.models import (
     WikiUpdateResponse,
 )
 from agents_memory.web.renderer import md_to_html
-
-import uuid
 
 # In-memory async task store {task_id: TaskStatus}
 _task_store: dict[str, dict[str, Any]] = {}
@@ -139,6 +154,55 @@ def _registered_project_ids(ctx: AppContext) -> list[str]:
         if normalized and normalized not in project_ids:
             project_ids.append(normalized)
     return project_ids
+
+
+def _scheduler_run_step_response(step) -> SchedulerRunStep:
+    return SchedulerRunStep(
+        id=step.id,
+        batch_id=step.batch_id,
+        task_group_id=step.task_group_id,
+        check_type=step.check_type,
+        status=step.status,
+        duration_ms=step.duration_ms,
+        summary=step.summary,
+        details=step.details,
+        workflow_record_id=step.workflow_record_id,
+    )
+
+
+def _scheduler_run_batch_response(batch: SchedulerRunBatchRecord) -> SchedulerRunBatch:
+    return SchedulerRunBatch(
+        id=batch.id,
+        task_group_id=batch.task_group_id,
+        task_group_name=batch.task_group_name,
+        project=batch.project,
+        run_at=batch.run_at,
+        finished_at=batch.finished_at,
+        overall_status=batch.overall_status,
+        duration_ms=batch.duration_ms,
+        trigger=batch.trigger,
+        steps=[_scheduler_run_step_response(step) for step in batch.steps],
+    )
+
+
+def _scheduler_task_group_response(ctx: AppContext, group) -> SchedulerTaskGroup:
+    latest_batch = latest_batch_for_task_group(ctx, group.id)
+    latest_steps = latest_batch.steps if latest_batch else []
+    return SchedulerTaskGroup(
+        id=group.id,
+        name=group.name,
+        project=group.project,
+        cron_expr=group.cron_expr,
+        status=group.status,
+        created_at=group.created_at,
+        updated_at=group.updated_at,
+        last_run_at=group.last_run_at,
+        next_run_at=group.next_run_at,
+        last_result=group.last_result,
+        last_summary=group.last_summary,
+        latest_steps=[_scheduler_run_step_response(step) for step in latest_steps],
+        recent_results=recent_results_for_task_group(ctx, group.id, limit=5),
+    )
 
 
 def _scheduler_task_name(base_name: str, project_id: str, check_type: str) -> str:
@@ -878,8 +942,8 @@ def workflow_record_detail(record_id: str) -> WorkflowDetailResponse:
 @app.get("/api/scheduler/tasks", response_model=SchedulerTasksResponse)
 def list_scheduler_tasks() -> SchedulerTasksResponse:
     ctx = _get_ctx()
-    run_due_scheduler_tasks(ctx)
-    tasks = [SchedulerTask(**task.__dict__) for task in load_scheduler_task_records(ctx)]
+    run_due_task_groups(ctx)
+    tasks = [SchedulerTask(**task) for task in flatten_groups_to_legacy_tasks(ctx)]
     return SchedulerTasksResponse(tasks=tasks)
 
 
@@ -898,20 +962,193 @@ def create_scheduler_task(body: SchedulerTaskCreate) -> SchedulerTasksResponse:
         validate_cron_expr(cron_expr)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    created_tasks = create_scheduler_task_bundle(
+    created_group = create_task_group(
         ctx,
         name=str(body.name).strip() or f"{project_id}-checks",
         project=project_id,
         cron_expr=cron_expr,
     )
-    return SchedulerTasksResponse(tasks=[SchedulerTask(**task.__dict__) for task in created_tasks])
+    created_tasks = [
+        task
+        for task in flatten_groups_to_legacy_tasks(ctx)
+        if str(task.get("id", "")).startswith(f"{created_group.id}:")
+    ]
+    return SchedulerTasksResponse(tasks=[SchedulerTask(**task) for task in created_tasks])
 
 
 @app.delete("/api/scheduler/tasks/{task_id}", status_code=204)
 def delete_scheduler_task(task_id: str) -> None:
     ctx = _get_ctx()
-    if not delete_scheduler_task_record(ctx, task_id):
+    task_group_id = task_id.split(":", 1)[0]
+    if not delete_task_group(ctx, task_group_id):
         raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
+
+
+@app.get("/api/scheduler/task-groups", response_model=SchedulerTaskGroupsResponse)
+def list_scheduler_task_groups(
+    q: str | None = Query(None),
+    project: str | None = Query(None),
+    status: str | None = Query(None),
+    last_result: str | None = Query(None),
+    failed_only: bool = Query(False),
+) -> SchedulerTaskGroupsResponse:
+    ctx = _get_ctx()
+    run_due_task_groups(ctx)
+    query = (q or "").strip().lower()
+    normalized_project = normalize_project_id(project or "")
+    task_groups: list[SchedulerTaskGroup] = []
+    for group in list_task_groups(ctx):
+        response = _scheduler_task_group_response(ctx, group)
+        if query and query not in " ".join([response.name, response.project, response.cron_expr]).lower():
+            continue
+        if normalized_project and response.project != normalized_project:
+            continue
+        if status and response.status != status:
+            continue
+        if last_result and response.last_result != last_result:
+            continue
+        if failed_only and response.last_result not in {"fail", "warn"}:
+            continue
+        task_groups.append(response)
+    return SchedulerTaskGroupsResponse(task_groups=task_groups, total=len(task_groups))
+
+
+@app.post("/api/scheduler/task-groups", response_model=SchedulerTaskGroupDetailResponse, status_code=201)
+def create_scheduler_task_group(body: SchedulerTaskGroupCreate) -> SchedulerTaskGroupDetailResponse:
+    ctx = _get_ctx()
+    project_id = normalize_project_id(body.project)
+    if not project_id:
+        raise HTTPException(status_code=400, detail="Project is required")
+    if project_id not in _registered_project_ids(ctx):
+        raise HTTPException(status_code=400, detail=f"Project '{project_id}' is not registered")
+    cron_expr = str(body.cron_expr).strip()
+    if not cron_expr:
+        raise HTTPException(status_code=400, detail="Cron expression is required")
+    try:
+        validate_cron_expr(cron_expr)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    group = create_task_group(
+        ctx,
+        name=str(body.name).strip() or f"{project_id}-checks",
+        project=project_id,
+        cron_expr=cron_expr,
+    )
+    return SchedulerTaskGroupDetailResponse(task_group=_scheduler_task_group_response(ctx, group), latest_batch=None)
+
+
+@app.get("/api/scheduler/task-groups/{task_group_id}", response_model=SchedulerTaskGroupDetailResponse)
+def scheduler_task_group_detail(task_group_id: str) -> SchedulerTaskGroupDetailResponse:
+    ctx = _get_ctx()
+    run_due_task_groups(ctx)
+    group = get_task_group(ctx, task_group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail=f"Task group '{task_group_id}' not found")
+    latest_batch = latest_batch_for_task_group(ctx, task_group_id)
+    return SchedulerTaskGroupDetailResponse(
+        task_group=_scheduler_task_group_response(ctx, group),
+        latest_batch=_scheduler_run_batch_response(latest_batch) if latest_batch else None,
+    )
+
+
+@app.put("/api/scheduler/task-groups/{task_group_id}", response_model=SchedulerTaskGroupDetailResponse)
+def scheduler_task_group_update(task_group_id: str, body: SchedulerTaskGroupUpdate) -> SchedulerTaskGroupDetailResponse:
+    ctx = _get_ctx()
+    project_id = normalize_project_id(body.project)
+    if not project_id:
+        raise HTTPException(status_code=400, detail="Project is required")
+    if project_id not in _registered_project_ids(ctx):
+        raise HTTPException(status_code=400, detail=f"Project '{project_id}' is not registered")
+    cron_expr = str(body.cron_expr).strip()
+    if not cron_expr:
+        raise HTTPException(status_code=400, detail="Cron expression is required")
+    if body.status not in {"active", "paused"}:
+        raise HTTPException(status_code=400, detail="Status must be active or paused")
+    try:
+        validate_cron_expr(cron_expr)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    group = update_task_group(
+        ctx,
+        task_group_id,
+        name=str(body.name).strip() or f"{project_id}-checks",
+        project=project_id,
+        cron_expr=cron_expr,
+        status=body.status,
+    )
+    if group is None:
+        raise HTTPException(status_code=404, detail=f"Task group '{task_group_id}' not found")
+    latest_batch = latest_batch_for_task_group(ctx, task_group_id)
+    return SchedulerTaskGroupDetailResponse(
+        task_group=_scheduler_task_group_response(ctx, group),
+        latest_batch=_scheduler_run_batch_response(latest_batch) if latest_batch else None,
+    )
+
+
+@app.post("/api/scheduler/task-groups/{task_group_id}/pause", response_model=SchedulerTaskGroupDetailResponse)
+def scheduler_task_group_pause(task_group_id: str) -> SchedulerTaskGroupDetailResponse:
+    ctx = _get_ctx()
+    group = set_task_group_status(ctx, task_group_id, status="paused")
+    if group is None:
+        raise HTTPException(status_code=404, detail=f"Task group '{task_group_id}' not found")
+    latest_batch = latest_batch_for_task_group(ctx, task_group_id)
+    return SchedulerTaskGroupDetailResponse(
+        task_group=_scheduler_task_group_response(ctx, group),
+        latest_batch=_scheduler_run_batch_response(latest_batch) if latest_batch else None,
+    )
+
+
+@app.post("/api/scheduler/task-groups/{task_group_id}/resume", response_model=SchedulerTaskGroupDetailResponse)
+def scheduler_task_group_resume(task_group_id: str) -> SchedulerTaskGroupDetailResponse:
+    ctx = _get_ctx()
+    group = set_task_group_status(ctx, task_group_id, status="active")
+    if group is None:
+        raise HTTPException(status_code=404, detail=f"Task group '{task_group_id}' not found")
+    latest_batch = latest_batch_for_task_group(ctx, task_group_id)
+    return SchedulerTaskGroupDetailResponse(
+        task_group=_scheduler_task_group_response(ctx, group),
+        latest_batch=_scheduler_run_batch_response(latest_batch) if latest_batch else None,
+    )
+
+
+@app.post("/api/scheduler/task-groups/{task_group_id}/run", response_model=SchedulerRunBatch)
+def scheduler_task_group_run_now(task_group_id: str) -> SchedulerRunBatch:
+    ctx = _get_ctx()
+    batch = execute_task_group_now(ctx, task_group_id)
+    if batch is None:
+        raise HTTPException(status_code=404, detail=f"Task group '{task_group_id}' not found")
+    return _scheduler_run_batch_response(batch)
+
+
+@app.delete("/api/scheduler/task-groups/{task_group_id}", status_code=204)
+def scheduler_task_group_delete(task_group_id: str) -> None:
+    ctx = _get_ctx()
+    if not delete_task_group(ctx, task_group_id):
+        raise HTTPException(status_code=404, detail=f"Task group '{task_group_id}' not found")
+
+
+@app.get("/api/scheduler/task-groups/{task_group_id}/runs", response_model=SchedulerRunListResponse)
+def scheduler_task_group_runs(task_group_id: str) -> SchedulerRunListResponse:
+    ctx = _get_ctx()
+    run_due_task_groups(ctx)
+    group = get_task_group(ctx, task_group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail=f"Task group '{task_group_id}' not found")
+    runs = load_scheduler_run_batches(ctx, task_group_id=task_group_id, limit=200)
+    return SchedulerRunListResponse(runs=[_scheduler_run_batch_response(batch) for batch in runs], total=len(runs))
+
+
+@app.get("/api/scheduler/task-groups/{task_group_id}/runs/{run_id}", response_model=SchedulerRunBatch)
+def scheduler_task_group_run_detail(task_group_id: str, run_id: str) -> SchedulerRunBatch:
+    ctx = _get_ctx()
+    group = get_task_group(ctx, task_group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail=f"Task group '{task_group_id}' not found")
+    runs = load_scheduler_run_batches(ctx, task_group_id=task_group_id, limit=200)
+    match = next((batch for batch in runs if batch.id == run_id), None)
+    if match is None:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
+    return _scheduler_run_batch_response(match)
 
 
 # ---------------------------------------------------------------------------
@@ -926,7 +1163,7 @@ def list_checks(
     status: str | None = Query(None),
 ) -> ChecksResponse:
     ctx = _get_ctx()
-    run_due_scheduler_tasks(ctx)
+    run_due_task_groups(ctx)
     records = load_check_runs(ctx)
     normalized_project = normalize_project_id(project or "")
     filtered = []
@@ -942,6 +1179,9 @@ def list_checks(
                 id=record.id,
                 task_id=record.task_id,
                 task_name=record.task_name,
+                task_group_id=record.task_group_id,
+                task_group_name=record.task_group_name,
+                batch_id=record.batch_id,
                 project=record.project,
                 check_type=record.check_type,
                 status=record.status,
@@ -949,6 +1189,8 @@ def list_checks(
                 duration_ms=record.duration_ms,
                 summary=record.summary,
                 details=record.details,
+                trigger=record.trigger,
+                workflow_record_id=record.workflow_record_id,
             )
         )
     return ChecksResponse(checks=filtered, total=len(filtered))
@@ -957,7 +1199,7 @@ def list_checks(
 @app.get("/api/checks/summary", response_model=ChecksSummary)
 def checks_summary() -> ChecksSummary:
     ctx = _get_ctx()
-    run_due_scheduler_tasks(ctx)
+    run_due_task_groups(ctx)
     summary = summarize_check_runs(load_check_runs(ctx))
     return ChecksSummary(
         docs_pass=summary["docs"]["pass"],

@@ -9,6 +9,7 @@ import Workflow from '@/pages/dashboard/Workflow'
 import WorkflowDetail from '@/pages/dashboard/WorkflowDetail'
 import Checks from '@/pages/dashboard/Checks'
 import Scheduler from '@/pages/dashboard/Scheduler'
+import SchedulerDetail from '@/pages/dashboard/SchedulerDetail'
 import WikiHome from '@/pages/wiki/WikiHome'
 import TopicDetail from '@/pages/wiki/TopicDetail'
 import TopicEdit from '@/pages/wiki/TopicEdit'
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="workflow/:id" element={<WorkflowDetail />} />
         <Route path="checks" element={<Checks />} />
         <Route path="scheduler" element={<Scheduler />} />
+        <Route path="scheduler/:id" element={<SchedulerDetail />} />
         <Route path="wiki" element={<WikiHome />} />
         <Route path="wiki/graph" element={<KnowledgeGraphPage />} />
         <Route path="wiki/lint" element={<LintReport />} />

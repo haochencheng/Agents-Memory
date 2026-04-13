@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-04-12
+updated_at: 2026-04-13
 doc_status: active
 ---
 
@@ -189,23 +189,28 @@ python3 scripts/backfill_wiki_metadata.py --json
 
 ### Scheduler 运行与恢复
 
-Scheduler 现在不是纯内存列表了，而是会把配置和执行结果写到本地磁盘：
+Scheduler 现在已经从“平铺 3 条任务”升级成“任务组 + 批次日志”模型，并会把配置和执行结果写到本地磁盘：
 
 ```text
-memory/scheduler_tasks.json   # 调度任务定义
-memory/check_runs.jsonl       # 每次检查执行结果
+memory/scheduler_tasks.json   # 任务组定义（task_groups）
+memory/scheduler_runs.jsonl   # 每次调度触发的 batch + steps
+memory/check_runs.jsonl       # 兼容旧索引的 checks 数据
 memory/workflow_records/*.md  # scheduler_check workflow 记录
 ```
 
 行为说明：
 - API 服务启动时会自动恢复 `memory/scheduler_tasks.json`
-- 后台 runtime 会定期扫描到期任务并执行 `docs` / `profile` / `plan`
+- 后台 runtime 会扫描到期任务组，并按顺序执行 `docs` / `profile` / `plan`
+- 一次 cron 触发会生成一个 batch，batch 下面固定有 3 个 step
+- 每个任务组只保留最近 200 次 batch；workflow 审计记录不受这个上限影响
+- `/api/scheduler/task-groups` 是主接口，`/api/scheduler/tasks` 只保留兼容映射
 - 每次执行同时写入 checks 与 workflow
 
 排障时可直接查看：
 
 ```bash
 cat memory/scheduler_tasks.json
+tail -n 20 memory/scheduler_runs.jsonl
 tail -n 20 memory/check_runs.jsonl
 rg -n "source_type: scheduler_check" memory/workflow_records
 ```
@@ -214,6 +219,8 @@ rg -n "source_type: scheduler_check" memory/workflow_records
 - 项目是否仍在 `memory/projects.md` 里注册
 - `cron_expr` 是否是合法的 5 段 cron
 - 注册项目根目录是否仍然存在
+- 任务组是否被暂停，或 `next_run_at` 是否为空
+- 最近的 `scheduler_runs.jsonl` 是否持续写入新 batch
 
 Scheduler 表单里会直接显示常用 cron 示例。快速参考：
 

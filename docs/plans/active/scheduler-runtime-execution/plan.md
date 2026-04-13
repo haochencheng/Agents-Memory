@@ -8,19 +8,19 @@ doc_status: active
 
 ## Change Set
 
-1. 新增 `agents_memory/services/scheduler.py`
+1. 升级 scheduler 服务模型
+   - 从平铺任务切到 `task_group + run_batch + run_step`
    - cron 校验与 next-run 计算
-   - 调度任务磁盘持久化
-   - checks 运行记录存储
-   - 到期执行 `docs` / `profile` / `plan`
-2. 改造 `agents_memory/web/api.py`
-   - lifespan 启动/停止调度 runtime
-   - scheduler/checks 端点接真实数据
+   - 任务组磁盘持久化与历史保留（每组 200 次）
+   - 到期 / 手动执行 `docs` / `profile` / `plan`
+2. 改造 API
+   - 保留 `/api/scheduler/tasks` 兼容映射
+   - 新增 `/api/scheduler/task-groups/*` 主接口
+   - checks 从 batch/step 日志派生统一结果
 3. 改造前端
-   - Scheduler 展示持久化任务、上次/下次运行结果
-   - Checks 消费结构化响应
-   - Overview 读取真实 summary
+   - Scheduler 列表页按任务组展示与过滤
+   - Scheduler 详情页支持编辑、启停、立即执行、删除
+   - 展示最近执行历史、step 明细、workflow/checks 入口
 4. 补文档与自动化测试
-   - API contract
-   - runbook
-   - service/api/frontend tests
+   - API contract / runbook / planning bundle
+   - scheduler service / web api / scheduler page / scheduler detail tests

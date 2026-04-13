@@ -1,6 +1,6 @@
 ---
 created_at: 2026-04-07
-updated_at: 2026-04-12
+updated_at: 2026-04-13
 doc_status: active
 ---
 
@@ -353,14 +353,14 @@ Base URL: `http://localhost:10100`
 
 ## GET /api/scheduler/tasks
 
-列出当前调度任务。任务持久化在 `memory/scheduler_tasks.json`，API 服务启动后会自动恢复。
+兼容旧前端的平铺任务接口。当前真实主模型已经升级为“任务组 + 批次日志”，这里会把每个任务组映射成 `docs/profile/plan` 三条虚拟任务。
 
 **响应 200:**
 ```json
 {
   "tasks": [
     {
-      "id": "ab12cd34",
+      "id": "group-1:docs",
       "name": "nightly-check-docs",
       "check_type": "docs",
       "project": "synapse-network",
@@ -379,7 +379,7 @@ Base URL: `http://localhost:10100`
 
 ## POST /api/scheduler/tasks
 
-为一个**已注册项目**一次性创建 3 个检查任务：`docs`、`profile`、`plan`。
+兼容旧调用。内部会创建一个任务组，再返回映射后的 `docs/profile/plan` 三条虚拟任务。
 
 Cron 表达式采用标准 5 段格式：
 
@@ -423,9 +423,152 @@ Cron 表达式采用标准 5 段格式：
 
 ---
 
+## GET /api/scheduler/task-groups
+
+返回任务组列表。前端 `/scheduler` 主页面现在优先消费这个接口。
+
+**查询参数:**
+- `q` — 按任务组名称 / 项目 / cron 模糊搜索
+- `project` — 项目过滤
+- `status` — `active` | `paused`
+- `last_result` — `pass` | `warn` | `fail`
+- `failed_only` — `true` 时只返回 `warn/fail`
+
+**响应 200:**
+```json
+{
+  "task_groups": [
+    {
+      "id": "group-1",
+      "name": "nightly-check",
+      "project": "synapse-network",
+      "cron_expr": "0 2 * * *",
+      "status": "active",
+      "created_at": "2026-04-13T01:50:00+08:00",
+      "updated_at": "2026-04-13T01:50:00+08:00",
+      "last_run_at": "2026-04-13T02:00:00+08:00",
+      "next_run_at": "2026-04-14T02:00:00+08:00",
+      "last_result": "warn",
+      "last_summary": "docs:pass | profile:warn | plan:pass",
+      "recent_results": ["warn", "pass"],
+      "latest_steps": [
+        {
+          "id": "step-1",
+          "batch_id": "batch-1",
+          "task_group_id": "group-1",
+          "check_type": "profile",
+          "status": "warn",
+          "duration_ms": 28,
+          "summary": "tests missing",
+          "details": ["[WARN] tests: missing"],
+          "workflow_record_id": "WF-1"
+        }
+      ]
+    }
+  ],
+  "total": 1
+}
+```
+
+## POST /api/scheduler/task-groups
+
+创建一个逻辑任务组。第一版固定包含 `docs/profile/plan` 三个子检查。
+
+**请求体:**
+```json
+{
+  "name": "nightly-check",
+  "project": "synapse-network",
+  "cron_expr": "0 2 * * *"
+}
+```
+
+**响应 201:**
+```json
+{
+  "task_group": {
+    "id": "group-1",
+    "name": "nightly-check",
+    "project": "synapse-network",
+    "cron_expr": "0 2 * * *",
+    "status": "active",
+    "latest_steps": [],
+    "recent_results": []
+  },
+  "latest_batch": null
+}
+```
+
+## GET /api/scheduler/task-groups/{id}
+
+返回单个任务组详情和最近一次执行摘要。
+
+## PUT /api/scheduler/task-groups/{id}
+
+编辑任务组的 `name / project / cron_expr / status`。
+
+## POST /api/scheduler/task-groups/{id}/pause
+
+暂停任务组，暂停后不会继续调度，并会清空 `next_run_at`。
+
+## POST /api/scheduler/task-groups/{id}/resume
+
+恢复任务组，恢复后重新计算下一次执行时间。
+
+## POST /api/scheduler/task-groups/{id}/run
+
+立即执行一次任务组，返回本次 `manual` 触发生成的批次记录。
+
+## DELETE /api/scheduler/task-groups/{id}
+
+删除任务组定义。已写入 workflow 的历史不会被删除。
+
+## GET /api/scheduler/task-groups/{id}/runs
+
+返回该任务组最近 200 次执行批次。
+
+**响应 200:**
+```json
+{
+  "runs": [
+    {
+      "id": "batch-1",
+      "task_group_id": "group-1",
+      "task_group_name": "nightly-check",
+      "project": "synapse-network",
+      "run_at": "2026-04-13T02:00:00+08:00",
+      "finished_at": "2026-04-13T02:00:05+08:00",
+      "overall_status": "warn",
+      "duration_ms": 5000,
+      "trigger": "scheduled",
+      "steps": [
+        {
+          "id": "step-1",
+          "batch_id": "batch-1",
+          "task_group_id": "group-1",
+          "check_type": "docs",
+          "status": "pass",
+          "duration_ms": 20,
+          "summary": "docs ok",
+          "details": [],
+          "workflow_record_id": "WF-1"
+        }
+      ]
+    }
+  ],
+  "total": 1
+}
+```
+
+## GET /api/scheduler/task-groups/{id}/runs/{run_id}
+
+返回单次执行批次的完整 step 明细。
+
+---
+
 ## GET /api/checks
 
-返回调度器执行过的检查结果，数据来自 `memory/check_runs.jsonl`。
+返回调度器执行过的检查结果。当前主数据源是 `memory/scheduler_runs.jsonl`，同时兼容旧的 `memory/check_runs.jsonl`。
 
 **查询参数:**
 - `project` — 项目过滤（可选）
@@ -440,15 +583,20 @@ Cron 表达式采用标准 5 段格式：
       "id": "CHK-20260413020000-docs-a1b2c3d4",
       "task_id": "a1b2c3d4",
       "task_name": "nightly-check-docs",
+      "task_group_id": "group-1",
+      "task_group_name": "nightly-check",
+      "batch_id": "batch-1",
       "project": "synapse-network",
       "check_type": "docs",
       "status": "fail",
+      "trigger": "scheduled",
       "run_at": "2026-04-13T02:00:00+08:00",
       "duration_ms": 42,
       "summary": "FAIL:docs_entrypoint | FAIL:docs_contracts",
       "details": [
         "[FAIL] docs_entrypoint: missing docs/README.md"
-      ]
+      ],
+      "workflow_record_id": "WF-1"
     }
   ],
   "total": 1

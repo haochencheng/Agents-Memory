@@ -1038,7 +1038,22 @@ class TestSchedulerApi(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmpdir.cleanup()
 
-    def test_create_scheduler_task_creates_docs_profile_plan_bundle(self) -> None:
+    def test_create_scheduler_task_group_returns_group_resource(self) -> None:
+        response = self._client.post(
+            "/api/scheduler/task-groups",
+            json={
+                "name": "nightly-check",
+                "project": "synapse-network",
+                "cron_expr": "0 2 * * *",
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(data["task_group"]["name"], "nightly-check")
+        self.assertEqual(data["task_group"]["project"], "synapse-network")
+        self.assertEqual(data["task_group"]["status"], "active")
+
+    def test_create_scheduler_task_creates_compat_docs_profile_plan_bundle(self) -> None:
         response = self._client.post(
             "/api/scheduler/tasks",
             json={
@@ -1057,6 +1072,33 @@ class TestSchedulerApi(unittest.TestCase):
         self.assertEqual(listing.status_code, 200)
         self.assertEqual(len(listing.json()["tasks"]), 3)
 
+    def test_task_group_list_supports_filters(self) -> None:
+        self._client.post(
+            "/api/scheduler/task-groups",
+            json={
+                "name": "nightly-check",
+                "project": "synapse-network",
+                "cron_expr": "0 2 * * *",
+            },
+        )
+        response = self._client.get("/api/scheduler/task-groups?status=active&q=nightly")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["task_groups"][0]["name"], "nightly-check")
+
+    def test_create_scheduler_task_group_rejects_unregistered_project(self) -> None:
+        response = self._client.post(
+            "/api/scheduler/task-groups",
+            json={
+                "name": "nightly-check",
+                "project": "unknown-project",
+                "cron_expr": "0 2 * * *",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("not registered", response.json()["detail"])
+
     def test_create_scheduler_task_rejects_unregistered_project(self) -> None:
         response = self._client.post(
             "/api/scheduler/tasks",
@@ -1071,7 +1113,7 @@ class TestSchedulerApi(unittest.TestCase):
 
     def test_scheduler_tasks_persist_across_app_reload(self) -> None:
         response = self._client.post(
-            "/api/scheduler/tasks",
+            "/api/scheduler/task-groups",
             json={
                 "name": "nightly-check",
                 "project": "synapse-network",
@@ -1081,13 +1123,13 @@ class TestSchedulerApi(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
 
         reloaded = _make_client(self._root)
-        listing = reloaded.get("/api/scheduler/tasks")
+        listing = reloaded.get("/api/scheduler/task-groups")
         self.assertEqual(listing.status_code, 200)
-        self.assertEqual(len(listing.json()["tasks"]), 3)
+        self.assertEqual(len(listing.json()["task_groups"]), 1)
 
-    def test_checks_endpoint_returns_due_scheduler_runs(self) -> None:
+    def test_task_group_can_be_edited_paused_resumed_and_run_manually(self) -> None:
         response = self._client.post(
-            "/api/scheduler/tasks",
+            "/api/scheduler/task-groups",
             json={
                 "name": "nightly-check",
                 "project": "synapse-network",
@@ -1095,10 +1137,66 @@ class TestSchedulerApi(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 201)
+        group_id = response.json()["task_group"]["id"]
+        updated = self._client.put(
+            f"/api/scheduler/task-groups/{group_id}",
+            json={
+                "name": "nightly-check-updated",
+                "project": "synapse-network",
+                "cron_expr": "5 * * * *",
+                "status": "active",
+            },
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.json()["task_group"]["name"], "nightly-check-updated")
+        paused = self._client.post(f"/api/scheduler/task-groups/{group_id}/pause")
+        self.assertEqual(paused.status_code, 200)
+        self.assertEqual(paused.json()["task_group"]["status"], "paused")
+        resumed = self._client.post(f"/api/scheduler/task-groups/{group_id}/resume")
+        self.assertEqual(resumed.status_code, 200)
+        self.assertEqual(resumed.json()["task_group"]["status"], "active")
+        manual_run = self._client.post(f"/api/scheduler/task-groups/{group_id}/run")
+        self.assertEqual(manual_run.status_code, 200)
+        self.assertEqual(manual_run.json()["trigger"], "manual")
+        self.assertEqual(len(manual_run.json()["steps"]), 3)
+
+    def test_task_group_runs_endpoint_returns_batched_history(self) -> None:
+        response = self._client.post(
+            "/api/scheduler/task-groups",
+            json={
+                "name": "nightly-check",
+                "project": "synapse-network",
+                "cron_expr": "0 2 * * *",
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        group_id = response.json()["task_group"]["id"]
+        run = self._client.post(f"/api/scheduler/task-groups/{group_id}/run")
+        self.assertEqual(run.status_code, 200)
+        run_id = run.json()["id"]
+        listing = self._client.get(f"/api/scheduler/task-groups/{group_id}/runs")
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing.json()["total"], 1)
+        detail = self._client.get(f"/api/scheduler/task-groups/{group_id}/runs/{run_id}")
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["id"], run_id)
+
+    def test_checks_endpoint_returns_due_scheduler_runs(self) -> None:
+        response = self._client.post(
+            "/api/scheduler/task-groups",
+            json={
+                "name": "nightly-check",
+                "project": "synapse-network",
+                "cron_expr": "0 2 * * *",
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        group_id = response.json()["task_group"]["id"]
         tasks_path = self._root / "memory" / "scheduler_tasks.json"
         payload = json.loads(tasks_path.read_text(encoding="utf-8"))
-        for task in payload["tasks"]:
-            task["next_run"] = "2026-04-01T00:00:00+08:00"
+        for task_group in payload["task_groups"]:
+            if task_group["id"] == group_id:
+                task_group["next_run_at"] = "2026-04-01T00:00:00+08:00"
         tasks_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
         checks = self._client.get("/api/checks")
@@ -1106,6 +1204,7 @@ class TestSchedulerApi(unittest.TestCase):
         data = checks.json()
         self.assertEqual(data["total"], 3)
         self.assertEqual(sorted(item["check_type"] for item in data["checks"]), ["docs", "plan", "profile"])
+        self.assertTrue(all(item["task_group_id"] == group_id for item in data["checks"]))
 
         summary = self._client.get("/api/checks/summary")
         self.assertEqual(summary.status_code, 200)
@@ -1113,6 +1212,22 @@ class TestSchedulerApi(unittest.TestCase):
         self.assertEqual(summary_data["docs_fail"], 1)
         self.assertEqual(summary_data["profile_fail"], 1)
         self.assertEqual(summary_data["plan_pass"] + summary_data["plan_warn"] + summary_data["plan_fail"], 1)
+
+    def test_task_group_delete_removes_group_from_listing(self) -> None:
+        response = self._client.post(
+            "/api/scheduler/task-groups",
+            json={
+                "name": "nightly-check",
+                "project": "synapse-network",
+                "cron_expr": "0 2 * * *",
+            },
+        )
+        group_id = response.json()["task_group"]["id"]
+        deleted = self._client.delete(f"/api/scheduler/task-groups/{group_id}")
+        self.assertEqual(deleted.status_code, 204)
+        listing = self._client.get("/api/scheduler/task-groups")
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing.json()["total"], 0)
 
 
 if __name__ == "__main__":

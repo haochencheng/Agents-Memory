@@ -10,11 +10,15 @@ from pathlib import Path
 
 from agents_memory.runtime import build_context
 from agents_memory.services.scheduler import (
-    create_scheduler_task_bundle,
-    list_scheduler_tasks,
+    _TASK_GROUP_HISTORY_LIMIT,
+    create_task_group,
+    execute_task_group_now,
+    list_task_groups,
     load_check_runs,
-    run_due_scheduler_tasks,
-    save_scheduler_tasks,
+    load_scheduler_run_batches,
+    run_due_task_groups,
+    save_task_groups,
+    set_task_group_status,
     summarize_check_runs,
 )
 
@@ -101,45 +105,114 @@ class TestSchedulerService(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmpdir.cleanup()
 
-    def test_scheduler_tasks_persist_to_disk(self) -> None:
-        created = create_scheduler_task_bundle(
+    def test_task_group_persists_to_disk(self) -> None:
+        created = create_task_group(
+          self._ctx,
+          name="nightly-check",
+          project="synapse-network",
+          cron_expr="0 2 * * *",
+          now=datetime.fromisoformat("2026-04-13T01:50:00+08:00"),
+        )
+        reloaded = list_task_groups(self._ctx)
+        self.assertEqual(len(reloaded), 1)
+        self.assertEqual(reloaded[0].id, created.id)
+        self.assertTrue(reloaded[0].next_run_at)
+
+    def test_manual_task_group_run_writes_batch_workflow_and_checks(self) -> None:
+        created = create_task_group(
             self._ctx,
             name="nightly-check",
             project="synapse-network",
             cron_expr="0 2 * * *",
             now=datetime.fromisoformat("2026-04-13T01:50:00+08:00"),
         )
-        self.assertEqual(len(created), 3)
-        reloaded = list_scheduler_tasks(self._ctx)
-        self.assertEqual(len(reloaded), 3)
-        self.assertTrue(all(task.next_run for task in reloaded))
+        batch = execute_task_group_now(self._ctx, created.id, now=datetime.fromisoformat("2026-04-13T01:55:00+08:00"))
+        self.assertIsNotNone(batch)
+        self.assertEqual(batch.trigger, "manual")
+        self.assertEqual(len(batch.steps), 3)
+        self.assertEqual(len(load_scheduler_run_batches(self._ctx, task_group_id=created.id)), 1)
+        self.assertEqual(len(load_check_runs(self._ctx)), 3)
+        workflow_paths = sorted((self._root / "memory" / "workflow_records").glob("*.md"))
+        self.assertEqual(len(workflow_paths), 3)
+        self.assertTrue(all("source_type: scheduler_check" in path.read_text(encoding="utf-8") for path in workflow_paths))
 
-    def test_due_scheduler_tasks_write_checks_and_workflow_records(self) -> None:
-        created = create_scheduler_task_bundle(
+    def test_pause_prevents_due_execution_until_resumed(self) -> None:
+        created = create_task_group(
             self._ctx,
             name="nightly-check",
             project="synapse-network",
             cron_expr="0 2 * * *",
             now=datetime.fromisoformat("2026-04-13T01:50:00+08:00"),
         )
-        for task in created:
-            task.next_run = "2026-04-13T02:00:00+08:00"
-        save_scheduler_tasks(self._ctx, created)
+        paused = set_task_group_status(self._ctx, created.id, status="paused", now=datetime.fromisoformat("2026-04-13T01:55:00+08:00"))
+        self.assertIsNotNone(paused)
+        save_task_groups(self._ctx, [paused])
+        runs = run_due_task_groups(self._ctx, now=datetime.fromisoformat("2026-04-13T02:00:00+08:00"))
+        self.assertEqual(runs, [])
+        resumed = set_task_group_status(self._ctx, created.id, status="active", now=datetime.fromisoformat("2026-04-13T02:01:00+08:00"))
+        self.assertIsNotNone(resumed)
+        self.assertTrue(resumed.next_run_at)
 
-        runs = run_due_scheduler_tasks(self._ctx, now=datetime.fromisoformat("2026-04-13T02:00:00+08:00"))
-        self.assertEqual(len(runs), 3)
-        stored_runs = load_check_runs(self._ctx)
-        self.assertEqual(len(stored_runs), 3)
-        summary = summarize_check_runs(stored_runs)
+    def test_history_is_trimmed_to_recent_limit_per_group(self) -> None:
+        created = create_task_group(
+            self._ctx,
+            name="nightly-check",
+            project="synapse-network",
+            cron_expr="0 2 * * *",
+            now=datetime.fromisoformat("2026-04-13T01:50:00+08:00"),
+        )
+        for index in range(_TASK_GROUP_HISTORY_LIMIT + 5):
+            execute_task_group_now(self._ctx, created.id, now=datetime.fromisoformat(f"2026-04-13T03:{index % 60:02d}:00+08:00"))
+        batches = load_scheduler_run_batches(self._ctx, task_group_id=created.id)
+        self.assertEqual(len(batches), _TASK_GROUP_HISTORY_LIMIT)
+
+    def test_legacy_tasks_payload_is_grouped_into_single_task_group(self) -> None:
+        payload = {
+            "tasks": [
+                {
+                    "id": "aaa-docs",
+                    "name": "nightly-check-docs",
+                    "check_type": "docs",
+                    "project": "synapse-network",
+                    "cron_expr": "0 2 * * *",
+                    "status": "active",
+                },
+                {
+                    "id": "aaa-profile",
+                    "name": "nightly-check-profile",
+                    "check_type": "profile",
+                    "project": "synapse-network",
+                    "cron_expr": "0 2 * * *",
+                    "status": "active",
+                },
+                {
+                    "id": "aaa-plan",
+                    "name": "nightly-check-plan",
+                    "check_type": "plan",
+                    "project": "synapse-network",
+                    "cron_expr": "0 2 * * *",
+                    "status": "active",
+                },
+            ]
+        }
+        (self._root / "memory" / "scheduler_tasks.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        groups = list_task_groups(self._ctx)
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].name, "nightly-check")
+
+    def test_check_summary_uses_latest_step_per_group(self) -> None:
+        created = create_task_group(
+            self._ctx,
+            name="nightly-check",
+            project="synapse-network",
+            cron_expr="0 2 * * *",
+            now=datetime.fromisoformat("2026-04-13T01:50:00+08:00"),
+        )
+        execute_task_group_now(self._ctx, created.id, now=datetime.fromisoformat("2026-04-13T01:55:00+08:00"))
+        summary = summarize_check_runs(load_check_runs(self._ctx))
         self.assertEqual(sum(summary["docs"].values()), 1)
         self.assertEqual(sum(summary["profile"].values()), 1)
         self.assertEqual(sum(summary["plan"].values()), 1)
-        workflow_paths = sorted((self._root / "memory" / "workflow_records").glob("*.md"))
-        self.assertEqual(len(workflow_paths), 3)
-        for path in workflow_paths:
-            content = path.read_text(encoding="utf-8")
-            self.assertIn("source_type: scheduler_check", content)
-            self.assertIn("# Scheduler Check Run", content)
 
 
 if __name__ == "__main__":

@@ -325,6 +325,75 @@ class ProjectOnboardingResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class SchedulerRunStep(BaseModel):
+    id: str
+    batch_id: str
+    task_group_id: str
+    check_type: str = "docs"
+    status: str = "pass"
+    duration_ms: int = 0
+    summary: str = ""
+    details: list[str] = Field(default_factory=list)
+    workflow_record_id: str = ""
+
+
+class SchedulerRunBatch(BaseModel):
+    id: str
+    task_group_id: str
+    task_group_name: str
+    project: str = ""
+    run_at: str = ""
+    finished_at: str = ""
+    overall_status: str = "pass"
+    duration_ms: int = 0
+    trigger: str = "scheduled"
+    steps: list[SchedulerRunStep] = Field(default_factory=list)
+
+
+class SchedulerTaskGroup(BaseModel):
+    id: str
+    name: str
+    project: str = ""
+    cron_expr: str = ""
+    status: str = "active"
+    created_at: str = ""
+    updated_at: str = ""
+    last_run_at: str = ""
+    next_run_at: str = ""
+    last_result: str = ""
+    last_summary: str = ""
+    latest_steps: list[SchedulerRunStep] = Field(default_factory=list)
+    recent_results: list[str] = Field(default_factory=list)
+
+
+class SchedulerTaskGroupCreate(BaseModel):
+    name: str
+    project: str = ""
+    cron_expr: str = ""
+
+
+class SchedulerTaskGroupUpdate(BaseModel):
+    name: str
+    project: str = ""
+    cron_expr: str = ""
+    status: str = "active"
+
+
+class SchedulerTaskGroupsResponse(BaseModel):
+    task_groups: list[SchedulerTaskGroup]
+    total: int = 0
+
+
+class SchedulerTaskGroupDetailResponse(BaseModel):
+    task_group: SchedulerTaskGroup
+    latest_batch: SchedulerRunBatch | None = None
+
+
+class SchedulerRunListResponse(BaseModel):
+    runs: list[SchedulerRunBatch]
+    total: int = 0
+
+
 class SchedulerTask(BaseModel):
     id: str
     name: str
@@ -359,6 +428,9 @@ class CheckResult(BaseModel):
     id: str
     task_id: str = ""
     task_name: str = ""
+    task_group_id: str = ""
+    task_group_name: str = ""
+    batch_id: str = ""
     project: str = ""
     check_type: str = "docs"
     status: str = "pass"
@@ -366,6 +438,8 @@ class CheckResult(BaseModel):
     duration_ms: int = 0
     summary: str = ""
     details: list[str] = Field(default_factory=list)
+    trigger: str = "scheduled"
+    workflow_record_id: str = ""
 
 
 class ChecksResponse(BaseModel):
