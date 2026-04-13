@@ -1177,9 +1177,36 @@ class TestSchedulerApi(unittest.TestCase):
         listing = self._client.get(f"/api/scheduler/task-groups/{group_id}/runs")
         self.assertEqual(listing.status_code, 200)
         self.assertEqual(listing.json()["total"], 1)
+        self.assertEqual(listing.json()["page"], 1)
+        self.assertEqual(listing.json()["page_size"], 10)
+        self.assertEqual(listing.json()["total_pages"], 1)
         detail = self._client.get(f"/api/scheduler/task-groups/{group_id}/runs/{run_id}")
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(detail.json()["id"], run_id)
+
+    def test_task_group_runs_endpoint_supports_pagination(self) -> None:
+        response = self._client.post(
+            "/api/scheduler/task-groups",
+            json={
+                "name": "hourly-check",
+                "project": "synapse-network",
+                "cron_expr": "5 * * * *",
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        group_id = response.json()["task_group"]["id"]
+        for _ in range(3):
+            run = self._client.post(f"/api/scheduler/task-groups/{group_id}/run")
+            self.assertEqual(run.status_code, 200)
+
+        listing = self._client.get(f"/api/scheduler/task-groups/{group_id}/runs?page=2&page_size=2")
+        self.assertEqual(listing.status_code, 200)
+        payload = listing.json()
+        self.assertEqual(payload["total"], 3)
+        self.assertEqual(payload["page"], 2)
+        self.assertEqual(payload["page_size"], 2)
+        self.assertEqual(payload["total_pages"], 2)
+        self.assertEqual(len(payload["runs"]), 1)
 
     def test_checks_endpoint_returns_due_scheduler_runs(self) -> None:
         response = self._client.post(

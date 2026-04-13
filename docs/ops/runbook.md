@@ -265,6 +265,7 @@ Scheduler 表单里会直接显示常用 cron 示例。快速参考：
 - 发现 `10100` 上已是兼容的 Agents-Memory API 时，会直接复用并写回 `.web_api.pid`
 - 发现端口上是旧版 `agents_memory.web.api`，但缺少 `/api/scheduler/task-groups` 时，会自动替换旧进程
 - 如果端口被其他非 Agents-Memory 进程占用，脚本会停止并提示人工处理，避免误杀别的服务
+- `10000` 上如果已经是兼容的 Vite 前端，会接管 `.web_ui.<env>.pid`；`restart` 路径会优先替换兼容但未托管的旧 UI 进程
 
 现在不同环境会使用独立的日志和 PID 文件：
 

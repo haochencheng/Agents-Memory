@@ -86,3 +86,9 @@ class ScriptEnvConfigTests(unittest.TestCase):
             with self.subTest(path=path):
                 content = (self.repo_root / path).read_text(encoding="utf-8")
                 self.assertNotIn('"${@}"', content)
+
+    def test_web_manage_script_contains_ui_port_handoff_logic(self) -> None:
+        content = (self.repo_root / "scripts" / "web" / "manage.sh").read_text(encoding="utf-8")
+        self.assertIn("_is_agents_memory_ui_pid", content)
+        self.assertIn("_ensure_expected_ui_on_port", content)
+        self.assertIn("REPLACE_COMPATIBLE_UI_ON_PORT=true", content)

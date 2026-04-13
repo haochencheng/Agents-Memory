@@ -525,7 +525,11 @@ Cron 表达式采用标准 5 段格式：
 
 ## GET /api/scheduler/task-groups/{id}/runs
 
-返回该任务组最近 200 次执行批次。
+返回该任务组最近 200 次执行批次，支持分页。
+
+**查询参数:**
+- `page` — 页码，默认 1
+- `page_size` — 每页条数，默认 10
 
 **响应 200:**
 ```json
@@ -556,7 +560,10 @@ Cron 表达式采用标准 5 段格式：
       ]
     }
   ],
-  "total": 1
+  "total": 1,
+  "page": 1,
+  "page_size": 10,
+  "total_pages": 1
 }
 ```
 

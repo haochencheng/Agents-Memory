@@ -107,6 +107,7 @@ cd frontend && npm install
 脚本还会额外做两层 API 版本校验：
 - 如果 `10100` 端口上已经是兼容的 `Agents-Memory API`，会直接接管 PID，不重复起进程
 - 如果端口上是旧版 `agents_memory.web.api`，且缺少 `/api/scheduler/task-groups`，脚本会先替换旧进程再启动
+- 如果 `10000` 端口上已经是本仓库兼容的 Vite 前端，脚本会接管 PID；`restart` 时则会先替换旧 UI 进程再重启
 
 环境切换方式：
 

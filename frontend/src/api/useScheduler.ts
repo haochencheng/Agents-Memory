@@ -88,6 +88,9 @@ export interface SchedulerTaskGroupDetailResponse {
 export interface SchedulerRunListResponse {
   runs: SchedulerRunBatch[]
   total: number
+  page: number
+  page_size: number
+  total_pages: number
 }
 
 export interface ChecksSummaryResponse {
@@ -139,11 +142,16 @@ export function useSchedulerTaskGroup(id: string) {
   })
 }
 
-export function useSchedulerTaskGroupRuns(id: string) {
+export function useSchedulerTaskGroupRuns(id: string, params?: { page?: number; pageSize?: number }) {
   return useQuery<SchedulerRunListResponse>({
-    queryKey: ['scheduler', 'task-groups', id, 'runs'],
+    queryKey: ['scheduler', 'task-groups', id, 'runs', params],
     queryFn: async () => {
-      const { data } = await client.get(`/scheduler/task-groups/${id}/runs`)
+      const { data } = await client.get(`/scheduler/task-groups/${id}/runs`, {
+        params: {
+          page: params?.page ?? 1,
+          page_size: params?.pageSize ?? 10,
+        },
+      })
       return data
     },
     enabled: Boolean(id),

@@ -54,6 +54,7 @@ UI_HOST="${AGENTS_MEMORY_UI_HOST:-0.0.0.0}"
 API_PROXY_TARGET="${AGENTS_MEMORY_API_PROXY_TARGET:-http://localhost:${API_PORT}}"
 FRONTEND_DIR="$REPO_ROOT/frontend"
 API_BASE="http://localhost:$API_PORT"
+REPLACE_COMPATIBLE_UI_ON_PORT="${REPLACE_COMPATIBLE_UI_ON_PORT:-false}"
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
 ok()   { echo -e "${GREEN}✅  $*${NC}"; }
@@ -93,6 +94,13 @@ _is_agents_memory_api_pid() {
   local cmd
   cmd="$(_pid_command "$pid")"
   [[ "$cmd" == *"uvicorn agents_memory.web.api:app"* ]]
+}
+
+_is_agents_memory_ui_pid() {
+  local pid="$1"
+  local cmd
+  cmd="$(_pid_command "$pid")"
+  [[ "$cmd" == *"$REPO_ROOT/frontend/node_modules/.bin/vite"* ]] || [[ "$cmd" == *"vite"*"$FRONTEND_DIR"* ]]
 }
 
 _api_supports_task_groups() {
@@ -192,6 +200,29 @@ _ensure_expected_api_on_port() {
   err "端口 $API_PORT 已被其他进程占用 (PID $pid)，且不是兼容的 Agents-Memory API；请先释放端口后再启动"
 }
 
+_ensure_expected_ui_on_port() {
+  local pid
+  pid="$(_port_pid "$UI_PORT")"
+  if [[ -z "$pid" ]]; then
+    return 1
+  fi
+
+  if _is_agents_memory_ui_pid "$pid"; then
+    if [[ "$REPLACE_COMPATIBLE_UI_ON_PORT" == "true" ]]; then
+      warn "端口 $UI_PORT 上已有兼容的 React 前端，正在替换旧进程 (PID $pid)"
+      kill "$pid" 2>/dev/null || true
+      sleep 1
+      rm -f "$UI_PID_FILE"
+      return 1
+    fi
+    echo "$pid" > "$UI_PID_FILE"
+    ok "检测到兼容的 React 前端正在端口 $UI_PORT 运行，已接管 PID $pid"
+    return 0
+  fi
+
+  err "端口 $UI_PORT 已被其他进程占用 (PID $pid)，且不是兼容的 Agents-Memory 前端；请先释放端口后再启动"
+}
+
 start_api() {
   _clear_stale_pid_file "$API_PID_FILE"
   if _pid_running "$API_PID_FILE"; then
@@ -235,13 +266,15 @@ start_api() {
 }
 
 start_ui() {
+  _clear_stale_pid_file "$UI_PID_FILE"
   if _pid_running "$UI_PID_FILE"; then
     warn "React 前端已在运行 (PID $(cat "$UI_PID_FILE"))"
     return 0
   fi
   if _port_in_use "$UI_PORT"; then
-    warn "端口 $UI_PORT 已被占用（可能已有前端运行）"
-    return 0
+    if _ensure_expected_ui_on_port; then
+      return 0
+    fi
   fi
   if [[ ! -d "$FRONTEND_DIR" ]]; then
     err "frontend/ 目录不存在"
@@ -417,6 +450,7 @@ case "$CMD" in
     sleep 1
     _check_deps
     start_api
+    REPLACE_COMPATIBLE_UI_ON_PORT=true
     start_ui
     cmd_status
     cmd_health

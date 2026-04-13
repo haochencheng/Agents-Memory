@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useProjects } from '@/api/useProjects'
 import {
   useDeleteSchedulerTaskGroup,
@@ -12,7 +12,7 @@ import {
 } from '@/api/useScheduler'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorAlert from '@/components/ErrorAlert'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatDateTime } from '@/lib/utils'
 
 interface EditForm {
   name: string
@@ -27,11 +27,33 @@ const RESULT_BADGE_CLASS: Record<string, string> = {
   fail: 'badge badge-red',
 }
 
+const RUN_PAGE_SIZE = 10
+const CRON_EXAMPLES = [
+  { expr: '5 * * * *', label: '每小时的第 5 分钟执行一次' },
+  { expr: '0 * * * *', label: '每小时整点执行一次' },
+  { expr: '0 2 * * *', label: '每天凌晨 2 点执行一次' },
+  { expr: '30 9 * * 1-5', label: '工作日每天 09:30 执行一次' },
+  { expr: '0 8 * * 1', label: '每周一早上 8 点执行一次' },
+]
+
+function buildPageNumbers(currentPage: number, totalPages: number): number[] {
+  const start = Math.max(1, currentPage - 2)
+  const end = Math.min(totalPages, currentPage + 2)
+  const pages: number[] = []
+  for (let page = start; page <= end; page += 1) {
+    pages.push(page)
+  }
+  return pages
+}
+
 export default function SchedulerDetail() {
   const { id = '' } = useParams<{ id: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
+  const initialRunsPage = Number.parseInt(searchParams.get('runsPage') ?? '1', 10)
+  const [runsPage, setRunsPage] = useState(Number.isFinite(initialRunsPage) && initialRunsPage > 0 ? initialRunsPage : 1)
   const { data, isLoading, error } = useSchedulerTaskGroup(id)
-  const { data: runsData, isLoading: runsLoading, error: runsError } = useSchedulerTaskGroupRuns(id)
+  const { data: runsData, isLoading: runsLoading, error: runsError } = useSchedulerTaskGroupRuns(id, { page: runsPage, pageSize: RUN_PAGE_SIZE })
   const { data: projects } = useProjects()
   const updateTaskGroup = useUpdateSchedulerTaskGroup()
   const pauseTaskGroup = usePauseSchedulerTaskGroup()
@@ -47,6 +69,16 @@ export default function SchedulerDetail() {
     status: 'active',
   })
   const taskGroup = data?.task_group
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParams)
+    if (runsPage > 1) {
+      nextParams.set('runsPage', String(runsPage))
+    } else {
+      nextParams.delete('runsPage')
+    }
+    setSearchParams(nextParams, { replace: true })
+  }, [runsPage, searchParams, setSearchParams])
 
   useEffect(() => {
     if (!taskGroup) return
@@ -69,12 +101,13 @@ export default function SchedulerDetail() {
     })
   }, [taskGroup?.id, taskGroup?.name, taskGroup?.project, taskGroup?.cron_expr, taskGroup?.status])
 
-  if (isLoading) return <LoadingSpinner text={`加载调度任务组 ${id}...`} />
-  if (error || !data?.task_group) return <ErrorAlert message={`调度任务组 "${id}" 加载失败`} />
-
-  const resolvedTaskGroup = data.task_group
+  const resolvedTaskGroup = data?.task_group
   const runs = runsData?.runs ?? []
   const registeredProjects = projects?.projects ?? []
+  const runPageNumbers = buildPageNumbers(runsData?.page ?? runsPage, runsData?.total_pages ?? 1)
+
+  if (isLoading) return <LoadingSpinner text={`加载调度任务组 ${id}...`} />
+  if (error || !resolvedTaskGroup) return <ErrorAlert message={`调度任务组 "${id}" 加载失败`} />
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -150,11 +183,11 @@ export default function SchedulerDetail() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <div className="bg-white rounded-xl border border-gray-100 p-4">
           <p className="text-xs text-slate-500">上次运行</p>
-          <p className="mt-2 text-sm text-slate-700">{resolvedTaskGroup.last_run_at ? formatDate(resolvedTaskGroup.last_run_at) : '暂无'}</p>
+          <p className="mt-2 text-sm text-slate-700">{resolvedTaskGroup.last_run_at ? formatDateTime(resolvedTaskGroup.last_run_at) : '暂无'}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 p-4">
           <p className="text-xs text-slate-500">下次运行</p>
-          <p className="mt-2 text-sm text-slate-700">{resolvedTaskGroup.next_run_at ? formatDate(resolvedTaskGroup.next_run_at) : '已暂停'}</p>
+          <p className="mt-2 text-sm text-slate-700">{resolvedTaskGroup.next_run_at ? formatDateTime(resolvedTaskGroup.next_run_at) : '已暂停'}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 p-4">
           <p className="text-xs text-slate-500">最近摘要</p>
@@ -163,7 +196,26 @@ export default function SchedulerDetail() {
         <div className="bg-white rounded-xl border border-gray-100 p-4">
           <p className="text-xs text-slate-500">执行历史</p>
           <p className="mt-2 text-sm text-slate-700">最近 {runsData?.total ?? 0} 次</p>
+          <p className="mt-1 text-xs text-slate-400">
+            第 {runsData?.page ?? 1} / {(runsData?.total_pages ?? 0) || 1} 页
+          </p>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <p className="font-medium text-slate-700">Cron 常用配置</p>
+        <p className="mt-1 font-mono text-xs text-slate-500">分钟 小时 日 月 星期</p>
+        <div className="mt-2 grid gap-1 md:grid-cols-2">
+          {CRON_EXAMPLES.map(item => (
+            <p key={item.expr}>
+              <span className="font-mono text-slate-700">{item.expr}</span>
+              <span className="ml-2">{item.label}</span>
+            </p>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          支持 `*`、范围 `1-5`、列表 `1,3,5`、步进 `*/2` 这种标准 5 段写法。
+        </p>
       </div>
 
       {editing && (
@@ -188,6 +240,17 @@ export default function SchedulerDetail() {
             <div>
               <label className="block text-xs text-gray-500 mb-1">Cron 表达式</label>
               <input className="input w-full font-mono" value={form.cron_expr} onChange={e => setForm(current => ({ ...current, cron_expr: e.target.value }))} />
+              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                <p className="font-medium text-slate-700">Cron 常用配置</p>
+                <div className="mt-2 space-y-1">
+                  {CRON_EXAMPLES.map(item => (
+                    <p key={item.expr}>
+                      <span className="font-mono text-slate-700">{item.expr}</span>
+                      <span className="ml-2">{item.label}</span>
+                    </p>
+                  ))}
+                </div>
+              </div>
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">状态</label>
@@ -209,6 +272,14 @@ export default function SchedulerDetail() {
           {runsLoading && <span className="text-xs text-slate-400">加载中...</span>}
         </div>
         {runsError && <ErrorAlert message="调度执行历史加载失败" />}
+        {!runsLoading && !runsError && (
+          <div className="flex flex-col gap-2 rounded-xl border border-gray-100 bg-slate-50 px-4 py-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+            <span>按批次展示最近 200 次中的当前分页结果</span>
+            <span data-testid="scheduler-runs-pagination-summary">
+              第 {runsData?.page ?? 1} / {(runsData?.total_pages ?? 0) || 1} 页，每页 {runsData?.page_size ?? RUN_PAGE_SIZE} 条
+            </span>
+          </div>
+        )}
         {!runsLoading && runs.length === 0 && <div className="text-sm text-gray-400">暂无执行历史</div>}
         <div className="space-y-3">
           {runs.map(run => (
@@ -268,6 +339,62 @@ export default function SchedulerDetail() {
             </details>
           ))}
         </div>
+        {(runsData?.total_pages ?? 0) > 1 && (
+          <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-white px-4 py-3">
+            <button
+              type="button"
+              className="btn btn-outline"
+              disabled={(runsData?.page ?? 1) <= 1}
+              onClick={() => setRunsPage(current => Math.max(1, current - 1))}
+            >
+              上一页
+            </button>
+
+            <div className="flex items-center gap-2 text-sm text-gray-500" data-testid="scheduler-runs-pagination-controls">
+              {runPageNumbers[0] > 1 && (
+                <>
+                  <button type="button" className="btn btn-outline" onClick={() => setRunsPage(1)}>
+                    1
+                  </button>
+                  {runPageNumbers[0] > 2 && <span>…</span>}
+                </>
+              )}
+
+              {runPageNumbers.map(pageNumber => (
+                <button
+                  key={pageNumber}
+                  type="button"
+                  className={pageNumber === (runsData?.page ?? runsPage) ? 'btn' : 'btn btn-outline'}
+                  onClick={() => setRunsPage(pageNumber)}
+                >
+                  {pageNumber}
+                </button>
+              ))}
+
+              {(runPageNumbers[runPageNumbers.length - 1] ?? 1) < (runsData?.total_pages ?? 1) && (
+                <>
+                  {(runPageNumbers[runPageNumbers.length - 1] ?? 1) < (runsData?.total_pages ?? 1) - 1 && <span>…</span>}
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => setRunsPage(runsData?.total_pages ?? 1)}
+                  >
+                    {runsData?.total_pages ?? 1}
+                  </button>
+                </>
+              )}
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-outline"
+              disabled={(runsData?.page ?? 1) >= (runsData?.total_pages ?? 1)}
+              onClick={() => setRunsPage(current => Math.min(runsData?.total_pages ?? current, current + 1))}
+            >
+              下一页
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -1128,14 +1128,29 @@ def scheduler_task_group_delete(task_group_id: str) -> None:
 
 
 @app.get("/api/scheduler/task-groups/{task_group_id}/runs", response_model=SchedulerRunListResponse)
-def scheduler_task_group_runs(task_group_id: str) -> SchedulerRunListResponse:
+def scheduler_task_group_runs(
+    task_group_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+) -> SchedulerRunListResponse:
     ctx = _get_ctx()
     run_due_task_groups(ctx)
     group = get_task_group(ctx, task_group_id)
     if group is None:
         raise HTTPException(status_code=404, detail=f"Task group '{task_group_id}' not found")
     runs = load_scheduler_run_batches(ctx, task_group_id=task_group_id, limit=200)
-    return SchedulerRunListResponse(runs=[_scheduler_run_batch_response(batch) for batch in runs], total=len(runs))
+    total = len(runs)
+    total_pages = (total + page_size - 1) // page_size if total else 0
+    start = (page - 1) * page_size
+    end = start + page_size
+    page_runs = runs[start:end]
+    return SchedulerRunListResponse(
+        runs=[_scheduler_run_batch_response(batch) for batch in page_runs],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
 
 
 @app.get("/api/scheduler/task-groups/{task_group_id}/runs/{run_id}", response_model=SchedulerRunBatch)
