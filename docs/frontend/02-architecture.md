@@ -1,6 +1,6 @@
 ---
 created_at: 2026-04-07
-updated_at: 2026-04-07
+updated_at: 2026-04-13
 doc_status: active
 ---
 
@@ -57,7 +57,7 @@ frontend/
     layouts/        ← 根布局 / 侧边栏布局
     pages/          ← Dashboard + Wiki 页面
     store/          ← Zustand 状态管理
-    lib/            ← axios client / utils
+    lib/            ← axios client / utils / graph view-model helpers
 
 tests/
   test_web_api.py     ← httpx TestClient 测试（覆盖所有端点）
@@ -94,6 +94,19 @@ docs/
 3. 同时调用 search_wiki(ctx.wiki_dir, "JWT auth", limit=5)
 4. 合并结果，加 type 字段区分 error/wiki
 5. 返回 {errors: [...], wiki: [...], total: N}
+```
+
+## 数据流（知识图谱多视图）
+
+```
+1. React 进入 /wiki/graph
+2. 页面读取 URL 参数（view / node）
+3. 调用 GET /api/wiki/graph 获取 typed concept nodes + edges
+4. 前端在 lib/knowledgeGraph.ts 内构建三种 view-model：
+   - Schema: 类型/项目/关系汇总
+   - Explore: 焦点节点的 1-hop / 2-hop 局部子图
+   - Table: 可过滤的结构化节点列表
+5. 页面按视图切换，不再把全量节点默认压进同一张画布
 ```
 
 ## 异步任务（wiki-compile）

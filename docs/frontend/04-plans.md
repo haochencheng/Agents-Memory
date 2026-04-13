@@ -1,6 +1,6 @@
 ---
 created_at: 2026-04-07
-updated_at: 2026-04-07
+updated_at: 2026-04-13
 doc_status: active
 ---
 
@@ -86,7 +86,7 @@ doc_status: active
 | 6.5 | 实现 RootLayout 含侧边栏导航 | `frontend/src/layouts/` | ✅ |
 | 6.6 | 实现 Dashboard 页面（Overview / ProjectList / ProjectDetail / MemoryRecords / Workflow / Checks / Scheduler）| `frontend/src/pages/dashboard/` | ✅ |
 | 6.7 | 实现 Wiki 页面（WikiHome / TopicDetail / TopicEdit / KnowledgeGraph / LintReport / Ingest） | `frontend/src/pages/wiki/` | ✅ |
-| 6.8 | 编写单元测试（28 个测试全部通过） | `frontend/src/test/` | ✅ |
+| 6.8 | 编写单元测试（含 Knowledge Graph 多视图） | `frontend/src/test/` | ✅ |
 | 6.9 | 构建验证（`npm run build` 无错误） | `frontend/dist/` | ✅ |
 | 6.10 | 启动 Dev Server 验证（http://localhost:10000） | vite dev | ✅ |
 
@@ -95,6 +95,22 @@ doc_status: active
 - 构建: `vite build` 成功，输出 281KB JS
 - 测试: 28/28 通过（5 个测试文件）
 - Dev Server: http://localhost:10000 返回正常 HTML
+
+## Phase 7 — Knowledge Graph Redesign（✅ 已完成）
+
+| # | 任务 | 产出 | 状态 |
+|---|------|------|------|
+| 7.1 | 将图谱默认入口改为 Schema 总览 | `KnowledgeGraphPage.tsx` | ✅ |
+| 7.2 | 增加局部 Explore 视图（1-hop / 2-hop） | `KnowledgeGraphPage.tsx` | ✅ |
+| 7.3 | 增加 Table 视图与统一过滤器 | `KnowledgeGraphPage.tsx` | ✅ |
+| 7.4 | 抽离图谱 view-model helper 便于测试 | `frontend/src/lib/knowledgeGraph.ts` | ✅ |
+| 7.5 | 为图谱页补自动化测试 | `frontend/src/test/KnowledgeGraphPage.test.tsx` | ✅ |
+
+**验收标准：**
+- `/wiki/graph` 默认进入 Schema
+- `/wiki/graph?node=...` 自动进入 Explore
+- `Table` 视图支持搜索和过滤
+- `npm exec vitest run src/test/KnowledgeGraphPage.test.tsx` 全绿
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 created_at: 2026-04-12
-updated_at: 2026-04-12
+updated_at: 2026-04-13
 doc_status: active
 ---
 
@@ -16,8 +16,13 @@ doc_status: active
 - [x] 从页面正文提取第一层 concept nodes（标题 / headings / tags / inline identifiers）
 - [x] 提供历史 wiki metadata / links backfill 脚本与 dry-run 验证
 - [x] 把 concept graph 信号进一步收敛进统一搜索排序
+- [x] 将 `/wiki/graph` 重构为 `Schema / Explore / Table` 多视图
+- [x] 为图谱页补项目、类型、关系、搜索词过滤
+- [x] 保留 `?node=` 深链语义，并让它默认进入 `Explore`
+- [x] 为多视图图谱页补前端自动化测试
 
 ## Notes
 
 - 当前 concept 抽取先走 deterministic 规则，不阻塞后续 LLM/entity extractor
 - 历史 wiki backfill 已支持读取 legacy `sources:` 并推断 `source_path`
+- 当前前端交互先验证浏览模型，后续如节点规模继续增长，再评估切换到 G6 / Graphin / Cytoscape

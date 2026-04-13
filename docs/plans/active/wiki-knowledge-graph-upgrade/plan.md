@@ -1,6 +1,6 @@
 ---
 created_at: 2026-04-12
-updated_at: 2026-04-12
+updated_at: 2026-04-13
 doc_status: active
 ---
 
@@ -33,3 +33,10 @@ doc_status: active
 
 - 为历史 wiki 页面补齐 `project / source_path / doc_type / tags / links`
 - 优先复用 legacy frontmatter `sources:` 作为 `source_path` 线索
+
+## Phase 6 — Multi-View Graph Explorer
+
+- `/wiki/graph` 默认进入 `Schema` 视图，而不是直接显示全量图
+- `Explore` 视图只渲染焦点节点的 `1-hop / 2-hop` 邻居
+- `Table` 视图提供项目、类型、关系和搜索词过滤
+- 保留 `?node=` 深链语义，并让它自动落到 `Explore`
