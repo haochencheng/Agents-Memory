@@ -332,14 +332,16 @@ class SchedulerTask(BaseModel):
     project: str = ""
     cron_expr: str = ""
     status: str = "active"
+    created_at: str = ""
+    updated_at: str = ""
     last_run: str = ""
     next_run: str = ""
     last_result: str = ""
+    last_summary: str = ""
 
 
 class SchedulerTaskCreate(BaseModel):
     name: str
-    check_type: str = "docs"
     project: str = ""
     cron_expr: str = ""
 
@@ -355,10 +357,13 @@ class SchedulerTasksResponse(BaseModel):
 
 class CheckResult(BaseModel):
     id: str
+    task_id: str = ""
+    task_name: str = ""
     project: str = ""
     check_type: str = "docs"
     status: str = "pass"
     run_at: str = ""
+    duration_ms: int = 0
     summary: str = ""
     details: list[str] = Field(default_factory=list)
 

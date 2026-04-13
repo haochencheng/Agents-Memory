@@ -8,16 +8,42 @@ export interface SchedulerTask {
   project: string
   cron_expr: string
   status: 'active' | 'paused'
+  created_at?: string
+  updated_at?: string
   last_run?: string
   next_run?: string
   last_result?: 'pass' | 'warn' | 'fail'
+  last_summary?: string
 }
 
-export interface TaskHistoryEntry {
+export interface CheckResult {
+  id: string
+  task_id: string
+  task_name: string
+  project: string
+  check_type: 'docs' | 'profile' | 'plan'
+  status: 'pass' | 'warn' | 'fail'
   run_at: string
   duration_ms: number
-  result: 'pass' | 'warn' | 'fail'
   summary: string
+  details: string[]
+}
+
+export interface ChecksResponse {
+  checks: CheckResult[]
+  total: number
+}
+
+export interface ChecksSummaryResponse {
+  docs_pass: number
+  docs_warn: number
+  docs_fail: number
+  profile_pass: number
+  profile_warn: number
+  profile_fail: number
+  plan_pass: number
+  plan_warn: number
+  plan_fail: number
 }
 
 export function useSchedulerTasks() {
@@ -33,7 +59,7 @@ export function useSchedulerTasks() {
 export function useCreateSchedulerTask() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (task: Omit<SchedulerTask, 'id' | 'status' | 'last_run' | 'next_run' | 'last_result'>) => {
+    mutationFn: async (task: { name: string; project: string; cron_expr: string }) => {
       const { data } = await client.post('/scheduler/tasks', task)
       return data
     },
@@ -53,7 +79,7 @@ export function useDeleteSchedulerTask() {
 }
 
 export function useChecks(params?: { project?: string; check_type?: string; status?: string }) {
-  return useQuery({
+  return useQuery<ChecksResponse>({
     queryKey: ['checks', params],
     queryFn: async () => {
       const { data } = await client.get('/checks', { params })
@@ -63,7 +89,7 @@ export function useChecks(params?: { project?: string; check_type?: string; stat
 }
 
 export function useChecksSummary() {
-  return useQuery({
+  return useQuery<ChecksSummaryResponse>({
     queryKey: ['checks', 'summary'],
     queryFn: async () => {
       const { data } = await client.get('/checks/summary')

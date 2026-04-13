@@ -187,6 +187,34 @@ python3 scripts/backfill_wiki_metadata.py --json
 - backfill / onboarding 现在还会解析正文中的显式 Markdown 文档引用，并把它们补成 `links`
 - 重复执行是安全的；已经具备 metadata 且无新增 links 的页面会自动跳过
 
+### Scheduler 运行与恢复
+
+Scheduler 现在不是纯内存列表了，而是会把配置和执行结果写到本地磁盘：
+
+```text
+memory/scheduler_tasks.json   # 调度任务定义
+memory/check_runs.jsonl       # 每次检查执行结果
+memory/workflow_records/*.md  # scheduler_check workflow 记录
+```
+
+行为说明：
+- API 服务启动时会自动恢复 `memory/scheduler_tasks.json`
+- 后台 runtime 会定期扫描到期任务并执行 `docs` / `profile` / `plan`
+- 每次执行同时写入 checks 与 workflow
+
+排障时可直接查看：
+
+```bash
+cat memory/scheduler_tasks.json
+tail -n 20 memory/check_runs.jsonl
+rg -n "source_type: scheduler_check" memory/workflow_records
+```
+
+如果任务创建成功但一直不执行，优先检查：
+- 项目是否仍在 `memory/projects.md` 里注册
+- `cron_expr` 是否是合法的 5 段 cron
+- 注册项目根目录是否仍然存在
+
 ---
 
 ## 向量搜索启用（记录达到 200 条后）

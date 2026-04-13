@@ -1,17 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useChecks } from '@/api/useScheduler'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorAlert from '@/components/ErrorAlert'
 import { formatDate } from '@/lib/utils'
 
 type CheckType = 'docs' | 'profile' | 'plan'
-
-interface CheckResult {
-  file?: string
-  status: string
-  message?: string
-  timestamp?: string
-}
 
 const STATUS_STYLE: Record<string, string> = {
   pass: 'badge badge-green',
@@ -22,8 +15,7 @@ const STATUS_STYLE: Record<string, string> = {
 export default function Checks() {
   const [checkType, setCheckType] = useState<CheckType>('docs')
   const { data: checks, isLoading, error, refetch } = useChecks({ check_type: checkType })
-
-  const results: CheckResult[] = Array.isArray(checks) ? checks : []
+  const results = useMemo(() => checks?.checks ?? [], [checks])
 
   return (
     <div className="space-y-6" data-testid="checks-page">
@@ -82,17 +74,18 @@ export default function Checks() {
             <div className="space-y-2">
               {results.map((r, i) => (
                 <div
-                  key={i}
+                    key={i}
                   className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-3"
                   data-testid="check-result"
                 >
                   <span className={STATUS_STYLE[r.status] ?? 'badge badge-gray'}>{r.status}</span>
                   <div className="flex-1 min-w-0">
-                    {r.file && <p className="text-sm font-mono text-gray-700 truncate">{r.file}</p>}
-                    {r.message && <p className="text-xs text-gray-500 mt-0.5">{r.message}</p>}
+                    <p className="text-sm font-medium text-gray-700 truncate">{r.task_name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{r.project} · {r.check_type}-check · {r.summary}</p>
+                    {r.details[0] && <p className="text-xs text-gray-400 mt-1 truncate">{r.details[0]}</p>}
                   </div>
-                  {r.timestamp && (
-                    <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(r.timestamp)}</span>
+                  {r.run_at && (
+                    <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(r.run_at)}</span>
                   )}
                 </div>
               ))}

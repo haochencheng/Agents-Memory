@@ -13,6 +13,7 @@ ERROR_SOURCE_TYPES = {"", "error_record"}
 WORKFLOW_SOURCE_TYPES = {
     "task_completion",
     "requirement_completion",
+    "scheduler_check",
     "markdown",
     "text",
     "json",

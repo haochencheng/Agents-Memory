@@ -1014,5 +1014,106 @@ class TestSearchWiki(unittest.TestCase):
         self.assertEqual(results, [])
 
 
+class TestSchedulerApi(unittest.TestCase):
+    def setUp(self) -> None:
+        import tempfile
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._root = Path(self._tmpdir.name)
+        _build_env(self._root)
+        self._project_root = self._root / "synapse-network"
+        self._project_root.mkdir(parents=True, exist_ok=True)
+        _write(self._root / "memory" / "projects.md", textwrap.dedent(f"""\
+            # Project Registry
+
+            ## synapse-network
+
+            - **id**: synapse-network
+            - **root**: {self._project_root}
+            - **active**: true
+
+            ## 注册新项目
+        """))
+        self._client = _make_client(self._root)
+
+    def tearDown(self) -> None:
+        self._tmpdir.cleanup()
+
+    def test_create_scheduler_task_creates_docs_profile_plan_bundle(self) -> None:
+        response = self._client.post(
+            "/api/scheduler/tasks",
+            json={
+                "name": "nightly-check",
+                "project": "synapse-network",
+                "cron_expr": "0 2 * * *",
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(len(data["tasks"]), 3)
+        self.assertEqual([task["check_type"] for task in data["tasks"]], ["docs", "profile", "plan"])
+        self.assertTrue(all(task["project"] == "synapse-network" for task in data["tasks"]))
+
+        listing = self._client.get("/api/scheduler/tasks")
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(len(listing.json()["tasks"]), 3)
+
+    def test_create_scheduler_task_rejects_unregistered_project(self) -> None:
+        response = self._client.post(
+            "/api/scheduler/tasks",
+            json={
+                "name": "nightly-check",
+                "project": "unknown-project",
+                "cron_expr": "0 2 * * *",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("not registered", response.json()["detail"])
+
+    def test_scheduler_tasks_persist_across_app_reload(self) -> None:
+        response = self._client.post(
+            "/api/scheduler/tasks",
+            json={
+                "name": "nightly-check",
+                "project": "synapse-network",
+                "cron_expr": "0 2 * * *",
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+
+        reloaded = _make_client(self._root)
+        listing = reloaded.get("/api/scheduler/tasks")
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(len(listing.json()["tasks"]), 3)
+
+    def test_checks_endpoint_returns_due_scheduler_runs(self) -> None:
+        response = self._client.post(
+            "/api/scheduler/tasks",
+            json={
+                "name": "nightly-check",
+                "project": "synapse-network",
+                "cron_expr": "0 2 * * *",
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        tasks_path = self._root / "memory" / "scheduler_tasks.json"
+        payload = json.loads(tasks_path.read_text(encoding="utf-8"))
+        for task in payload["tasks"]:
+            task["next_run"] = "2026-04-01T00:00:00+08:00"
+        tasks_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+        checks = self._client.get("/api/checks")
+        self.assertEqual(checks.status_code, 200)
+        data = checks.json()
+        self.assertEqual(data["total"], 3)
+        self.assertEqual(sorted(item["check_type"] for item in data["checks"]), ["docs", "plan", "profile"])
+
+        summary = self._client.get("/api/checks/summary")
+        self.assertEqual(summary.status_code, 200)
+        summary_data = summary.json()
+        self.assertEqual(summary_data["docs_fail"], 1)
+        self.assertEqual(summary_data["profile_fail"], 1)
+        self.assertEqual(summary_data["plan_pass"] + summary_data["plan_warn"] + summary_data["plan_fail"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

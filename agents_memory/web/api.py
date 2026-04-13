@@ -10,6 +10,7 @@ import asyncio
 import json
 import re
 import time
+from contextlib import asynccontextmanager
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -31,6 +32,17 @@ from agents_memory.services.records import (
 from agents_memory.services.integration import cmd_enable as run_enable_command
 from agents_memory.services.project_onboarding import ingest_project_wiki_sources
 from agents_memory.services.projects import parse_projects, resolve_project_target
+from agents_memory.services.scheduler import (
+    SCHEDULER_CHECK_TYPES,
+    SchedulerRuntime,
+    create_scheduler_task_bundle,
+    delete_scheduler_task as delete_scheduler_task_record,
+    list_scheduler_tasks as load_scheduler_task_records,
+    load_check_runs,
+    run_due_scheduler_tasks,
+    summarize_check_runs,
+    validate_cron_expr,
+)
 from agents_memory.services.workflow_records import (
     collect_workflow_records,
     is_error_record_meta,
@@ -98,29 +110,12 @@ from agents_memory.web.models import (
 )
 from agents_memory.web.renderer import md_to_html
 
-# ---------------------------------------------------------------------------
-# App factory
-# ---------------------------------------------------------------------------
-
-app = FastAPI(title="Agents-Memory API", version="1.0.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:10000",
-        "http://127.0.0.1:10000",
-    ],
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["*"],
-)
-
 import uuid
 
 # In-memory async task store {task_id: TaskStatus}
 _task_store: dict[str, dict[str, Any]] = {}
-# In-memory scheduler tasks store
-_scheduler_tasks: list[dict[str, Any]] = []
 _GENERIC_ERROR_TITLE_TOKENS = {"step", "steps", "步骤", "todo", "note", "notes", "phase", "section"}
+_scheduler_runtime = SchedulerRuntime()
 
 
 @dataclass(frozen=True)
@@ -135,6 +130,49 @@ class _SearchCandidate:
 def _get_ctx() -> AppContext:
     """Return a fresh AppContext per request (cheap — just path resolution)."""
     return build_context(logger_name="agents_memory.web")
+
+
+def _registered_project_ids(ctx: AppContext) -> list[str]:
+    project_ids: list[str] = []
+    for item in parse_projects(ctx):
+        normalized = normalize_project_id(str(item.get("id", "")))
+        if normalized and normalized not in project_ids:
+            project_ids.append(normalized)
+    return project_ids
+
+
+def _scheduler_task_name(base_name: str, project_id: str, check_type: str) -> str:
+    normalized_base = re.sub(r"\s+", "-", base_name.strip().lower()).strip("-")
+    if not normalized_base:
+        normalized_base = f"{project_id}-checks"
+    return f"{normalized_base}-{check_type}"
+
+
+@asynccontextmanager
+async def _app_lifespan(_app: FastAPI):
+    ctx = _get_ctx()
+    _scheduler_runtime.start(ctx)
+    try:
+        yield
+    finally:
+        await _scheduler_runtime.stop()
+
+
+# ---------------------------------------------------------------------------
+# App factory
+# ---------------------------------------------------------------------------
+
+app = FastAPI(title="Agents-Memory API", version="1.0.0", lifespan=_app_lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:10000",
+        "http://127.0.0.1:10000",
+    ],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["*"],
+)
 
 
 # ---------------------------------------------------------------------------
@@ -839,29 +877,40 @@ def workflow_record_detail(record_id: str) -> WorkflowDetailResponse:
 
 @app.get("/api/scheduler/tasks", response_model=SchedulerTasksResponse)
 def list_scheduler_tasks() -> SchedulerTasksResponse:
-    return SchedulerTasksResponse(tasks=[SchedulerTask(**t) for t in _scheduler_tasks])
+    ctx = _get_ctx()
+    run_due_scheduler_tasks(ctx)
+    tasks = [SchedulerTask(**task.__dict__) for task in load_scheduler_task_records(ctx)]
+    return SchedulerTasksResponse(tasks=tasks)
 
 
-@app.post("/api/scheduler/tasks", response_model=SchedulerTask, status_code=201)
-def create_scheduler_task(body: SchedulerTaskCreate) -> SchedulerTask:
-    task = SchedulerTask(
-        id=str(uuid.uuid4())[:8],
-        name=body.name,
-        check_type=body.check_type,
-        project=body.project,
-        cron_expr=body.cron_expr,
-        status="active",
+@app.post("/api/scheduler/tasks", response_model=SchedulerTasksResponse, status_code=201)
+def create_scheduler_task(body: SchedulerTaskCreate) -> SchedulerTasksResponse:
+    ctx = _get_ctx()
+    project_id = normalize_project_id(body.project)
+    if not project_id:
+        raise HTTPException(status_code=400, detail="Project is required")
+    if project_id not in _registered_project_ids(ctx):
+        raise HTTPException(status_code=400, detail=f"Project '{project_id}' is not registered")
+    cron_expr = str(body.cron_expr).strip()
+    if not cron_expr:
+        raise HTTPException(status_code=400, detail="Cron expression is required")
+    try:
+        validate_cron_expr(cron_expr)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    created_tasks = create_scheduler_task_bundle(
+        ctx,
+        name=str(body.name).strip() or f"{project_id}-checks",
+        project=project_id,
+        cron_expr=cron_expr,
     )
-    _scheduler_tasks.append(task.model_dump())
-    return task
+    return SchedulerTasksResponse(tasks=[SchedulerTask(**task.__dict__) for task in created_tasks])
 
 
 @app.delete("/api/scheduler/tasks/{task_id}", status_code=204)
 def delete_scheduler_task(task_id: str) -> None:
-    global _scheduler_tasks
-    before = len(_scheduler_tasks)
-    _scheduler_tasks = [t for t in _scheduler_tasks if t.get("id") != task_id]
-    if len(_scheduler_tasks) == before:
+    ctx = _get_ctx()
+    if not delete_scheduler_task_record(ctx, task_id):
         raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
 
 
@@ -876,13 +925,51 @@ def list_checks(
     check_type: str | None = Query(None),
     status: str | None = Query(None),
 ) -> ChecksResponse:
-    # Returns empty list — checks are populated by CLI runs
-    return ChecksResponse(checks=[], total=0)
+    ctx = _get_ctx()
+    run_due_scheduler_tasks(ctx)
+    records = load_check_runs(ctx)
+    normalized_project = normalize_project_id(project or "")
+    filtered = []
+    for record in records:
+        if normalized_project and record.project != normalized_project:
+            continue
+        if check_type and record.check_type != check_type:
+            continue
+        if status and record.status != status:
+            continue
+        filtered.append(
+            CheckResult(
+                id=record.id,
+                task_id=record.task_id,
+                task_name=record.task_name,
+                project=record.project,
+                check_type=record.check_type,
+                status=record.status,
+                run_at=record.run_at,
+                duration_ms=record.duration_ms,
+                summary=record.summary,
+                details=record.details,
+            )
+        )
+    return ChecksResponse(checks=filtered, total=len(filtered))
 
 
 @app.get("/api/checks/summary", response_model=ChecksSummary)
 def checks_summary() -> ChecksSummary:
-    return ChecksSummary()
+    ctx = _get_ctx()
+    run_due_scheduler_tasks(ctx)
+    summary = summarize_check_runs(load_check_runs(ctx))
+    return ChecksSummary(
+        docs_pass=summary["docs"]["pass"],
+        docs_warn=summary["docs"]["warn"],
+        docs_fail=summary["docs"]["fail"],
+        profile_pass=summary["profile"]["pass"],
+        profile_warn=summary["profile"]["warn"],
+        profile_fail=summary["profile"]["fail"],
+        plan_pass=summary["plan"]["pass"],
+        plan_warn=summary["plan"]["warn"],
+        plan_fail=summary["plan"]["fail"],
+    )
 
 
 # ---------------------------------------------------------------------------

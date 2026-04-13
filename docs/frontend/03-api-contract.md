@@ -351,6 +351,118 @@ Base URL: `http://localhost:10100`
 
 ---
 
+## GET /api/scheduler/tasks
+
+列出当前调度任务。任务持久化在 `memory/scheduler_tasks.json`，API 服务启动后会自动恢复。
+
+**响应 200:**
+```json
+{
+  "tasks": [
+    {
+      "id": "ab12cd34",
+      "name": "nightly-check-docs",
+      "check_type": "docs",
+      "project": "synapse-network",
+      "cron_expr": "0 2 * * *",
+      "status": "active",
+      "created_at": "2026-04-13T01:50:00+08:00",
+      "updated_at": "2026-04-13T01:50:00+08:00",
+      "last_run": "2026-04-13T02:00:00+08:00",
+      "next_run": "2026-04-14T02:00:00+08:00",
+      "last_result": "fail",
+      "last_summary": "FAIL:docs_entrypoint | FAIL:docs_contracts"
+    }
+  ]
+}
+```
+
+## POST /api/scheduler/tasks
+
+为一个**已注册项目**一次性创建 3 个检查任务：`docs`、`profile`、`plan`。
+
+**请求体:**
+```json
+{
+  "name": "nightly-check",
+  "project": "synapse-network",
+  "cron_expr": "0 2 * * *"
+}
+```
+
+**响应 201:**
+```json
+{
+  "tasks": [
+    { "id": "a1", "name": "nightly-check-docs", "check_type": "docs", "project": "synapse-network", "cron_expr": "0 2 * * *", "status": "active" },
+    { "id": "a2", "name": "nightly-check-profile", "check_type": "profile", "project": "synapse-network", "cron_expr": "0 2 * * *", "status": "active" },
+    { "id": "a3", "name": "nightly-check-plan", "check_type": "plan", "project": "synapse-network", "cron_expr": "0 2 * * *", "status": "active" }
+  ]
+}
+```
+
+**错误 400:**
+```json
+{"detail": "Project 'unknown-project' is not registered"}
+```
+
+---
+
+## GET /api/checks
+
+返回调度器执行过的检查结果，数据来自 `memory/check_runs.jsonl`。
+
+**查询参数:**
+- `project` — 项目过滤（可选）
+- `check_type` — `docs` | `profile` | `plan`
+- `status` — `pass` | `warn` | `fail`
+
+**响应 200:**
+```json
+{
+  "checks": [
+    {
+      "id": "CHK-20260413020000-docs-a1b2c3d4",
+      "task_id": "a1b2c3d4",
+      "task_name": "nightly-check-docs",
+      "project": "synapse-network",
+      "check_type": "docs",
+      "status": "fail",
+      "run_at": "2026-04-13T02:00:00+08:00",
+      "duration_ms": 42,
+      "summary": "FAIL:docs_entrypoint | FAIL:docs_contracts",
+      "details": [
+        "[FAIL] docs_entrypoint: missing docs/README.md"
+      ]
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+## GET /api/checks/summary
+
+返回每类检查基于“每个任务最新一次运行结果”的聚合摘要。
+
+**响应 200:**
+```json
+{
+  "docs_pass": 0,
+  "docs_warn": 0,
+  "docs_fail": 1,
+  "profile_pass": 0,
+  "profile_warn": 1,
+  "profile_fail": 0,
+  "plan_pass": 1,
+  "plan_warn": 0,
+  "plan_fail": 0
+}
+```
+
+---
+
 ## GET /api/workflow/{id}
 
 获取单条 workflow 记录详情。

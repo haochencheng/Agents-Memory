@@ -67,7 +67,12 @@ export default function Overview() {
           <h2 className="section-title">Check 状态汇总</h2>
           <div className="grid grid-cols-3 gap-4">
             {['docs', 'profile', 'plan'].map(type => {
-              const summary = (checks as Record<string, unknown>)[type] as { pass?: number; warn?: number; fail?: number } | undefined
+              const prefix = type as 'docs' | 'profile' | 'plan'
+              const summary = {
+                pass: checks[`${prefix}_pass` as keyof typeof checks] as number | undefined,
+                warn: checks[`${prefix}_warn` as keyof typeof checks] as number | undefined,
+                fail: checks[`${prefix}_fail` as keyof typeof checks] as number | undefined,
+              }
               return (
                 <div key={type} className="text-center">
                   <div className="text-sm font-medium text-gray-600 mb-2 capitalize">{type}-check</div>
