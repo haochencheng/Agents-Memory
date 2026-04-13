@@ -246,6 +246,7 @@ python3.12 -m unittest discover -s tests -p 'test_*.py'
 bash scripts/web-start.sh restart   # FastAPI :10100, React :10000
 bash scripts/web/manage.sh --env staging restart
 bash scripts/runtime/manage.sh --env prod config
+bash scripts/local/web.sh restart
 ```
 
 ### Trust Signals
@@ -516,6 +517,7 @@ python3.12 -m unittest discover -s tests -p 'test_*.py'
 bash scripts/web-start.sh restart   # FastAPI :10100，React :10000
 bash scripts/web/manage.sh --env staging restart
 bash scripts/runtime/manage.sh --env prod config
+bash scripts/local/web.sh restart
 ```
 
 ### 可信信号

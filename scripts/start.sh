@@ -1,7 +1,7 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Backward-compatible wrapper for categorized runtime scripts.
 
-set -euo pipefail
+set -eu
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 exec bash "$REPO_ROOT/scripts/runtime/manage.sh" "$@"

@@ -137,6 +137,18 @@ Agents-Memory/
   ├── runtime/
   │   ├── manage.sh               # grouped runtime manager (Qdrant / Ollama / MCP)
   │   └── restart.sh              # grouped runtime restart entrypoint
+  ├── local/
+  │   ├── web.sh                  # local web shortcut
+  │   ├── runtime.sh              # local runtime shortcut
+  │   └── restart.sh              # local full restart shortcut
+  ├── staging/
+  │   ├── web.sh                  # staging web shortcut
+  │   ├── runtime.sh              # staging runtime shortcut
+  │   └── restart.sh              # staging full restart shortcut
+  ├── prod/
+  │   ├── web.sh                  # prod web shortcut
+  │   ├── runtime.sh              # prod runtime shortcut
+  │   └── restart.sh              # prod full restart shortcut
   └── web/
       ├── manage.sh               # grouped web manager (API / UI)
       └── restart.sh              # grouped web restart entrypoint
@@ -243,6 +255,9 @@ bash scripts/start.sh status                           # backward-compatible run
 bash scripts/start.sh restart                          # backward-compatible runtime restart
 bash scripts/runtime/manage.sh --env staging config    # inspect staging runtime config
 bash scripts/runtime/manage.sh --env prod restart      # restart runtime services with prod-like profile
+bash scripts/local/web.sh restart                      # local environment shortcut
+bash scripts/staging/runtime.sh status                 # staging environment shortcut
+bash scripts/prod/restart.sh                           # prod environment full restart shortcut
 ```
 
 ## MCP Server Tools (for AI Agents)

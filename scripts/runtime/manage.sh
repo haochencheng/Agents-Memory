@@ -100,7 +100,7 @@ start_qdrant() {
 
   mkdir -p "$DOCKER_DIR/data/qdrant"
   cd "$DOCKER_DIR"
-  env QDRANT_PORT="${QDRANT_PORT:-6333}" QDRANT_GRPC_PORT="${QDRANT_GRPC_PORT:-6334}" compose up -d qdrant
+  QDRANT_PORT="${QDRANT_PORT:-6333}" QDRANT_GRPC_PORT="${QDRANT_GRPC_PORT:-6334}" compose up -d qdrant
 
   printf "    等待 Qdrant 就绪"
   for _ in $(seq 1 30); do
@@ -128,7 +128,7 @@ start_ollama() {
 
   mkdir -p "$DOCKER_DIR/data/ollama"
   cd "$DOCKER_DIR"
-  env OLLAMA_PORT="${OLLAMA_PORT:-11434}" compose up -d ollama
+  OLLAMA_PORT="${OLLAMA_PORT:-11434}" compose up -d ollama
 
   printf "    等待 Ollama 就绪"
   for _ in $(seq 1 45); do
@@ -234,7 +234,7 @@ stop_services() {
 
   if curl -sf "http://localhost:${QDRANT_PORT:-6333}/readyz" &>/dev/null; then
     cd "$DOCKER_DIR"
-    env QDRANT_PORT="${QDRANT_PORT:-6333}" QDRANT_GRPC_PORT="${QDRANT_GRPC_PORT:-6334}" compose stop qdrant
+    QDRANT_PORT="${QDRANT_PORT:-6333}" QDRANT_GRPC_PORT="${QDRANT_GRPC_PORT:-6334}" compose stop qdrant
     cd "$REPO_ROOT"
     ok "Qdrant 已停止。"
   else
@@ -243,7 +243,7 @@ stop_services() {
 
   if curl -sf "http://localhost:${OLLAMA_PORT:-11434}/api/tags" &>/dev/null; then
     cd "$DOCKER_DIR"
-    env OLLAMA_PORT="${OLLAMA_PORT:-11434}" compose stop ollama
+    OLLAMA_PORT="${OLLAMA_PORT:-11434}" compose stop ollama
     cd "$REPO_ROOT"
     ok "Ollama 已停止。"
   else

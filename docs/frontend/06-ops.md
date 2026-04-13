@@ -72,6 +72,9 @@ scripts/web/manage.sh       # Web 主入口
 scripts/web/restart.sh      # Web 重启入口
 scripts/runtime/manage.sh   # Runtime 主入口
 scripts/runtime/restart.sh  # Runtime 重启入口
+scripts/local/*             # local 快捷入口
+scripts/staging/*           # staging 快捷入口
+scripts/prod/*              # prod 快捷入口
 scripts/web-start.sh        # 兼容旧入口
 scripts/start.sh            # 兼容旧入口
 config/environments/*.env   # local / staging / prod 配置
@@ -116,6 +119,11 @@ bash scripts/web/manage.sh --env staging restart
 
 # prod 风格配置预览
 bash scripts/web/manage.sh --env prod config
+
+# 更直观的环境入口
+bash scripts/local/web.sh restart
+bash scripts/staging/web.sh config
+bash scripts/prod/restart.sh
 ```
 
 ## 健康检查

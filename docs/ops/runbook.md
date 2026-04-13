@@ -83,6 +83,9 @@ config/environments/prod.env
 bash scripts/web/manage.sh --env local restart
 bash scripts/web/manage.sh --env staging config
 bash scripts/runtime/manage.sh --env prod config --json
+bash scripts/local/web.sh restart
+bash scripts/staging/runtime.sh status
+bash scripts/prod/restart.sh
 ```
 
 兼容入口仍然保留：

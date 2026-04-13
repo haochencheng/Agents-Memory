@@ -186,6 +186,9 @@ scripts/runtime/manage.sh   # runtime 主入口
 scripts/runtime/restart.sh  # runtime 重启入口
 scripts/web/manage.sh       # web 主入口
 scripts/web/restart.sh      # web 重启入口
+scripts/local/*             # local 环境快捷入口
+scripts/staging/*           # staging 环境快捷入口
+scripts/prod/*              # prod 环境快捷入口
 scripts/start.sh            # 兼容旧命令，转发到 runtime/manage.sh
 scripts/web-start.sh        # 兼容旧命令，转发到 web/manage.sh
 ```
@@ -204,6 +207,9 @@ config/environments/prod.env
 bash scripts/web/manage.sh --env local restart
 bash scripts/web/manage.sh --env staging config
 bash scripts/runtime/manage.sh --env prod config --json
+bash scripts/local/web.sh restart
+bash scripts/staging/runtime.sh status
+bash scripts/prod/restart.sh
 ```
 
 ---

@@ -4,4 +4,4 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 
-exec bash "$REPO_ROOT/scripts/web/manage.sh" "$@" restart
+exec bash "$REPO_ROOT/scripts/web/manage.sh" --env staging "$@"
