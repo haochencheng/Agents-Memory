@@ -14,13 +14,15 @@ doc_status: active
 ## Phase 2 — Auto Links
 
 - 基于同项目、共享标签、相邻目录域生成候选 links
+- 接入时额外解析正文中的显式 Markdown / source-path 引用
 - 在 ingest 时写入 frontmatter `links`
 
 ## Phase 3 — Hybrid Search
 
 - 复用现有 error FTS + vector
-- 为 wiki/workflow 增加 SQLite FTS
+- 为 wiki/workflow 增加 SQLite FTS + semantic vector scoring
 - 统一搜索时把 graph relation 作为 rerank boost
+- `/api/search` 的 `keyword / semantic / hybrid` 三种模式都应覆盖 errors / wiki / workflow
 
 ## Phase 4 — Concept Graph
 

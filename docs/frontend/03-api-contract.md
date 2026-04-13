@@ -256,7 +256,9 @@ Base URL: `http://localhost:10100`
 
 全文混合搜索（wiki + 错误记录 + workflow 记录）。
 
-- 基础召回：errors 走 FTS5 + vector，wiki/workflow 走 FTS5
+- 基础召回：
+  - errors 走 `FTS5 + LanceDB vector`
+  - wiki/workflow 走 `FTS5 + deterministic semantic vector`
 - 统一排序：会叠加 concept graph rerank，把 query 命中的概念沿 `explicit / inferred / mentions / contains` 关系向相关结果传播
 
 **查询参数:**

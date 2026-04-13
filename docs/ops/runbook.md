@@ -184,6 +184,7 @@ python3 scripts/backfill_wiki_metadata.py --json
 说明：
 - backfill 会补齐 `project / source_path / doc_type / tags / links`
 - 历史页面若存在旧 frontmatter `sources:`，会优先复用它推断 `source_path`
+- backfill / onboarding 现在还会解析正文中的显式 Markdown 文档引用，并把它们补成 `links`
 - 重复执行是安全的；已经具备 metadata 且无新增 links 的页面会自动跳过
 
 ---

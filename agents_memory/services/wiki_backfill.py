@@ -221,6 +221,7 @@ def backfill_wiki_metadata_and_links(
             source_path=source_path or topic,
             doc_type=doc_type,
             tags=tags,
+            raw=raw,
             known_pages=planned_pages,
         )
         merged_links, added_links = _merge_links(existing_links, candidate_links)

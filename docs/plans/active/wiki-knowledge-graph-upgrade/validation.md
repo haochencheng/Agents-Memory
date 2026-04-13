@@ -8,8 +8,8 @@ doc_status: active
 
 ## Code
 
-- `python3 -m py_compile agents_memory/services/project_onboarding.py agents_memory/services/search.py agents_memory/services/wiki_backfill.py agents_memory/services/wiki_knowledge.py agents_memory/web/api.py agents_memory/web/models.py scripts/backfill_wiki_metadata.py tests/test_project_onboarding_service.py tests/test_web_api.py tests/test_wiki_backfill.py tests/test_wiki_knowledge.py`
-- `python3 -m unittest tests.test_project_onboarding_service tests.test_wiki_backfill tests.test_wiki_knowledge -v`
+- `python3 -m py_compile agents_memory/services/project_onboarding.py agents_memory/services/search.py agents_memory/services/wiki_backfill.py agents_memory/services/wiki_knowledge.py agents_memory/web/api.py agents_memory/web/models.py tests/test_project_onboarding_service.py tests/test_search_service.py tests/test_web_api.py tests/test_wiki_backfill.py tests/test_wiki_knowledge.py`
+- `.venv/bin/python -m unittest tests.test_project_onboarding_service tests.test_search_service tests.test_wiki_backfill tests.test_wiki_knowledge tests.test_web_api -v`
 - `npm exec tsc --noEmit`
 - `npm exec vitest run src/test/KnowledgeGraphPage.test.tsx`
 
@@ -17,7 +17,9 @@ doc_status: active
 
 - onboarding 导入的新 wiki 页面应写入 `project / source_path / doc_type / tags`
 - 同项目相关文档应自动出现第一批 `links`
+- 正文里写了相对 Markdown 引用（如 `../architecture.md`）时，应自动落到对应 wiki `links`
 - `/api/search` 对 wiki/workflow 不再退化为纯 contains
+- `/api/search?mode=semantic` 应能从 wiki/workflow 返回 semantic hits
 - `/api/search` 应将 concept graph 信号并入统一 rerank，而不是只对 wiki 做轻量 boost
 - `/api/wiki/graph` 应返回 typed concept nodes，而不是纯 page nodes
 - `/wiki/graph` 默认应先显示 `Schema`，而不是直接显示全量图

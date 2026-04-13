@@ -1108,11 +1108,16 @@ def _extract_snippet(filepath: str, q: str) -> str:
 
 def _search_error_candidates(ctx, q: str, mode: str, limit: int) -> list[_SearchCandidate]:
     candidates: list[_SearchCandidate] = []
-    if mode not in ("hybrid", "keyword"):
+    if mode not in ("hybrid", "keyword", "semantic"):
         return candidates
     try:
-        from agents_memory.services.search import hybrid_search, search_fts  # noqa: PLC0415
-        raw = hybrid_search(ctx, q, limit=limit) if mode == "hybrid" else search_fts(ctx, q, limit=limit)
+        from agents_memory.services.search import hybrid_search, search_fts, search_vector  # noqa: PLC0415
+        if mode == "hybrid":
+            raw = hybrid_search(ctx, q, limit=limit)
+        elif mode == "semantic":
+            raw = search_vector(ctx, q, limit=limit)
+        else:
+            raw = search_fts(ctx, q, limit=limit)
         for row in raw:
             filepath = str(row.get("filepath", ""))
             if filepath and not is_error_record_meta(parse_frontmatter(Path(filepath))):
@@ -1145,8 +1150,14 @@ def _search_wiki_candidates(ctx, q: str, mode: str, limit: int = 40) -> list[_Se
     if mode not in ("hybrid", "keyword", "semantic"):
         return candidates
     try:
-        from agents_memory.services.search import search_knowledge_fts  # noqa: PLC0415
-        for row in search_knowledge_fts(ctx, q, limit=limit, source_kind="wiki"):
+        from agents_memory.services.search import search_knowledge_fts, search_knowledge_hybrid, search_knowledge_semantic  # noqa: PLC0415
+        if mode == "hybrid":
+            rows = search_knowledge_hybrid(ctx, q, limit=limit, source_kind="wiki")
+        elif mode == "semantic":
+            rows = search_knowledge_semantic(ctx, q, limit=limit, source_kind="wiki")
+        else:
+            rows = search_knowledge_fts(ctx, q, limit=limit, source_kind="wiki")
+        for row in rows:
             filepath = str(row.get("filepath", ""))
             candidates.append(
                 _SearchCandidate(
@@ -1155,7 +1166,7 @@ def _search_wiki_candidates(ctx, q: str, mode: str, limit: int = 40) -> list[_Se
                         id=str(row.get("id", "")),
                         title=str(row.get("title", "") or row.get("id", "")),
                         snippet=_extract_snippet(filepath, q),
-                        score=round(float(row.get("fts_score", 0.0)), 4),
+                        score=round(float(row.get("combined_score", row.get("semantic_score", row.get("fts_score", 0.0)))), 4),
                     ),
                     project=normalize_project_id(row.get("project", "")),
                     topic=str(row.get("id", "")),
@@ -1175,8 +1186,13 @@ def _search_workflow_candidates(ctx, q: str, mode: str, limit: int) -> list[_Sea
     if mode not in ("hybrid", "keyword", "semantic"):
         return []
     try:
-        from agents_memory.services.search import search_knowledge_fts  # noqa: PLC0415
-        rows = search_knowledge_fts(ctx, q, limit=limit * 2, source_kind="workflow")
+        from agents_memory.services.search import search_knowledge_fts, search_knowledge_hybrid, search_knowledge_semantic  # noqa: PLC0415
+        if mode == "hybrid":
+            rows = search_knowledge_hybrid(ctx, q, limit=limit * 2, source_kind="workflow")
+        elif mode == "semantic":
+            rows = search_knowledge_semantic(ctx, q, limit=limit * 2, source_kind="workflow")
+        else:
+            rows = search_knowledge_fts(ctx, q, limit=limit * 2, source_kind="workflow")
     except Exception:
         return []
     return [
@@ -1186,7 +1202,7 @@ def _search_workflow_candidates(ctx, q: str, mode: str, limit: int) -> list[_Sea
                 id=str(row.get("id", "")),
                 title=str(row.get("title", "") or row.get("id", "")),
                 snippet=_extract_snippet(str(row.get("filepath", "")), q),
-                score=round(float(row.get("fts_score", 0.0)), 4),
+                score=round(float(row.get("combined_score", row.get("semantic_score", row.get("fts_score", 0.0)))), 4),
             ),
             project=normalize_project_id(row.get("project", "")),
             source_type=str(row.get("source_type", "")),

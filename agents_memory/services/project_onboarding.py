@@ -178,6 +178,40 @@ def _candidate_reason(shared_tags: list[str], same_doc_type: bool, same_section:
     return "；".join(reasons) or "自动推断候选关系"
 
 
+def _resolve_explicit_reference(current_source_path: str, target: str) -> str:
+    cleaned = str(target).strip()
+    if not cleaned or cleaned.startswith(("http://", "https://", "#", "mailto:")):
+        return ""
+    cleaned = cleaned.split("#", 1)[0].split("?", 1)[0].strip()
+    if not cleaned.endswith(".md"):
+        return ""
+    candidate = Path(cleaned)
+    resolved = candidate if candidate.is_absolute() else Path(current_source_path).parent / candidate
+    normalized_parts: list[str] = []
+    for part in resolved.parts:
+        if part in {"", "."}:
+            continue
+        if part == "..":
+            if normalized_parts:
+                normalized_parts.pop()
+            continue
+        normalized_parts.append(part)
+    return "/".join(normalized_parts)
+
+
+def _explicit_reference_targets(raw: str, source_path: str) -> set[str]:
+    targets: set[str] = set()
+    for match in re.finditer(r"\[[^\]]+\]\(([^)]+)\)", raw):
+        resolved = _resolve_explicit_reference(source_path, match.group(1))
+        if resolved:
+            targets.add(resolved)
+    for match in re.finditer(r"(?:(?:\.\./|\.?/)?(?:docs/)?[A-Za-z0-9._/-]+\.md)\b", raw):
+        resolved = _resolve_explicit_reference(source_path, match.group(0))
+        if resolved:
+            targets.add(resolved)
+    return targets
+
+
 def _candidate_links(
     *,
     topic: str,
@@ -185,9 +219,11 @@ def _candidate_links(
     source_path: str,
     doc_type: str,
     tags: list[str],
+    raw: str,
     known_pages: list[dict[str, object]],
 ) -> list[dict[str, str]]:
     current_parts = tuple(Path(source_path).parts)
+    explicit_targets = _explicit_reference_targets(raw, source_path)
     candidates: list[tuple[float, dict[str, str]]] = []
     for page in known_pages:
         other_topic = str(page.get("topic", "")).strip()
@@ -201,7 +237,12 @@ def _candidate_links(
         other_source_path = str(page.get("source_path", "")).strip()
         same_doc_type = bool(doc_type and other_doc_type and doc_type == other_doc_type)
         same_section = bool(current_parts and other_source_path and Path(other_source_path).parts[:2] == current_parts[:2])
+        explicit_reference = bool(other_source_path and other_source_path in explicit_targets)
         score = 0.0
+        context = _candidate_reason(shared_tags, same_doc_type, same_section)
+        if explicit_reference:
+            score += 3.2
+            context = f"正文引用: {other_source_path}"
         if shared_tags:
             score += min(len(shared_tags), 3) * 1.4
         if same_doc_type:
@@ -215,7 +256,7 @@ def _candidate_links(
                 score,
                 {
                     "topic": other_topic,
-                    "context": _candidate_reason(shared_tags, same_doc_type, same_section),
+                    "context": context,
                 },
             )
         )
@@ -239,6 +280,7 @@ def _current_wiki_pages(ctx: AppContext) -> list[dict[str, object]]:
                 "doc_type": str(fm.get("doc_type", "")) or _doc_type_for_source(str(fm.get("source_path", ""))),
                 "tags": [str(tag) for tag in fm.get("tags", []) if str(tag)],
                 "links": get_wiki_links(raw),
+                "raw": raw,
             }
         )
     return pages
@@ -355,6 +397,7 @@ def ingest_project_wiki_sources(
 
     for source_path in selected_paths:
         relative_path = source_path.relative_to(project_root).as_posix()
+        content = source_path.read_text(encoding="utf-8")
         topic = _topic_for_source(resolved_project_id, project_root, source_path)
         doc_type = _doc_type_for_source(relative_path)
         tags = _tags_for_source(resolved_project_id, relative_path, doc_type=doc_type)
@@ -364,6 +407,7 @@ def ingest_project_wiki_sources(
             source_path=relative_path,
             doc_type=doc_type,
             tags=tags,
+            raw=content,
             known_pages=known_pages,
         )
         sources.append(ProjectKnowledgeSource(source_path=relative_path, topic=topic))
@@ -376,10 +420,10 @@ def ingest_project_wiki_sources(
                     "doc_type": doc_type,
                     "tags": tags,
                     "links": links,
+                    "raw": content,
                 }
             )
             continue
-        content = source_path.read_text(encoding="utf-8")
         write_wiki_page(
             ctx.wiki_dir,
             topic,
@@ -403,6 +447,7 @@ def ingest_project_wiki_sources(
                 "doc_type": doc_type,
                 "tags": tags,
                 "links": links,
+                "raw": content,
             }
         )
 

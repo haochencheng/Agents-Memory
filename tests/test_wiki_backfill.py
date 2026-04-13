@@ -118,6 +118,39 @@ class WikiBackfillTests(unittest.TestCase):
             self.assertEqual(page_map["synapse-architecture"].doc_type, "architecture")
             self.assertEqual(page_map["synapse-bugfix-frontend"].doc_type, "maintenance")
 
+    def test_backfill_extracts_explicit_markdown_links_from_existing_pages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _ctx(root)
+            _write(
+                root / "memory" / "wiki" / "synapse-network-docs-architecture.md",
+                "---\n"
+                "topic: synapse-network-docs-architecture\n"
+                "source_path: docs/architecture.md\n"
+                "project: synapse-network\n"
+                "---\n\n"
+                "# Architecture\n",
+            )
+            _write(
+                root / "memory" / "wiki" / "synapse-network-docs-guides-getting-started.md",
+                "---\n"
+                "topic: synapse-network-docs-guides-getting-started\n"
+                "source_path: docs/guides/getting-started.md\n"
+                "project: synapse-network\n"
+                "---\n\n"
+                "# Getting Started\n\n"
+                "Read [Architecture](../architecture.md) first.\n",
+            )
+
+            result = backfill_wiki_metadata_and_links(ctx)
+            self.assertEqual(result.updated, 2)
+
+            guide_page = read_wiki_page(ctx.wiki_dir, "synapse-network-docs-guides-getting-started")
+            self.assertIsNotNone(guide_page)
+            assert guide_page is not None
+            self.assertIn("topic: synapse-network-docs-architecture", guide_page)
+            self.assertIn("context: \"正文引用: docs/architecture.md\"", guide_page)
+
     def test_backfill_dry_run_does_not_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

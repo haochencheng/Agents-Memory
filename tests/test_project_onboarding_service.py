@@ -105,6 +105,26 @@ class ProjectOnboardingServiceTests(unittest.TestCase):
             self.assertIn("links:", refund_page)
             self.assertIn("topic: synapse-network-docs-billing-recharge", refund_page)
 
+    def test_ingest_project_wiki_sources_extracts_explicit_markdown_links(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ctx = _build_context(root)
+            project_root = root / "Synapse-Network"
+            project_root.mkdir(parents=True)
+            _write_text(project_root / "docs" / "architecture.md", "# Architecture\n")
+            _write_text(
+                project_root / "docs" / "guides" / "getting-started.md",
+                "# Getting Started\n\nSee [Architecture](../architecture.md) before changing flows.\n",
+            )
+
+            ingest_project_wiki_sources(ctx, project_root, max_files=10)
+
+            guide_page = read_wiki_page(ctx.wiki_dir, "synapse-network-docs-guides-getting-started")
+            self.assertIsNotNone(guide_page)
+            assert guide_page is not None
+            self.assertIn("topic: synapse-network-docs-architecture", guide_page)
+            self.assertIn("context: \"正文引用: docs/architecture.md\"", guide_page)
+
     def test_discover_project_wiki_sources_applies_optional_limit_to_docs_corpus(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             project_root = Path(tmpdir) / "Synapse-Network"

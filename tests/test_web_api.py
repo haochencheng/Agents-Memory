@@ -459,6 +459,13 @@ class TestPhase2(unittest.TestCase):
         data = r.json()
         self.assertIn("results", data)
 
+    def test_search_semantic_returns_wiki_results(self) -> None:
+        r = self._client.get("/api/search?q=jwt refresh&mode=semantic")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        ids = [item["id"] for item in data["results"]]
+        self.assertIn("auth-design", ids)
+
     def test_search_missing_q_returns_422(self) -> None:
         r = self._client.get("/api/search")
         self.assertEqual(r.status_code, 422)

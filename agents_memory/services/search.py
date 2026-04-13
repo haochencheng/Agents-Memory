@@ -16,6 +16,7 @@ Hybrid score formula (aligned with Karpathy query skill):
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 from collections import defaultdict
 from datetime import date, timedelta
@@ -178,8 +179,8 @@ def _wiki_doc_type(source_path: str, frontmatter: dict[str, Any]) -> str:
     return "reference"
 
 
-def _wiki_rows(ctx: AppContext) -> list[tuple]:
-    rows: list[tuple] = []
+def _wiki_docs(ctx: AppContext) -> list[dict[str, Any]]:
+    docs: list[dict[str, Any]] = []
     for topic in list_wiki_topics(ctx.wiki_dir):
         raw = read_wiki_page(ctx.wiki_dir, topic)
         if raw is None:
@@ -191,40 +192,40 @@ def _wiki_rows(ctx: AppContext) -> list[tuple]:
             tags = [tags]
         source_path = str(frontmatter.get("source_path", ctx.wiki_dir / f"{topic}.md"))
         doc_type = _wiki_doc_type(source_path, frontmatter)
-        rows.append(
-            (
-                topic,
-                "wiki",
-                str(frontmatter.get("project", "")),
-                title,
-                doc_type,
-                "",
-                " ".join(str(tag) for tag in tags if str(tag)),
-                str(ctx.wiki_dir / f"{topic}.md"),
-                " ".join([topic, title, doc_type, " ".join(str(tag) for tag in tags), raw]),
-            )
+        docs.append(
+            {
+                "id": topic,
+                "source_kind": "wiki",
+                "project": str(frontmatter.get("project", "")),
+                "title": title,
+                "doc_type": doc_type,
+                "source_type": "",
+                "tags": [str(tag) for tag in tags if str(tag)],
+                "filepath": str(ctx.wiki_dir / f"{topic}.md"),
+                "content": " ".join([topic, title, doc_type, " ".join(str(tag) for tag in tags), raw]),
+            }
         )
-    return rows
+    return docs
 
 
-def _workflow_rows(ctx: AppContext) -> list[tuple]:
-    rows: list[tuple] = []
+def _workflow_docs(ctx: AppContext) -> list[dict[str, Any]]:
+    docs: list[dict[str, Any]] = []
     for record in collect_workflow_records(ctx):
         filepath = str(record.get("_file", ""))
         if not filepath:
             continue
         body = read_body(Path(filepath))
-        rows.append(
-            (
-                str(record.get("id", "")),
-                "workflow",
-                str(record.get("project", "")),
-                str(record.get("title", "") or record.get("id", "")),
-                "",
-                str(record.get("source_type", "")),
-                "",
-                filepath,
-                " ".join(
+        docs.append(
+            {
+                "id": str(record.get("id", "")),
+                "source_kind": "workflow",
+                "project": str(record.get("project", "")),
+                "title": str(record.get("title", "") or record.get("id", "")),
+                "doc_type": "",
+                "source_type": str(record.get("source_type", "")),
+                "tags": [],
+                "filepath": filepath,
+                "content": " ".join(
                     [
                         str(record.get("id", "")),
                         str(record.get("title", "")),
@@ -233,6 +234,29 @@ def _workflow_rows(ctx: AppContext) -> list[tuple]:
                         body,
                     ]
                 ),
+            }
+        )
+    return docs
+
+
+def _knowledge_docs(ctx: AppContext) -> list[dict[str, Any]]:
+    return _wiki_docs(ctx) + _workflow_docs(ctx)
+
+
+def _knowledge_rows(ctx: AppContext) -> list[tuple]:
+    rows: list[tuple] = []
+    for doc in _knowledge_docs(ctx):
+        rows.append(
+            (
+                doc["id"],
+                doc["source_kind"],
+                doc["project"],
+                doc["title"],
+                doc["doc_type"],
+                doc["source_type"],
+                " ".join(str(tag) for tag in doc["tags"]),
+                doc["filepath"],
+                doc["content"],
             )
         )
     return rows
@@ -282,7 +306,7 @@ def build_knowledge_fts_index(ctx: AppContext, force: bool = False) -> int:
     db_path = _fts_db_path(ctx)
     conn = _open_fts_db(db_path)
     _create_fts_schema(conn)
-    rows = _wiki_rows(ctx) + _workflow_rows(ctx)
+    rows = _knowledge_rows(ctx)
     if not force and _knowledge_doc_count(conn) == len(rows):
         conn.close()
         return len(rows)
@@ -310,7 +334,7 @@ def search_knowledge_fts(ctx: AppContext, query: str, limit: int = 20, source_ki
 
     conn = _open_fts_db(db_path)
     _create_fts_schema(conn)
-    current_count = len(_wiki_rows(ctx)) + len(_workflow_rows(ctx))
+    current_count = len(_knowledge_docs(ctx))
     if _knowledge_doc_count(conn) != current_count:
         conn.close()
         build_knowledge_fts_index(ctx, force=True)
@@ -360,6 +384,119 @@ def search_knowledge_fts(ctx: AppContext, query: str, limit: int = 20, source_ki
     ]
     conn.close()
     return results
+
+
+def _semantic_terms(value: str) -> list[str]:
+    tokens = [
+        token
+        for token in "".join(ch if (ch.isalnum() or ch.isspace()) else " " for ch in value.lower()).split()
+        if len(token) >= 2
+    ]
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for token in tokens:
+        if token in seen:
+            continue
+        seen.add(token)
+        deduped.append(token)
+    return deduped
+
+
+def _sparse_semantic_vector(value: str) -> dict[int, float]:
+    vector: dict[int, float] = defaultdict(float)
+    for token in _semantic_terms(value):
+        vector[hash(token) % 512] += 1.0
+        if len(token) >= 4:
+            for index in range(len(token) - 2):
+                trigram = token[index : index + 3]
+                vector[hash(f"g:{trigram}") % 512] += 0.35
+    return dict(vector)
+
+
+def _cosine_similarity(left: dict[int, float], right: dict[int, float]) -> float:
+    if not left or not right:
+        return 0.0
+    dot = sum(weight * right.get(index, 0.0) for index, weight in left.items())
+    left_norm = math.sqrt(sum(weight * weight for weight in left.values()))
+    right_norm = math.sqrt(sum(weight * weight for weight in right.values()))
+    if left_norm == 0.0 or right_norm == 0.0:
+        return 0.0
+    return max(0.0, min(1.0, dot / (left_norm * right_norm)))
+
+
+def search_knowledge_semantic(
+    ctx: AppContext,
+    query: str,
+    limit: int = 20,
+    source_kind: str | None = None,
+) -> list[dict[str, Any]]:
+    query_vector = _sparse_semantic_vector(query)
+    scored: list[dict[str, Any]] = []
+    for doc in _knowledge_docs(ctx):
+        if source_kind and str(doc.get("source_kind", "")) != source_kind:
+            continue
+        semantic_score = _cosine_similarity(query_vector, _sparse_semantic_vector(str(doc.get("content", ""))))
+        if semantic_score <= 0:
+            continue
+        scored.append(
+            {
+                "id": doc["id"],
+                "source_kind": doc["source_kind"],
+                "project": doc["project"],
+                "title": doc["title"],
+                "doc_type": doc["doc_type"],
+                "source_type": doc["source_type"],
+                "tags": " ".join(str(tag) for tag in doc["tags"]),
+                "filepath": doc["filepath"],
+                "semantic_score": round(semantic_score, 4),
+            }
+        )
+    scored.sort(key=lambda item: (-float(item["semantic_score"]), str(item["id"])))
+    return scored[:limit]
+
+
+def search_knowledge_hybrid(
+    ctx: AppContext,
+    query: str,
+    limit: int = 20,
+    source_kind: str | None = None,
+    *,
+    fts_weight: float = 0.55,
+    semantic_weight: float = 0.45,
+) -> list[dict[str, Any]]:
+    fts_results = search_knowledge_fts(ctx, query, limit=limit * 3, source_kind=source_kind)
+    semantic_results = search_knowledge_semantic(ctx, query, limit=limit * 3, source_kind=source_kind)
+    fts_by_id = {str(row["id"]): row for row in fts_results}
+    semantic_by_id = {str(row["id"]): row for row in semantic_results}
+
+    merged: list[dict[str, Any]] = []
+    for doc_id in set(fts_by_id) | set(semantic_by_id):
+        fts_row = fts_by_id.get(doc_id, {})
+        semantic_row = semantic_by_id.get(doc_id, {})
+        fts_score = float(fts_row.get("fts_score", 0.0))
+        semantic_score = float(semantic_row.get("semantic_score", 0.0))
+        if fts_score and semantic_score:
+            combined_score = (fts_score * fts_weight) + (semantic_score * semantic_weight)
+        else:
+            combined_score = fts_score or semantic_score
+        base = fts_row or semantic_row
+        merged.append(
+            {
+                "id": doc_id,
+                "source_kind": base.get("source_kind", ""),
+                "project": base.get("project", ""),
+                "title": base.get("title", ""),
+                "doc_type": base.get("doc_type", ""),
+                "source_type": base.get("source_type", ""),
+                "tags": base.get("tags", ""),
+                "filepath": base.get("filepath", ""),
+                "fts_score": round(fts_score, 4),
+                "semantic_score": round(semantic_score, 4),
+                "combined_score": round(combined_score, 4),
+            }
+        )
+    merged.sort(key=lambda item: (-float(item["combined_score"]), str(item["id"])))
+    return merged[:limit]
 
 
 def search_fts(ctx: AppContext, query: str, limit: int = 20) -> list[dict[str, Any]]:
@@ -461,6 +598,33 @@ def _get_vector_scores(ctx: AppContext, query: str, limit: int) -> dict[str, flo
     except Exception:
         pass
     return vector_by_id
+
+
+def search_vector(ctx: AppContext, query: str, limit: int = 20) -> list[dict[str, Any]]:
+    vector_by_id = _get_vector_scores(ctx, query, limit=limit * 2)
+    records_by_id = {
+        str(record.get("id", "")): record
+        for record in collect_errors(ctx)
+    }
+    rows: list[dict[str, Any]] = []
+    for doc_id, vector_score in vector_by_id.items():
+        record = records_by_id.get(doc_id, {})
+        rows.append(
+            {
+                "id": doc_id,
+                "project": record.get("project", ""),
+                "category": record.get("category", ""),
+                "domain": record.get("domain", ""),
+                "severity": record.get("severity", ""),
+                "status": record.get("status", ""),
+                "date_str": record.get("date", record.get("created_at", "")),
+                "filepath": record.get("_file", ""),
+                "vector_score": round(float(vector_score), 4),
+                "combined_score": round(float(vector_score), 4),
+            }
+        )
+    rows.sort(key=lambda item: (-float(item["vector_score"]), str(item["id"])))
+    return rows[:limit]
 
 
 def _merge_search_results(

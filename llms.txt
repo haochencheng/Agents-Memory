@@ -173,6 +173,7 @@ Agents-Memory/
 | `templates/agents-memory-copilot-instructions.md` | Repo-wide Copilot activation template | `copilot-setup` / `register` |
 | `docker/docker-compose.yml` | Qdrant service | Human (`docker-compose up -d`) |
 | `tests/test_*.py` | Regression coverage for services, MCP, docs, bootstrap | `python3 -m unittest` |
+| `tests/test_search_service.py` | Regression coverage for wiki/workflow hybrid + semantic search | `python3 -m unittest` |
 
 ## CLI Quick Reference
 

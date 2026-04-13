@@ -20,7 +20,7 @@ doc_status: active
 系统应提供：
 
 1. 每个接入页面都具备稳定 frontmatter 元数据
-2. onboarding/ingest 时自动补出第一批候选 links
+2. onboarding/ingest 时自动补出第一批候选 links，并识别正文里的显式文档引用
 3. 搜索结果同时吸收 FTS/BM25、向量相似度和图关系信号
 4. 图谱节点以“概念层”为主，页面退到阅读载体层
 5. 图谱 UI 采用 `Schema / Explore / Table` 三段式浏览
