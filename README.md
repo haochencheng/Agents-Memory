@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-26
-updated_at: 2026-04-07
+updated_at: 2026-04-13
 doc_status: active
 ---
 
@@ -244,6 +244,8 @@ python3.12 -m unittest discover -s tests -p 'test_*.py'
 
 # Start web UI (optional)
 bash scripts/web-start.sh restart   # FastAPI :10100, React :10000
+bash scripts/web/manage.sh --env staging restart
+bash scripts/runtime/manage.sh --env prod config
 ```
 
 ### Trust Signals
@@ -512,6 +514,8 @@ python3.12 -m unittest discover -s tests -p 'test_*.py'
 
 # 启动 Web UI（可选）
 bash scripts/web-start.sh restart   # FastAPI :10100，React :10000
+bash scripts/web/manage.sh --env staging restart
+bash scripts/runtime/manage.sh --env prod config
 ```
 
 ### 可信信号

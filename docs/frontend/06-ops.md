@@ -36,6 +36,13 @@ bash scripts/web-start.sh status
 
 # 运行健康检查
 bash scripts/web-start.sh health
+
+# 查看当前环境配置
+bash scripts/web-start.sh config
+
+# 明确指定环境
+bash scripts/web/manage.sh --env staging restart
+bash scripts/web/manage.sh --env prod config --json
 ```
 
 ## 访问地址
@@ -52,8 +59,23 @@ bash scripts/web-start.sh health
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `AGENTS_MEMORY_ROOT` | 自动检测（项目根目录） | 数据目录根路径 |
+| `AGENTS_MEMORY_ENV` | `local` | 当前脚本环境名，对应 `config/environments/*.env` |
 | `AGENTS_MEMORY_API_PORT` | `10100` | FastAPI 监听端口 |
 | `AGENTS_MEMORY_UI_PORT` | `10000` | React 前端监听端口 |
+| `AGENTS_MEMORY_API_PROXY_TARGET` | `http://localhost:10100` | Vite `/api` 代理目标 |
+
+## 脚本归类
+
+```text
+scripts/lib/env.sh          # 共享环境加载
+scripts/web/manage.sh       # Web 主入口
+scripts/web/restart.sh      # Web 重启入口
+scripts/runtime/manage.sh   # Runtime 主入口
+scripts/runtime/restart.sh  # Runtime 重启入口
+scripts/web-start.sh        # 兼容旧入口
+scripts/start.sh            # 兼容旧入口
+config/environments/*.env   # local / staging / prod 配置
+```
 
 ## 前提依赖
 
@@ -77,11 +99,24 @@ pip3.12 install fastapi "uvicorn[standard]" requests \
 cd frontend && npm install
 ```
 
-`bash scripts/web-start.sh` 会优先使用项目根目录下的 `.venv/bin/python`；只有在 `.venv` 不存在时，才会回退到系统 `python3.12 / python3`。
+`bash scripts/web-start.sh` / `bash scripts/web/manage.sh` 会优先使用项目根目录下的 `.venv/bin/python`；只有在 `.venv` 不存在时，才会回退到系统 `python3.12 / python3`。
 
 脚本还会额外做两层 API 版本校验：
 - 如果 `10100` 端口上已经是兼容的 `Agents-Memory API`，会直接接管 PID，不重复起进程
 - 如果端口上是旧版 `agents_memory.web.api`，且缺少 `/api/scheduler/task-groups`，脚本会先替换旧进程再启动
+
+环境切换方式：
+
+```bash
+# 默认 local
+bash scripts/web-start.sh restart
+
+# staging
+bash scripts/web/manage.sh --env staging restart
+
+# prod 风格配置预览
+bash scripts/web/manage.sh --env prod config
+```
 
 ## 健康检查
 
@@ -139,8 +174,8 @@ cd frontend && npm run build && npm test -- --run
 
 | 文件 | 内容 |
 |------|------|
-| `logs/web-api.log` | FastAPI (uvicorn) 请求日志 |
-| `logs/web-ui.log` | Vite 前端启动/访问日志 |
+| `logs/web-api.<env>.log` | FastAPI (uvicorn) 请求日志 |
+| `logs/web-ui.<env>.log` | Vite 前端启动/访问日志 |
 
 ```bash
 # 实时查看 API 日志
@@ -154,8 +189,8 @@ grep -i error logs/web-api.log | tail -50
 
 | 文件 | 描述 |
 |------|------|
-| `.web_api.pid` | FastAPI 进程 PID |
-| `.web_ui.pid` | React 前端进程 PID |
+| `.web_api.<env>.pid` | FastAPI 进程 PID |
+| `.web_ui.<env>.pid` | React 前端进程 PID |
 
 手动停止（若脚本失效）：
 

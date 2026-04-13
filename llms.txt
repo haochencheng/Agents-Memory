@@ -40,6 +40,11 @@ Agents-Memory/
 │   └── projects.md                 # local project registry, gitignored
 ├── memory/wiki/                    # WARM runtime dir: ingested wiki knowledge pages (gitignored)
 ├── memory/workflow_records/        # WARM runtime dir: completed task / requirement execution evidence (gitignored)
+├── config/
+│   └── environments/
+│       ├── local.env               # local startup profile (ports / proxy / service hosts)
+│       ├── staging.env             # staging startup profile
+│       └── prod.env                # prod-like startup profile
 │
 ├── logs/                           # RUNTIME LOGS (gitignored)
 │   └── agents-memory.log           # CLI / MCP / 文件写入统一日志
@@ -120,13 +125,21 @@ Agents-Memory/
 │   └── test_runtime_bootstrap.py
 │
 └── scripts/
-  ├── memory.py                   # thin CLI wrapper → agents_memory.app
   ├── amem                        # convenience launcher
+  ├── lib/env.sh                  # shared env loader for startup scripts
+  ├── memory.py                   # thin CLI wrapper → agents_memory.app
   ├── backfill_wiki_metadata.py   # one-shot historical wiki metadata / links backfill
   ├── install-cli.sh              # install CLI shim into local environment
   ├── migrate_workflow_records.py # one-shot migration of legacy workflow records out of errors/
-  ├── start.sh                    # local startup helper
-  └── mcp_server.py               # thin MCP wrapper → agents_memory.mcp_app
+  ├── start.sh                    # compatibility wrapper → scripts/runtime/manage.sh
+  ├── web-start.sh                # compatibility wrapper → scripts/web/manage.sh
+  ├── mcp_server.py               # thin MCP wrapper → agents_memory.mcp_app
+  ├── runtime/
+  │   ├── manage.sh               # grouped runtime manager (Qdrant / Ollama / MCP)
+  │   └── restart.sh              # grouped runtime restart entrypoint
+  └── web/
+      ├── manage.sh               # grouped web manager (API / UI)
+      └── restart.sh              # grouped web restart entrypoint
 ```
 
 ## Key Files
@@ -217,6 +230,19 @@ python3 scripts/memory.py archive                      # archive old records
 python3 scripts/memory.py to-qdrant                    # migrate to shared Qdrant
 python3 scripts/memory.py update-index                 # regenerate index.md stats
 python3 scripts/backfill_wiki_metadata.py --dry-run    # preview wiki metadata / links backfill
+```
+
+## Startup Script Quick Reference
+
+```bash
+bash scripts/web-start.sh restart                      # backward-compatible local web restart
+bash scripts/web-start.sh config                       # inspect current local web config
+bash scripts/web/manage.sh --env staging restart       # restart web services with staging profile
+bash scripts/web/manage.sh --env prod config --json    # print prod-like web config
+bash scripts/start.sh status                           # backward-compatible runtime status
+bash scripts/start.sh restart                          # backward-compatible runtime restart
+bash scripts/runtime/manage.sh --env staging config    # inspect staging runtime config
+bash scripts/runtime/manage.sh --env prod restart      # restart runtime services with prod-like profile
 ```
 
 ## MCP Server Tools (for AI Agents)

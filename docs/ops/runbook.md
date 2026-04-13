@@ -67,6 +67,31 @@ export AGENTS_MEMORY_LOG_STDERR=1
 export AGENTS_MEMORY_LOG_LEVEL=DEBUG
 ```
 
+### 环境分层启动
+
+脚本已经按 `local / staging / prod` 分层，并从 `config/environments/*.env` 读取配置：
+
+```text
+config/environments/local.env
+config/environments/staging.env
+config/environments/prod.env
+```
+
+推荐入口：
+
+```bash
+bash scripts/web/manage.sh --env local restart
+bash scripts/web/manage.sh --env staging config
+bash scripts/runtime/manage.sh --env prod config --json
+```
+
+兼容入口仍然保留：
+
+```bash
+bash scripts/web-start.sh restart
+bash scripts/start.sh status
+```
+
 ### MCP 直接读取 refactor hotspots
 
 当 agent 已通过 MCP 接入时，可以直接调用 `memory_get_refactor_hotspots(project_root)` 获取结构化 hotspot 列表；每个 hotspot 都会返回稳定的 `rank_token`。随后优先调用 `memory_init_refactor_bundle(project_root, hotspot_index, hotspot_token, task_slug, dry_run)` 并传入 `hotspot_token` 生成执行 bundle，无需依赖 `docs/plans/refactor-watch.md`，也不会因为 hotspot 排序变化而指向漂移。
@@ -237,6 +262,20 @@ Scheduler 表单里会直接显示常用 cron 示例。快速参考：
 - 发现 `10100` 上已是兼容的 Agents-Memory API 时，会直接复用并写回 `.web_api.pid`
 - 发现端口上是旧版 `agents_memory.web.api`，但缺少 `/api/scheduler/task-groups` 时，会自动替换旧进程
 - 如果端口被其他非 Agents-Memory 进程占用，脚本会停止并提示人工处理，避免误杀别的服务
+
+现在不同环境会使用独立的日志和 PID 文件：
+
+```text
+.web_api.local.pid
+.web_api.staging.pid
+.web_api.prod.pid
+.web_ui.local.pid
+.web_ui.staging.pid
+.web_ui.prod.pid
+logs/web-api.local.log
+logs/web-api.staging.log
+logs/web-api.prod.log
+```
 
 ---
 

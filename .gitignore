@@ -14,6 +14,9 @@ index.md
 memory/projects.md
 memory/rules.md
 memory/ingest_log.jsonl
+memory/check_runs.jsonl
+memory/scheduler_runs.jsonl
+memory/scheduler_tasks.json
 memory/wiki/
 memory/workflow_records/
 errors/*.md
