@@ -215,6 +215,17 @@ rg -n "source_type: scheduler_check" memory/workflow_records
 - `cron_expr` 是否是合法的 5 段 cron
 - 注册项目根目录是否仍然存在
 
+Scheduler 表单里会直接显示常用 cron 示例。快速参考：
+
+```text
+分钟 小时 日 月 星期
+5 * * * *       每小时第 5 分钟
+0 * * * *       每小时整点
+0 2 * * *       每天凌晨 2 点
+30 9 * * 1-5    工作日 09:30
+0 8 * * 1       每周一 08:00
+```
+
 ---
 
 ## 向量搜索启用（记录达到 200 条后）

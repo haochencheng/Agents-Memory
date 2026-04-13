@@ -59,6 +59,10 @@ describe('Scheduler page', () => {
     expect(screen.getByText('docs')).toBeInTheDocument()
     expect(screen.getByText('profile')).toBeInTheDocument()
     expect(screen.getByText('plan')).toBeInTheDocument()
+    expect(screen.getByText('Cron 说明')).toBeInTheDocument()
+    expect(screen.getByText('分钟 小时 日 月 星期')).toBeInTheDocument()
+    expect(screen.getByText('每小时的第 5 分钟执行一次')).toBeInTheDocument()
+    expect(screen.getByText('每天凌晨 2 点执行一次')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '创建 3 个检查任务' })).toBeInTheDocument()
   })
 

@@ -12,6 +12,13 @@ interface CreateForm {
 }
 
 const EMPTY_FORM: CreateForm = { name: '', project: '', cron_expr: '' }
+const CRON_EXAMPLES = [
+  { expr: '5 * * * *', label: '每小时的第 5 分钟执行一次' },
+  { expr: '0 * * * *', label: '每小时整点执行一次' },
+  { expr: '0 2 * * *', label: '每天凌晨 2 点执行一次' },
+  { expr: '30 9 * * 1-5', label: '工作日每天 09:30 执行一次' },
+  { expr: '0 8 * * 1', label: '每周一早上 8 点执行一次' },
+]
 
 export default function Scheduler() {
   const { data: tasks, isLoading, error } = useSchedulerTasks()
@@ -124,6 +131,21 @@ export default function Scheduler() {
                 onChange={e => setForm(f => ({ ...f, cron_expr: e.target.value }))}
                 placeholder="0 2 * * *"
               />
+              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                <p className="font-medium text-slate-700">Cron 说明</p>
+                <p className="mt-1 font-mono text-xs text-slate-500">分钟 小时 日 月 星期</p>
+                <div className="mt-2 space-y-1">
+                  {CRON_EXAMPLES.map(item => (
+                    <p key={item.expr}>
+                      <span className="font-mono text-slate-700">{item.expr}</span>
+                      <span className="ml-2">{item.label}</span>
+                    </p>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  支持 `*`、范围 `1-5`、列表 `1,3,5`、步进 `*/2` 这种标准 5 段写法。
+                </p>
+              </div>
             </div>
           </div>
 
