@@ -53,8 +53,49 @@ _pid_running() {
   [[ -f "$pid_file" ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null
 }
 
+_clear_stale_pid_file() {
+  local pid_file="$1"
+  if [[ -f "$pid_file" ]] && ! kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+    rm -f "$pid_file"
+  fi
+}
+
 _port_in_use() {
   lsof -ti tcp:"$1" &>/dev/null
+}
+
+_port_pid() {
+  lsof -ti tcp:"$1" -sTCP:LISTEN 2>/dev/null | head -n 1
+}
+
+_pid_command() {
+  local pid="$1"
+  ps -p "$pid" -o command= 2>/dev/null || true
+}
+
+_is_agents_memory_api_pid() {
+  local pid="$1"
+  local cmd
+  cmd="$(_pid_command "$pid")"
+  [[ "$cmd" == *"uvicorn agents_memory.web.api:app"* ]]
+}
+
+_api_supports_task_groups() {
+  local body
+  body="$(curl -fsS --max-time 5 "$API_BASE/openapi.json" 2>/dev/null || true)"
+  [[ "$body" == *'"/api/scheduler/task-groups"'* ]]
+}
+
+_wait_for_api_contract() {
+  local max_wait="${1:-15}"
+  local elapsed=0
+  while ! _api_supports_task_groups; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+    if (( elapsed >= max_wait )); then
+      return 1
+    fi
+  done
 }
 
 _wait_for_port() {
@@ -108,16 +149,54 @@ _check_deps() {
   fi
 }
 
+_ensure_expected_api_on_port() {
+  local pid
+  pid="$(_port_pid "$API_PORT")"
+  if [[ -z "$pid" ]]; then
+    return 1
+  fi
+
+  if _api_supports_task_groups; then
+    if _is_agents_memory_api_pid "$pid"; then
+      echo "$pid" > "$API_PID_FILE"
+      ok "检测到兼容的 Agents-Memory API 正在端口 $API_PORT 运行，已接管 PID $pid"
+    else
+      warn "端口 $API_PORT 上已有兼容 API 运行，但不由本脚本管理 (PID $pid)"
+    fi
+    return 0
+  fi
+
+  if _is_agents_memory_api_pid "$pid"; then
+    warn "端口 $API_PORT 上的 Agents-Memory API 缺少 /api/scheduler/task-groups，正在替换旧进程 (PID $pid)"
+    kill "$pid" 2>/dev/null || true
+    sleep 1
+    rm -f "$API_PID_FILE"
+    return 1
+  fi
+
+  err "端口 $API_PORT 已被其他进程占用 (PID $pid)，且不是兼容的 Agents-Memory API；请先释放端口后再启动"
+}
+
 # ─── 服务控制 ─────────────────────────────────────────────────────────────────
 
 start_api() {
+  _clear_stale_pid_file "$API_PID_FILE"
   if _pid_running "$API_PID_FILE"; then
-    warn "FastAPI 已在运行 (PID $(cat "$API_PID_FILE"))"
-    return 0
+    if _api_supports_task_groups; then
+      warn "FastAPI 已在运行 (PID $(cat "$API_PID_FILE"))"
+      return 0
+    fi
+    warn "PID 文件指向的 FastAPI 缺少新 scheduler 路由，正在重启 (PID $(cat "$API_PID_FILE"))"
+    stop_service "$API_PID_FILE" "FastAPI"
   fi
   if _port_in_use "$API_PORT"; then
-    warn "端口 $API_PORT 已被占用（可能已有 API 运行）"
-    return 0
+    if _ensure_expected_api_on_port; then
+      return 0
+    fi
+  fi
+  if _port_in_use "$API_PORT"; then
+    warn "端口 $API_PORT 仍被占用，无法启动 FastAPI"
+    return 1
   fi
   info "启动 FastAPI 后端 → http://localhost:$API_PORT ..."
   cd "$REPO_ROOT"
@@ -128,6 +207,10 @@ start_api() {
   echo $! > "$API_PID_FILE"
   _wait_for_port "$API_PORT" "FastAPI" 30 || {
     warn "FastAPI 启动失败，查看日志: $API_LOG"
+    return 1
+  }
+  _wait_for_api_contract 15 || {
+    warn "FastAPI 已启动，但缺少 /api/scheduler/task-groups，查看日志: $API_LOG"
     return 1
   }
   ok "FastAPI 已启动 (PID $(cat "$API_PID_FILE"))"
@@ -182,10 +265,21 @@ stop_service() {
 cmd_status() {
   echo ""
   echo "=== Web 服务状态 ==="
+  _clear_stale_pid_file "$API_PID_FILE"
   if _pid_running "$API_PID_FILE"; then
-    ok "FastAPI   ── 运行中 (PID $(cat "$API_PID_FILE")) → http://localhost:$API_PORT"
+    if _api_supports_task_groups; then
+      ok "FastAPI   ── 运行中 (PID $(cat "$API_PID_FILE")) → http://localhost:$API_PORT"
+    else
+      warn "FastAPI   ── PID $(cat "$API_PID_FILE") 在运行，但缺少 /api/scheduler/task-groups"
+    fi
   elif _port_in_use "$API_PORT"; then
-    warn "FastAPI   ── 端口 $API_PORT 被占用（不由本脚本管理）"
+    local port_pid
+    port_pid="$(_port_pid "$API_PORT")"
+    if _api_supports_task_groups; then
+      warn "FastAPI   ── 端口 $API_PORT 被兼容 API 占用（未写入 PID 文件，PID $port_pid）"
+    else
+      warn "FastAPI   ── 端口 $API_PORT 被旧版/未知进程占用 (PID $port_pid)"
+    fi
   else
     echo -e "${RED}❌  FastAPI   ── 未运行${NC}"
   fi
@@ -220,6 +314,7 @@ except Exception as e:
 
   local endpoints=(
     "/api/stats"
+    "/api/scheduler/task-groups"
     "/api/wiki"
     "/api/wiki/lint"
     "/api/errors"

@@ -79,6 +79,10 @@ cd frontend && npm install
 
 `bash scripts/web-start.sh` 会优先使用项目根目录下的 `.venv/bin/python`；只有在 `.venv` 不存在时，才会回退到系统 `python3.12 / python3`。
 
+脚本还会额外做两层 API 版本校验：
+- 如果 `10100` 端口上已经是兼容的 `Agents-Memory API`，会直接接管 PID，不重复起进程
+- 如果端口上是旧版 `agents_memory.web.api`，且缺少 `/api/scheduler/task-groups`，脚本会先替换旧进程再启动
+
 ## 健康检查
 
 ```bash

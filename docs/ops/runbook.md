@@ -233,6 +233,11 @@ Scheduler 表单里会直接显示常用 cron 示例。快速参考：
 0 8 * * 1       每周一 08:00
 ```
 
+`bash scripts/web-start.sh api` 现在还会校验运行中的 API 合同：
+- 发现 `10100` 上已是兼容的 Agents-Memory API 时，会直接复用并写回 `.web_api.pid`
+- 发现端口上是旧版 `agents_memory.web.api`，但缺少 `/api/scheduler/task-groups` 时，会自动替换旧进程
+- 如果端口被其他非 Agents-Memory 进程占用，脚本会停止并提示人工处理，避免误杀别的服务
+
 ---
 
 ## 向量搜索启用（记录达到 200 条后）
