@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useWikiGraph } from '@/api/useWiki'
 import LoadingSpinner from '@/components/LoadingSpinner'
@@ -47,6 +47,7 @@ export default function KnowledgeGraphPage() {
   const [projectFilter, setProjectFilter] = useState('all')
   const [nodeTypeFilter, setNodeTypeFilter] = useState('all')
   const [relationFilter, setRelationFilter] = useState<GraphRelationFilter>('all')
+  const [draftQuery, setDraftQuery] = useState('')
   const [query, setQuery] = useState('')
   const [depth, setDepth] = useState<1 | 2>(1)
   const requestedNodeId = searchParams.get('node') ?? ''
@@ -112,6 +113,11 @@ export default function KnowledgeGraphPage() {
   const explicitCount = edges.filter(edge => edge.type === 'explicit').length
   const inferredCount = edges.filter(edge => edge.type === 'inferred').length
 
+  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setQuery(draftQuery.trim())
+  }
+
   return (
     <div className="space-y-5" data-testid="knowledge-graph-page">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -142,16 +148,21 @@ export default function KnowledgeGraphPage() {
       </div>
 
       <div className="grid gap-3 rounded-xl border border-gray-100 bg-white p-4 md:grid-cols-2 xl:grid-cols-5">
-        <label className="space-y-1">
+        <form className="space-y-1 md:col-span-2 xl:col-span-2" onSubmit={handleSearchSubmit}>
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">搜索</span>
-          <input
-            value={query}
-            onChange={event => setQuery(event.target.value)}
-            className="input w-full"
-            placeholder="概念、项目、标签..."
-            data-testid="knowledge-graph-search-input"
-          />
-        </label>
+          <div className="flex max-w-3xl items-stretch gap-3">
+            <input
+              value={draftQuery}
+              onChange={event => setDraftQuery(event.target.value)}
+              className="input h-12 min-w-0 flex-1"
+              placeholder="概念、项目、标签..."
+              data-testid="knowledge-graph-search-input"
+            />
+            <button type="submit" className="btn h-12 px-5" data-testid="knowledge-graph-search-submit">
+              搜索
+            </button>
+          </div>
+        </form>
 
         <label className="space-y-1">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">项目</span>

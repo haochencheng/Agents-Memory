@@ -97,7 +97,7 @@ export default function MemoryRecords() {
           )}
         </div>
         <form
-          className="flex items-center gap-3"
+          className="flex max-w-4xl items-stretch gap-3"
           onSubmit={event => {
             event.preventDefault()
             submitSearch()
@@ -107,12 +107,12 @@ export default function MemoryRecords() {
             value={queryDraft}
             onChange={event => setQueryDraft(event.target.value)}
             placeholder="例如：jwt、auth refresh、billing recharge"
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-400"
+            className="h-12 min-w-0 flex-1 rounded-xl border border-gray-200 px-4 text-sm outline-none focus:border-blue-400"
             data-testid="memory-search-input"
           />
           <button
             type="submit"
-            className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-blue-700"
+            className="h-12 rounded-xl bg-blue-600 px-5 text-sm font-medium text-white transition hover:bg-blue-700"
             data-testid="memory-search-submit"
           >
             搜索

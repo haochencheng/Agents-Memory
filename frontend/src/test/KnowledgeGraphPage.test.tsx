@@ -95,7 +95,12 @@ describe('KnowledgeGraphPage', () => {
     await user.click(screen.getByRole('button', { name: 'Table' }))
     await user.type(screen.getByTestId('knowledge-graph-search-input'), 'billing')
 
-    const table = screen.getByTestId('graph-table')
+    let table = screen.getByTestId('graph-table')
+    expect(within(table).getByText('Auth Design')).toBeInTheDocument()
+
+    await user.click(screen.getByTestId('knowledge-graph-search-submit'))
+
+    table = screen.getByTestId('graph-table')
 
     expect(within(table).getByText('Billing Recharge')).toBeInTheDocument()
     expect(within(table).queryByText('Auth Design')).not.toBeInTheDocument()

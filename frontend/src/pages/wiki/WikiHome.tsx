@@ -50,10 +50,10 @@ export default function WikiHome() {
         <span className="text-sm text-gray-500">{topics?.total ?? 0} 篇</span>
       </div>
 
-      <form className="flex flex-col gap-3 sm:flex-row" onSubmit={handleSearchSubmit}>
-        <div className="relative flex-1">
+      <form className="flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-stretch" onSubmit={handleSearchSubmit}>
+        <div className="relative min-w-0 flex-1">
           <input
-            className="input w-full pl-9"
+            className="input h-12 w-full pl-9"
             placeholder="搜索标题、标签、项目、路径或正文内容..."
             value={draftQuery}
             onChange={e => setDraftQuery(e.target.value)}
@@ -61,7 +61,7 @@ export default function WikiHome() {
           />
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
         </div>
-        <button type="submit" className="btn whitespace-nowrap" data-testid="wiki-search-submit">
+        <button type="submit" className="btn h-12 whitespace-nowrap px-5" data-testid="wiki-search-submit">
           搜索
         </button>
       </form>
