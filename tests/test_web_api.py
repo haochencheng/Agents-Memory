@@ -291,6 +291,58 @@ class TestPhase1(unittest.TestCase):
         self.assertIn("errors", data)
         self.assertIsInstance(data["errors"], list)
         self.assertGreaterEqual(len(data["errors"]), 1)
+        self.assertEqual(data["page"], 1)
+        self.assertEqual(data["page_size"], 20)
+        self.assertGreaterEqual(data["total_pages"], 1)
+
+    def test_errors_list_supports_pagination(self) -> None:
+        _write(
+            self._root / "errors" / "ERR-2026-0315-001.md",
+            textwrap.dedent("""\
+                ---
+                id: ERR-2026-0315-001
+                title: Extra failure one
+                status: open
+                project: synapse-network
+                severity: high
+                date: 2026-03-15
+                category: auth
+                domain: backend
+                source_type: error_record
+                ---
+
+                ## Problem
+                Extra failure one.
+            """),
+        )
+        _write(
+            self._root / "errors" / "ERR-2026-0315-002.md",
+            textwrap.dedent("""\
+                ---
+                id: ERR-2026-0315-002
+                title: Extra failure two
+                status: open
+                project: synapse-network
+                severity: high
+                date: 2026-03-15
+                category: auth
+                domain: backend
+                source_type: error_record
+                ---
+
+                ## Problem
+                Extra failure two.
+            """),
+        )
+
+        r = self._client.get("/api/errors?page=2&page_size=2")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertEqual(data["page"], 2)
+        self.assertEqual(data["page_size"], 2)
+        self.assertEqual(data["total"], 3)
+        self.assertEqual(data["total_pages"], 2)
+        self.assertEqual(len(data["errors"]), 1)
 
     def test_wiki_graph_returns_explicit_and_inferred_edges(self) -> None:
         r = self._client.get("/api/wiki/graph")
@@ -402,6 +454,34 @@ class TestPhase1(unittest.TestCase):
         data = r.json()
         self.assertEqual(data["id"], "TASK-24-FAIL")
         self.assertIn("Legacy file name does not match frontmatter id.", data["raw"])
+
+    def test_errors_list_replaces_generic_step_title_with_meaningful_line(self) -> None:
+        _write(
+            self._root / "errors" / "ERR-2026-0316-001.md",
+            textwrap.dedent("""\
+                ---
+                id: ERR-2026-0316-001
+                title: "## Step"
+                status: open
+                project: synapse-network
+                severity: high
+                date: 2026-03-16
+                category: auth
+                domain: backend
+                source_type: error_record
+                ---
+
+                ## Step
+
+                Refresh token callback returns 401 after Redis flush.
+            """),
+        )
+
+        r = self._client.get("/api/errors?project=synapse-network&limit=20")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        matched = next(item for item in data["errors"] if item["id"] == "ERR-2026-0316-001")
+        self.assertEqual(matched["title"], "Refresh token callback returns 401 after Redis flush.")
 
     def test_rules_ok(self) -> None:
         r = self._client.get("/api/rules")

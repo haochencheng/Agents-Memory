@@ -120,6 +120,7 @@ import uuid
 _task_store: dict[str, dict[str, Any]] = {}
 # In-memory scheduler tasks store
 _scheduler_tasks: list[dict[str, Any]] = []
+_GENERIC_ERROR_TITLE_TOKENS = {"step", "steps", "步骤", "todo", "note", "notes", "phase", "section"}
 
 
 @dataclass(frozen=True)
@@ -1041,7 +1042,9 @@ async def wiki_compile(topic: str) -> CompileResponse:  # WRITE
 def list_errors(
     status: str | None = Query(None),
     project: str | None = Query(None),
-    limit: int = Query(20, ge=1, le=500),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    limit: int | None = Query(None, ge=1, le=500),
 ) -> ErrorListResponse:
     ctx = _get_ctx()
     status_filter = [status] if status else None
@@ -1051,11 +1054,15 @@ def list_errors(
         records = [r for r in records if normalize_project_id(r.get("project", "")) == normalized_project]
     records = dedupe_error_records(records)
     total = len(records)
-    records = records[:limit]
+    effective_page_size = limit or page_size
+    total_pages = (total + effective_page_size - 1) // effective_page_size if total else 0
+    start = (page - 1) * effective_page_size
+    end = start + effective_page_size
+    records = records[start:end]
     error_metas = [
         ErrorMeta(
             id=r.get("id", ""),
-            title=r.get("title", r.get("id", "")),
+            title=_error_display_title(r, filepath=str(r.get("_file", ""))),
             status=r.get("status", ""),
             project=normalize_project_id(r.get("project", "")),
             created_at=r.get("date", r.get("created_at", "")),
@@ -1063,7 +1070,7 @@ def list_errors(
         )
         for r in records
     ]
-    return ErrorListResponse(errors=error_metas, total=total)
+    return ErrorListResponse(errors=error_metas, total=total, page=page, page_size=effective_page_size, total_pages=total_pages)
 
 
 @app.get("/api/errors/{error_id}", response_model=ErrorDetailResponse)
@@ -1080,7 +1087,7 @@ def error_detail(error_id: str) -> ErrorDetailResponse:
     body = read_body(path)
     return ErrorDetailResponse(
         id=fm.get("id", path.stem),
-        title=fm.get("title", fm.get("id", path.stem)),
+        title=_error_display_title(fm, filepath=str(path)),
         status=fm.get("status", ""),
         project=fm.get("project", ""),
         content_html=md_to_html(body),
@@ -1106,6 +1113,46 @@ def _extract_snippet(filepath: str, q: str) -> str:
         return ""
 
 
+def _strip_markdown_heading(value: str) -> str:
+    cleaned = re.sub(r"^\s{0,3}#{1,6}\s*", "", str(value or "")).strip()
+    cleaned = re.sub(r"^[>\-\*\d\.\)\s]+", "", cleaned).strip()
+    return cleaned
+
+
+def _is_generic_error_title(value: str) -> bool:
+    normalized = _strip_markdown_heading(value).lower()
+    if not normalized:
+        return True
+    tokens = re.findall(r"[a-z0-9\u4e00-\u9fff]+", normalized)
+    if not tokens:
+        return True
+    significant = [token for token in tokens if token not in _GENERIC_ERROR_TITLE_TOKENS and not token.isdigit()]
+    return len(significant) == 0
+
+
+def _first_meaningful_error_line(body: str) -> str:
+    for raw_line in body.splitlines():
+        line = _strip_markdown_heading(raw_line)
+        if not line or line == "---" or line.startswith("```"):
+            continue
+        if _is_generic_error_title(line):
+            continue
+        return line[:160]
+    return ""
+
+
+def _error_display_title(record: dict[str, Any], *, filepath: str = "") -> str:
+    title = str(record.get("title", "")).strip()
+    if title and not _is_generic_error_title(title):
+        return _strip_markdown_heading(title)
+    if filepath and Path(filepath).exists():
+        fallback = _first_meaningful_error_line(read_body(Path(filepath)))
+        if fallback:
+            return fallback
+    record_id = str(record.get("id", "")).strip()
+    return _strip_markdown_heading(record_id) or "Untitled Error"
+
+
 def _search_error_candidates(ctx, q: str, mode: str, limit: int) -> list[_SearchCandidate]:
     candidates: list[_SearchCandidate] = []
     if mode not in ("hybrid", "keyword", "semantic"):
@@ -1127,7 +1174,7 @@ def _search_error_candidates(ctx, q: str, mode: str, limit: int) -> list[_Search
                 result=SearchResult(
                     type="error",
                     id=row.get("id", ""),
-                    title=row.get("id", row.get("category", "")),
+                    title=_error_display_title(meta or row, filepath=filepath),
                     snippet=_extract_snippet(filepath, q),
                     score=row.get("combined_score", row.get("fts_score", 0.0)),
                 ),

@@ -207,7 +207,9 @@ Base URL: `http://localhost:10100`
 **查询参数:**
 - `status` — `open` | `resolved` | `archived` （可选）
 - `project` — 项目名过滤（可选）
-- `limit` — 返回条数，默认 20
+- `page` — 页码，默认 1
+- `page_size` — 每页条数，默认 20
+- `limit` — 兼容旧调用；传入时等价于 `page=1&page_size=limit`
 
 **响应 200:**
 ```json
@@ -222,7 +224,10 @@ Base URL: `http://localhost:10100`
       "tags": ["auth", "jwt"]
     }
   ],
-  "total": 34
+  "total": 34,
+  "page": 1,
+  "page_size": 20,
+  "total_pages": 2
 }
 ```
 

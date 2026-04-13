@@ -1,6 +1,6 @@
 ---
 created_at: 2026-04-07
-updated_at: 2026-04-07
+updated_at: 2026-04-13
 doc_status: active
 ---
 
@@ -58,6 +58,10 @@ bash scripts/web-start.sh health
 ## 前提依赖
 
 ```bash
+# 推荐：使用项目虚拟环境
+python3 -m venv .venv
+.venv/bin/pip install fastapi "uvicorn[standard]" requests markdown httpx pytest
+
 # Python 版本
 python3.12 --version   # >= 3.12
 
@@ -65,13 +69,15 @@ python3.12 --version   # >= 3.12
 node --version         # >= 18
 npm --version
 
-# 安装后端依赖
+# 安装后端依赖（如果不使用 .venv）
 pip3.12 install fastapi "uvicorn[standard]" requests \
     markdown httpx pytest --break-system-packages
 
 # 安装前端依赖
 cd frontend && npm install
 ```
+
+`bash scripts/web-start.sh` 会优先使用项目根目录下的 `.venv/bin/python`；只有在 `.venv` 不存在时，才会回退到系统 `python3.12 / python3`。
 
 ## 健康检查
 

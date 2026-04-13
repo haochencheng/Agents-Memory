@@ -14,6 +14,9 @@ export interface ErrorRecord {
 export interface ErrorsResponse {
   errors: ErrorRecord[]
   total: number
+  page: number
+  page_size: number
+  total_pages: number
 }
 
 export interface ErrorDetail {
@@ -63,11 +66,19 @@ export interface SearchResultsResponse {
   total: number
 }
 
-export function useErrors(params?: { project?: string; severity?: string; status?: string }) {
+export function useErrors(params?: { project?: string; severity?: string; status?: string; page?: number; pageSize?: number }) {
   return useQuery<ErrorsResponse>({
     queryKey: ['errors', params],
     queryFn: async () => {
-      const { data } = await client.get('/errors', { params })
+      const { data } = await client.get('/errors', {
+        params: {
+          project: params?.project,
+          severity: params?.severity,
+          status: params?.status,
+          page: params?.page ?? 1,
+          page_size: params?.pageSize ?? 20,
+        },
+      })
       return data
     },
   })

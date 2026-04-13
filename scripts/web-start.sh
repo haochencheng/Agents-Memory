@@ -15,13 +15,19 @@
 #   React    :10000  — Vite 开发服务器 (SPA 前端)
 #
 # 依赖:
-#   python3.12, pip (fastapi, uvicorn, requests)
+#   .venv/bin/python（优先，推荐）或 python3.12 / python3
 #   node >= 18, npm
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON="python3.12"
+if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
+  PYTHON="$REPO_ROOT/.venv/bin/python"
+elif command -v python3.12 &>/dev/null; then
+  PYTHON="python3.12"
+else
+  PYTHON="python3"
+fi
 API_PID_FILE="$REPO_ROOT/.web_api.pid"
 UI_PID_FILE="$REPO_ROOT/.web_ui.pid"
 API_LOG="$REPO_ROOT/logs/web-api.log"
@@ -73,7 +79,7 @@ _check_deps() {
   echo "=== 依赖检查 ==="
 
   if ! command -v "$PYTHON" &>/dev/null; then
-    err "Python 3.12 未找到。安装: brew install python@3.12"
+    err "Python 未找到。请先创建 .venv，或安装 python3.12 / python3"
   fi
   ok "Python: $($PYTHON --version)"
 

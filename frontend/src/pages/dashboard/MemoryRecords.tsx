@@ -64,15 +64,21 @@ function searchResultTarget(result: SearchResultItem) {
 
 export default function MemoryRecords() {
   const [tab, setTab] = useState<Tab>('errors')
+  const [queryDraft, setQueryDraft] = useState('')
   const [query, setQuery] = useState('')
+  const [errorPage, setErrorPage] = useState(1)
   const navigate = useNavigate()
-  const { data: errors, isLoading: errLoading, error: errError } = useErrors()
+  const { data: errors, isLoading: errLoading, error: errError } = useErrors({ page: errorPage, pageSize: 20 })
   const { data: rules, isLoading: rulesLoading, error: rulesError } = useRules()
   const { data: searchData, isLoading: searchLoading } = useSearchResults(query)
   const { data: graphData } = useWikiGraph()
 
   const isLoading = tab === 'errors' ? errLoading : rulesLoading
   const err = tab === 'errors' ? errError : rulesError
+
+  const submitSearch = () => {
+    setQuery(queryDraft.trim())
+  }
 
   return (
     <div className="space-y-6" data-testid="memory-records-page">
@@ -90,13 +96,28 @@ export default function MemoryRecords() {
             </span>
           )}
         </div>
-        <input
-          value={query}
-          onChange={event => setQuery(event.target.value)}
-          placeholder="例如：jwt、auth refresh、billing recharge"
-          className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-400"
-          data-testid="memory-search-input"
-        />
+        <form
+          className="flex items-center gap-3"
+          onSubmit={event => {
+            event.preventDefault()
+            submitSearch()
+          }}
+        >
+          <input
+            value={queryDraft}
+            onChange={event => setQueryDraft(event.target.value)}
+            placeholder="例如：jwt、auth refresh、billing recharge"
+            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-400"
+            data-testid="memory-search-input"
+          />
+          <button
+            type="submit"
+            className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-blue-700"
+            data-testid="memory-search-submit"
+          >
+            搜索
+          </button>
+        </form>
         {query.trim() && !searchLoading && (
           <div className="space-y-3">
             {(searchData?.results ?? []).length === 0 ? (
@@ -236,22 +257,61 @@ export default function MemoryRecords() {
           {(!errors?.errors || errors.errors.length === 0) ? (
             <div className="bg-white rounded-xl border p-10 text-center text-gray-400">暂无错误记录</div>
           ) : (
-            errors.errors.map((e, i) => (
-              <Link
-                key={i}
-                to={`/memory/errors/${encodeURIComponent(e.id)}`}
-                className="block bg-white rounded-xl border border-gray-100 p-4 transition hover:border-blue-200 hover:shadow-sm"
-                data-testid="error-record"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{e.title}</p>
-                    {e.project && <span className="badge badge-blue mt-1">{e.project}</span>}
+            <>
+              <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-white px-4 py-3 text-sm text-gray-500" data-testid="errors-pagination-summary">
+                <span>当前显示错误记录</span>
+                <span>第 {errors?.page ?? 1} / {errors?.total_pages ?? 1} 页，每页 {errors?.page_size ?? 20} 条</span>
+              </div>
+              {errors.errors.map((e, i) => (
+                <Link
+                  key={i}
+                  to={`/memory/errors/${encodeURIComponent(e.id)}`}
+                  className="block bg-white rounded-xl border border-gray-100 p-4 transition hover:border-blue-200 hover:shadow-sm"
+                  data-testid="error-record"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{e.title}</p>
+                      {e.project && <span className="badge badge-blue mt-1">{e.project}</span>}
+                    </div>
+                    <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(e.created_at)}</span>
                   </div>
-                  <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(e.created_at)}</span>
+                </Link>
+              ))}
+              {(errors?.total_pages ?? 0) > 1 && (
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    disabled={(errors?.page ?? 1) <= 1}
+                    onClick={() => setErrorPage(page => Math.max(1, page - 1))}
+                  >
+                    上一页
+                  </button>
+                  {Array.from({ length: errors?.total_pages ?? 0 }, (_, index) => index + 1).slice(
+                    Math.max(0, (errors?.page ?? 1) - 3),
+                    Math.max(5, Math.min(errors?.total_pages ?? 0, (errors?.page ?? 1) + 2)),
+                  ).map(page => (
+                    <button
+                      key={page}
+                      type="button"
+                      className={`rounded-lg px-3 py-2 text-sm ${page === (errors?.page ?? 1) ? 'bg-blue-600 text-white' : 'border border-gray-200 bg-white text-gray-600'}`}
+                      onClick={() => setErrorPage(page)}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    disabled={(errors?.page ?? 1) >= (errors?.total_pages ?? 1)}
+                    onClick={() => setErrorPage(page => Math.min(errors?.total_pages ?? page, page + 1))}
+                  >
+                    下一页
+                  </button>
                 </div>
-              </Link>
-            ))
+              )}
+            </>
           )}
         </div>
       )}
